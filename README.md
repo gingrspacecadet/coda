@@ -5,12 +5,14 @@ A fresh attempt at a systems language, without all that clutter!
 - Immutability and privacy by default
 - Shadowing is forbidden at all scopes (module and local). Redeclaration of an existing name is a hard error.
 - There are no warnings, only errors (aka `-Wall -Wextra -Werror` and you CANNOT turn it off :3) 
-- When a pointer is passed to a function, unless it is marked as `@null`, the compiler will insert dereference checks
 
 ## Safety and UB
 Coda is designed in such a way that undefined behaviour (UB) is intentionally difficult to do. Anything that could potentially cause it **must** be wrapped in an `unsafe` block. Unitialised reads are compile-time errors, integer overflow is defined (wrap), implicit integer <-> pointer casts are forbidden, and pointer arithmetic is `unsafe`.
 
 There are also some optional assistances to keep code clean and safe, for example `@null` which inserts runtime checks for null dereferences.
+
+## Null shenanigans
+`?` can be used when declaring a pointer type to specify whether the pointer can or can not be null. Without it, the compiler will throw an error if there is any possibility of a null dereference, otherwise it will ignore
 
 ## Builtin types
 - `word` - native platform word size. Is the exact size of a pointer. 
@@ -35,7 +37,6 @@ All attributes are denoted by a `@` preceeding the name of the attribute
 - `@packed` - disabled all potential struct padding
 
 ### Safety attributes
-- `@null` - compiler doesn't insert runtime null-dereference checks. 
 - `@unsafe` - marks a function as unsafe to call; it must be called from a corresponding `unsafe` block.
 
 ### Linkage attributes
@@ -98,10 +99,10 @@ Explicit `unsafe` is required for:
 - integer <-> pointer casts  
 The compiler can and will assume that all pointers are not `null` unless explicitly marked with the `@null` parameter.
 
-## `export` shenanigans
+## `export` semantics
 Only exported symbols are accessible from other modules
 
-## name mangling
+### name mangling
 - By default, the compiler will mangle module-local symbol names to avoid collisions (eg include the module path in the symbol)
 - `@extern` removes manglign and requires the platform's C calling convention to be used
 - varargs are a WIP
