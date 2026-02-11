@@ -1,0 +1,15 @@
+module echo;
+
+include std::io;
+
+err main(int argc, @null string argv[]) {
+    if (argc < 2) {
+        return ERROR;
+    }
+
+    for (int i = 0; i < argc; i++) {
+        io::puts(argv[i]);
+    }
+
+    return OK;
+}
