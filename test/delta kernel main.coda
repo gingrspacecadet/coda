@@ -1,0 +1,32 @@
+// partial transcription of the DeltaOS kernel entry point
+// some sections omitted for brevity
+
+module kernel_main;
+
+include drivers;
+include tmpfs;
+include initrd;
+include sched;
+include syscall;
+include lib::io;
+include kernel;
+
+fn void kernel_main(string cmdline) {
+    // initialise all drivers
+    drivers::init();
+
+    //initialise filesystems
+    tmpfs::init();
+    initrd::init();
+
+    //initialise scheduler
+    sched::init();
+    syscall::init();
+
+    io::putsn("[kernel] starting scheduler...");
+    sched::start();
+
+    //should never reach here
+    io::putsn("[kernel] ERROR: scheduler returned!");
+    kernel::panic(null, "FATAL: scheduler returned!");
+}

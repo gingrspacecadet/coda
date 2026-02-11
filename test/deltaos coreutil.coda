@@ -1,0 +1,47 @@
+// transcribed deltaos coreutil "klog"
+
+module klog;
+
+include std::system;
+include std::io;
+include std::string;
+
+fn err main(int argc, string argv[]) {
+    (void)argc; (void)argv;
+
+    handle log = system::handle::aquire("$kernel/log", RIGHT_READ);
+    if (log == INVALID_HANDLE) {
+        io::putsn("klog: cannot acces $kernel/log");
+        return ERROR;
+    }
+
+    stat st;
+    if (io::stat(log, &st) != OK) {
+        io::putsn("klog: cannot stat $kernel/log");
+        return ERROR;
+    }
+
+    if (st.size == 0) {
+        io::putsn("klog: error reading from $kernel/log");
+        return ERROR;
+    }
+
+    char buf[512];
+    err status = OK;
+
+    while (1) {
+        size n = system::handle::read(log, buf, sizeof(buf) - 1);
+        if (n < 0) {
+            io::putsn("klog: error reading from $kernel/log");
+            status = ERROR;
+            break;
+        }
+        if (n == 0) break;
+
+        buf[n] = '\0';
+        io::puts(buf);
+    }
+
+    system::handle::close(log);
+    return status;
+}
