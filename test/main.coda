@@ -2,7 +2,7 @@ module echo;
 
 include std::io;
 
-err main(int argc, @null string argv[]) {
+fn err main(int argc, @null string argv[]) {
     if (argc < 2) {
         return ERROR;
     }
