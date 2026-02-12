@@ -1,5 +1,8 @@
 module 1;
 
 err main() {
+    asm {
+        ALSKJABDLAKJSBDLKJASBDJBL
+    }
     return OK;
 }
