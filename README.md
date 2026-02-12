@@ -118,15 +118,12 @@ type enum name {
 ```
 
 ## Inline assembly
-Uses similar syntax to GnuC:
+Inline assembly is a code block as follows:
 ```
-asm("asm string", inputs, outputs, constraints);
+asm {
+    mov x, 0
+    xor foo, foo
+}
 ```
-
-inputs use the following syntax:
-- "reg": set the specified register to a variable
-- "int": set the corresponding "%int" inside the assembly block to a variable
-
-outputs use the same syntax.
-
-constraints are lists of registers that may be modified.
+Inside the block, you follow standard nasm
+sytax, except for the fact that you can input variables which get converted. Inputs, outputs and constraints are inferred.
