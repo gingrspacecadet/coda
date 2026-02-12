@@ -2,14 +2,14 @@
 
 module klog;
 
-include std::system;
+include std::system::handle;
 include std::io;
 include std::string;
 
 fn err main(int argc, string argv[]) {
     (void)argc; (void)argv;
 
-    handle log = system::handle::aquire("$kernel/log", RIGHT_READ);
+    handle log = handle::acquire("$kernel/log", RIGHT_READ);
     if (log == INVALID_HANDLE) {
         io::putsn("klog: cannot acces $kernel/log");
         return ERROR;
@@ -30,7 +30,7 @@ fn err main(int argc, string argv[]) {
     err status = OK;
 
     while (1) {
-        size n = system::handle::read(log, buf, sizeof(buf) - 1);
+        size n = handle::read(log, buf, sizeof(buf) - 1);
         if (n < 0) {
             io::putsn("klog: error reading from $kernel/log");
             status = ERROR;
@@ -42,6 +42,6 @@ fn err main(int argc, string argv[]) {
         io::puts(buf);
     }
 
-    system::handle::close(log);
+    handle::close(log);
     return status;
 }
