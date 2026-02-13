@@ -8,13 +8,13 @@
 static char *src = NULL;
 static int idx = 0;
 
-char peek() {
+static char peek() {
     return src[idx];
 }
 
 static size line = 1, col = 1;
 
-char consume() {
+static char consume() {
     if (!(src + idx)) return '\0';
     if (src[idx] == '\n') {
         line++;

@@ -1,5 +1,5 @@
 module main;
 
 fn int main() {
-    return 0;
+    return 1;
 }
