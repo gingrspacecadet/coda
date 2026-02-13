@@ -1,8 +1,5 @@
-module 1;
+module main;
 
-err main() {
-    asm {
-        ALSKJABDLAKJSBDLKJASBDJBL
-    }
-    return OK;
+fn int main() {
+    return 0;
 }
