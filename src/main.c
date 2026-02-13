@@ -36,8 +36,16 @@ char peek() {
     return src[idx];
 }
 
+static size line = 1, col = 1;
+
 char consume() {
     if (!(src + idx)) return '\0';
+    if (src[idx] == '\n') {
+        line++;
+        col = 0;
+    } else {
+        col++;
+    }
     return src[idx++];
 }
 
@@ -77,6 +85,8 @@ TokenBuffer tokenbuffer_create(size elements) {
 
 void token_push(TokenBuffer *buffer, Token token) {
     if (buffer->idx >= buffer->len) return;
+    token.line = line;
+    token.column = col;
     buffer->data[buffer->idx++] = token;
 }
 
@@ -84,8 +94,6 @@ TokenBuffer lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
     src = data;
-
-    size line = 0, col = 0;
 
     while (peek()) {
         if (isalpha(peek())) {
@@ -116,7 +124,7 @@ TokenBuffer lexer(char *data) {
                 } else {
                     col++;
                 }
-                token_push(&tokens, (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.len});
+                token_push(&tokens, (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.idx});
                 buffer_clear(&buf);
             }
         }
@@ -125,7 +133,7 @@ TokenBuffer lexer(char *data) {
             while (isdigit(peek())) {
                 buffer_push(&buf, consume());
             }
-            token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.len});
+            token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.idx});
             buffer_clear(&buf);
         }
         else if (peek() == '(') {
@@ -171,11 +179,11 @@ int main(int argc, char **argv) {
     buf[src_size] = '\0';
     TokenBuffer tokens = lexer(buf);
 
-    for (int i = 0; tokens.data[i].type != _EOF; i++) {
+    for (int i = 0; i < tokens.idx; i++) {
         Token t = tokens.data[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
-            case IDENT: printf("IDENT %s\n", t.value); break;
+            case IDENT: printf("IDENT %s\n", t.value); free(t.value); break;
             case SEMI: puts("SEMI"); break;
             case FN: puts("FN"); break;
             case INT: puts("INT"); break;
@@ -184,7 +192,8 @@ int main(int argc, char **argv) {
             case LBRACE: puts("LBRACE"); break;
             case RBRACE: puts("RBRACE"); break;
             case RETURN: puts("RETURN"); break;
-            case NUMBER: printf("NUMBER %s\n", t.value); break;
+            case NUMBER: printf("NUMBER %s\n", t.value); free(t.value); break;
+            case _EOF: puts("EOF"); break;
         }
     }
 
