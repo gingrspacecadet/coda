@@ -91,7 +91,7 @@ Token *lexer(char *data) {
                 buffer_clear(&buf);
             }
             else {
-                tokens[num_tokens++] = (Token){.type = IDENT};
+                tokens[num_tokens++] = (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.len};
                 buffer_clear(&buf);
             }
         }
@@ -100,7 +100,7 @@ Token *lexer(char *data) {
             while (isdigit(peek())) {
                 buffer_push(&buf, consume());
             }
-            tokens[num_tokens++] = (Token){.type = NUMBER};
+            tokens[num_tokens++] = (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.len};
             buffer_clear(&buf);
         }
         else if (peek() == '(') {
@@ -150,15 +150,16 @@ int main(int argc, char **argv) {
         Token t = tokens[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
-            case IDENT: puts("IDENT"); break;
+            case IDENT: printf("IDENT %s\n", t.value); break;
             case SEMI: puts("SEMI"); break;
             case FN: puts("FN"); break;
             case INT: puts("INT"); break;
             case LPAREN: puts("LPAREN"); break;
             case RPAREN: puts("RPAREN"); break;
             case LBRACE: puts("LBRACE"); break;
+            case RBRACE: puts("RBRACE"); break;
             case RETURN: puts("RETURN"); break;
-            case NUMBER: puts("NUMBER"); break;
+            case NUMBER: printf("NUMBER %s\n", t.value); break;
         }
     }
 
