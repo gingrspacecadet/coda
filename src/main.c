@@ -61,11 +61,31 @@ void buffer_clear(Buffer *buffer) {
     buffer->idx = 0;
 }
 
-Token *lexer(char *data) {
-    Token *tokens = malloc(1024 * sizeof(Token));   // TODO: dynamic resizing
-    int num_tokens = 0;
+typedef struct {
+    Token *data;
+    size len;
+    int idx;
+} TokenBuffer;
+
+TokenBuffer tokenbuffer_create(size elements) {
+    return (TokenBuffer){
+        .data = calloc(elements, sizeof(Token)),
+        .len = elements,
+        .idx = 0,
+    };
+}
+
+void token_push(TokenBuffer *buffer, Token token) {
+    if (buffer->idx >= buffer->len) return;
+    buffer->data[buffer->idx++] = token;
+}
+
+TokenBuffer lexer(char *data) {
+    TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
     src = data;
+
+    size line = 0, col = 0;
 
     while (peek()) {
         if (isalpha(peek())) {
@@ -75,23 +95,28 @@ Token *lexer(char *data) {
             }
 
             if (strcmp(buf.data, "module") == 0) {
-                tokens[num_tokens++] = (Token){.type = MODULE};
+                token_push(&tokens, (Token){.type = MODULE});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "fn") == 0) {
-                tokens[num_tokens++] = (Token){.type = FN};
+                token_push(&tokens, (Token){.type = FN});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "int") == 0) {
-                tokens[num_tokens++] = (Token){.type = INT};
+                token_push(&tokens, (Token){.type = INT});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "return") == 0) {
-                tokens[num_tokens++] = (Token){.type = RETURN};
+                token_push(&tokens, (Token){.type = RETURN});
                 buffer_clear(&buf);
             }
             else {
-                tokens[num_tokens++] = (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.len};
+                if (peek() == '\n') { 
+                    line++; col = 0;
+                } else {
+                    col++;
+                }
+                token_push(&tokens, (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.len});
                 buffer_clear(&buf);
             }
         }
@@ -100,27 +125,27 @@ Token *lexer(char *data) {
             while (isdigit(peek())) {
                 buffer_push(&buf, consume());
             }
-            tokens[num_tokens++] = (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.len};
+            token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.len});
             buffer_clear(&buf);
         }
         else if (peek() == '(') {
-            tokens[num_tokens++] = (Token){.type = LPAREN};
+            token_push(&tokens, (Token){.type = LPAREN});
             consume();
         }
         else if (peek() == ')') {
-            tokens[num_tokens++] = (Token){.type = RPAREN};
+            token_push(&tokens, (Token){.type = RPAREN});
             consume();
         }
         else if (peek() == '{') {
-            tokens[num_tokens++] = (Token){.type = LBRACE};
+            token_push(&tokens, (Token){.type = LBRACE});
             consume();
         }
         else if (peek() == '}') {
-            tokens[num_tokens++] = (Token){.type = RBRACE};
+            token_push(&tokens, (Token){.type = RBRACE});
             consume();
         }
         else if (peek() == ';') {
-            tokens[num_tokens++] = (Token){.type = SEMI};
+            token_push(&tokens, (Token){.type = SEMI});
             consume();
         }
         else {
@@ -128,7 +153,7 @@ Token *lexer(char *data) {
         }
     }
 
-    tokens[num_tokens++] = (Token){.type = _EOF};
+    token_push(&tokens, (Token){.type = _EOF});
 
     return tokens;
 }
@@ -144,10 +169,10 @@ int main(int argc, char **argv) {
     char *buf = malloc(src_size + 1);
     fread(buf, 1, src_size, src_file);
     buf[src_size] = '\0';
-    Token *tokens = lexer(buf);
+    TokenBuffer tokens = lexer(buf);
 
-    for (int i = 0; tokens[i].type != _EOF; i++) {
-        Token t = tokens[i];
+    for (int i = 0; tokens.data[i].type != _EOF; i++) {
+        Token t = tokens.data[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
             case IDENT: printf("IDENT %s\n", t.value); break;
