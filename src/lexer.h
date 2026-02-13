@@ -1,0 +1,36 @@
+#pragma once
+
+#include <stddef.h>
+
+typedef size_t size;
+
+typedef enum {
+    MODULE,
+    IDENT,
+    SEMI,
+    FN,
+    INT,
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    RBRACE,
+    RETURN,
+    NUMBER,
+    _EOF,
+} TokenType;
+
+typedef struct {
+    TokenType type;
+    char *value;
+    size len;
+    size line;
+    size column;
+} Token;
+
+typedef struct {
+    Token *data;
+    size len;
+    int idx;
+} TokenBuffer;
+
+TokenBuffer lexer(char *src);
