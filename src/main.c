@@ -9,7 +9,17 @@
 
 void print_program(Program *prog) {
     printf("Module: %s\n", prog->module.name);
-    printf("Main returns: %d\n", prog->main_fn.ret_val);
+    printf("Main returns: %d\n", prog->main_fn.ret);
+}
+
+void emit_expr(FILE *f, Expr *e) {
+    if (e->type == EXPR_NUMBER) {
+        fprintf(f, "%d", e->number);
+    } else if (e->type = EXPR_BINOP) {
+        emit_expr(f, e->binop.left);
+        fprintf(f, " %c ", e->binop.op);
+        emit_expr(f, e->binop.right);
+    }
 }
 
 void emit_c(Program *prog, const char *out_path) {
@@ -21,9 +31,9 @@ void emit_c(Program *prog, const char *out_path) {
 
     fprintf(f, "#include <stdio.h>\n\n");
 
-    fprintf(f, "int main(void) {\n");
-    fprintf(f, "    return %d;\n", prog->main_fn.ret_val);
-    fprintf(f, "}\n");
+    fprintf(f, "int main(void) {\n    return ");
+    emit_expr(f, prog->main_fn.ret);
+    fprintf(f, ";\n}\n");
 
     fclose(f);
 }
@@ -41,23 +51,25 @@ int main(int argc, char **argv) {
     buf[src_size] = '\0';
     TokenBuffer tokens = lexer(buf);
 
-    // for (int i = 0; i < tokens.idx; i++) {
-    //     Token t = tokens.data[i];
-    //     switch (t.type) {
-    //         case MODULE: puts("MODULE"); break;
-    //         case IDENT: printf("IDENT %s\n", t.value); free(t.value); break;
-    //         case SEMI: puts("SEMI"); break;
-    //         case FN: puts("FN"); break;
-    //         case INT: puts("INT"); break;
-    //         case LPAREN: puts("LPAREN"); break;
-    //         case RPAREN: puts("RPAREN"); break;
-    //         case LBRACE: puts("LBRACE"); break;
-    //         case RBRACE: puts("RBRACE"); break;
-    //         case RETURN: puts("RETURN"); break;
-    //         case NUMBER: printf("NUMBER %s\n", t.value); free(t.value); break;
-    //         case _EOF: puts("EOF"); break;
-    //     }
-    // }
+    for (int i = 0; i < tokens.idx; i++) {
+        Token t = tokens.data[i];
+        switch (t.type) {
+            case MODULE: puts("MODULE"); break;
+            case IDENT: printf("IDENT %s\n", t.value); break;
+            case SEMI: puts("SEMI"); break;
+            case FN: puts("FN"); break;
+            case INT: puts("INT"); break;
+            case LPAREN: puts("LPAREN"); break;
+            case RPAREN: puts("RPAREN"); break;
+            case LBRACE: puts("LBRACE"); break;
+            case RBRACE: puts("RBRACE"); break;
+            case RETURN: puts("RETURN"); break;
+            case NUMBER: printf("NUMBER %s\n", t.value); break;
+            case PLUS: puts("PLUS"); break;
+            case MINUS: puts("MINUS"); break;
+            case _EOF: puts("EOF"); break;
+        }
+    }
 
     tokens.idx = 0;
     Program p = parse_program(&tokens);

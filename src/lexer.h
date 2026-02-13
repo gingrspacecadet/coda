@@ -5,7 +5,7 @@
 typedef size_t size;
 
 typedef enum {
-    MODULE,
+    MODULE = 0,
     IDENT,
     SEMI,
     FN,
@@ -16,6 +16,8 @@ typedef enum {
     RBRACE,
     RETURN,
     NUMBER,
+    PLUS,
+    MINUS,
     _EOF,
 } TokenType;
 

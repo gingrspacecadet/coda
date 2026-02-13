@@ -126,6 +126,14 @@ TokenBuffer lexer(char *data) {
             token_push(&tokens, (Token){.type = SEMI});
             consume();
         }
+        else if (peek() == '+') {
+            token_push(&tokens, (Token){.type = PLUS});
+            consume();
+        }
+        else if (peek() == '-') {
+            token_push(&tokens, (Token){.type = MINUS});
+            consume();
+        }
         else {
             consume();
         }

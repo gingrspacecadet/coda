@@ -4,74 +4,106 @@
 #include "lexer.h"
 #include "parser.h"
 
-static Token peek(TokenBuffer *tokens) {
+static TokenBuffer *tokens = NULL;
+
+static Token peek() {
     return tokens->data[tokens->idx];
 }
 
-static Token consume(TokenBuffer *tokens) {
+static Token consume() {
     return tokens->data[tokens->idx++];
 }
 
-static int match(TokenBuffer *tokens, TokenType expected) {
-    if (peek(tokens).type == expected) {
-        consume(tokens);
+static int match(TokenType expected) {
+    if (peek().type == expected) {
+        consume();
         return 1;
     }
     return 0;
 }
 
-static void expect(TokenBuffer *tokens, TokenType expected, const char *msg) {
-    if (!match(tokens, expected)) {
+static void expect(TokenType expected, const char *msg) {
+    if (!match(expected)) {
         fprintf(stderr, "parse error at line %zu, column %zu: %s\n",
-        peek(tokens).line, peek(tokens).column, msg);
+        peek().line, peek().column, msg);
         exit(1);
     }
 }
 
-Module parse_module(TokenBuffer *tokens) {
-    expect(tokens, MODULE, "expected 'module'");
-    Token name_token = consume(tokens);
+Expr *parse_number() {
+    Token t = consume();
+    if (t.type != NUMBER) {
+        fprintf(stderr, "expected number at line %zu (got %d)\n", t.line, t.type);
+        exit(1);
+    }
+    Expr *e = malloc(sizeof(Expr));
+    e->type = EXPR_NUMBER;
+    e->number = atoi(t.value);
+    return e;
+}
+
+Expr *parse_expr() {
+    Expr *left = parse_number();
+
+    while (peek().type == PLUS || peek().type == MINUS) {
+        char op = consume().type == PLUS ? '+' : '-';
+        Expr *right = parse_number();
+
+        Expr *bin = malloc(sizeof(Expr));
+        bin->type = EXPR_BINOP;
+        bin->binop.left = left;
+        bin->binop.op = op;
+        bin->binop.right = right;
+
+        left = bin;
+    }
+
+    return left;
+}
+
+Module parse_module() {
+    expect(MODULE, "expected 'module'");
+    Token name_token = consume();
     if (name_token.type != IDENT) {
         fprintf(stderr, "expected identifier for module name (%d)\n", name_token.type);
         exit(1);
     }
-    expect(tokens, SEMI, "expected ';' after module name");
+    expect(SEMI, "expected ';' after module name");
 
     Module m;
     m.name = name_token.value;
     return m;
 }
 
-Function parse_main(TokenBuffer *tokens) {
-    expect(tokens, FN, "expected 'fn'");
-    expect(tokens, INT, "expected 'int'");
-    Token name_token = consume(tokens);
+Function parse_main() {
+    expect(FN, "expected 'fn'");
+    expect(INT, "expected 'int'");
+    Token name_token = consume();
     if (name_token.type != IDENT || strcmp(name_token.value, "main") != 0) {
         fprintf(stderr, "expected function named 'main'\n");
         exit(1);
     }
 
-    expect(tokens, LPAREN, "expected '('");
-    expect(tokens, RPAREN, "expected ')'");
-    expect(tokens, LBRACE, "expected '{'");
+    expect(LPAREN, "expected '('");
+    expect(RPAREN, "expected ')'");
+    expect(LBRACE, "expected '{'");
 
-    expect(tokens, RETURN, "expected 'return'");
-    Token num_token = consume(tokens);
-    if (num_token.type != NUMBER) {
-        fprintf(stderr, "expected number after 'return'\n");
-        exit(1);
-    }
-    expect(tokens, SEMI, "expected ';'");
-    expect(tokens, RBRACE, "expected '}'");
+    expect(RETURN, "expected 'return'");
+    
+    Expr *ret_expr = parse_expr();
+
+    expect(SEMI, "expected ';'");
+    expect(RBRACE, "expected '}'");
 
     Function fn;
-    fn.ret_val = atoi(num_token.value);
+    fn.ret = ret_expr;
     return fn;
 }
 
-Program parse_program(TokenBuffer *tokens) {
+Program parse_program(TokenBuffer *t) {
+    tokens = t;
     Program prog;
-    prog.module = parse_module(tokens);
-    prog.main_fn = parse_main(tokens);
+    prog.module = parse_module();
+    prog.main_fn = parse_main();
     return prog;
 }

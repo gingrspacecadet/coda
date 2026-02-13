@@ -2,3 +2,4 @@
 coda
 
 *.o
+out/
