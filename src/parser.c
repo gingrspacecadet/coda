@@ -12,7 +12,7 @@ static Token consume(TokenBuffer *tokens) {
     return tokens->data[tokens->idx++];
 }
 
-int match(TokenBuffer *tokens, TokenType expected) {
+static int match(TokenBuffer *tokens, TokenType expected) {
     if (peek(tokens).type == expected) {
         consume(tokens);
         return 1;
@@ -20,7 +20,7 @@ int match(TokenBuffer *tokens, TokenType expected) {
     return 0;
 }
 
-void expect(TokenBuffer *tokens, TokenType expected, const char *msg) {
+static void expect(TokenBuffer *tokens, TokenType expected, const char *msg) {
     if (!match(tokens, expected)) {
         fprintf(stderr, "parse error at line %zu, column %zu: %s\n",
         peek(tokens).line, peek(tokens).column, msg);
