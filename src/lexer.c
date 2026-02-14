@@ -76,6 +76,10 @@ TokenBuffer lexer(char *data) {
                 token_push(&tokens, (Token){.type = MODULE});
                 buffer_clear(&buf);
             }
+            else if (strcmp(buf.data, "include") == 0) {
+                token_push(&tokens, (Token){.type = MODULE});
+                buffer_clear(&buf);
+            }
             else if (strcmp(buf.data, "fn") == 0) {
                 token_push(&tokens, (Token){.type = FN});
                 buffer_clear(&buf);

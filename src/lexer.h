@@ -5,7 +5,8 @@
 typedef size_t size;
 
 typedef enum {
-    MODULE = 0,
+    MODULE,
+    INCLUDE,
     IDENT,
     SEMI,
     FN,
