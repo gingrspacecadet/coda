@@ -19,6 +19,7 @@ typedef enum {
     NUMBER,
     PLUS,
     MINUS,
+    DOUBLECOLON,
     _EOF,
 } TokenType;
 
@@ -32,8 +33,9 @@ typedef struct {
 
 typedef struct {
     Token *data;
+    size cap;
     size len;
-    int idx;
+    size pos;
 } TokenBuffer;
 
 TokenBuffer lexer(char *src);

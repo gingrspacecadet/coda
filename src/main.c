@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     buf[src_size] = '\0';
     TokenBuffer tokens = lexer(buf);
 
-    for (int i = 0; i < tokens.idx; i++) {
+    for (int i = 0; i < tokens.len; i++) {
         Token t = tokens.data[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
@@ -68,11 +68,11 @@ int main(int argc, char **argv) {
             case NUMBER: printf("NUMBER %s\n", t.value); break;
             case PLUS: puts("PLUS"); break;
             case MINUS: puts("MINUS"); break;
+            case DOUBLECOLON: puts("DOUBLECOLON"); break;
             case _EOF: puts("EOF"); break;
         }
     }
 
-    tokens.idx = 0;
     Program p = parse_program(&tokens);
     mkdir("out", 0755);
     emit_c(&p, "out/hello.c");

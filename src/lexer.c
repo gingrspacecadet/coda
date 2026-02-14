@@ -48,16 +48,17 @@ void buffer_clear(Buffer *buffer) {
 TokenBuffer tokenbuffer_create(size elements) {
     return (TokenBuffer){
         .data = calloc(elements, sizeof(Token)),
-        .len = elements,
-        .idx = 0,
+        .cap = elements,
+        .len = 0,
+        .pos = 0,
     };
 }
 
 void token_push(TokenBuffer *buffer, Token token) {
-    if (buffer->idx >= buffer->len) return;
+    if (buffer->len >= buffer->cap) return;
     token.line = line;
-    token.column = col;
-    buffer->data[buffer->idx++] = token;
+    token.column = col - token.len;
+    buffer->data[buffer->len++] = token;
 }
 
 TokenBuffer lexer(char *data) {
@@ -68,28 +69,28 @@ TokenBuffer lexer(char *data) {
     while (peek()) {
         if (isalpha(peek())) {
             buffer_push(&buf, consume());
-            while (isalnum(peek()) || peek() == ':') {
+            while (isalnum(peek()) || peek() == '_') {
                 buffer_push(&buf, consume());
             }
 
             if (strcmp(buf.data, "module") == 0) {
-                token_push(&tokens, (Token){.type = MODULE});
+                token_push(&tokens, (Token){.type = MODULE, .len = 6});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "include") == 0) {
-                token_push(&tokens, (Token){.type = INCLUDE});
+                token_push(&tokens, (Token){.type = INCLUDE, .len = 7});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "fn") == 0) {
-                token_push(&tokens, (Token){.type = FN});
+                token_push(&tokens, (Token){.type = FN, .len = 2});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "int") == 0) {
-                token_push(&tokens, (Token){.type = INT});
+                token_push(&tokens, (Token){.type = INT, .len = 3});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "return") == 0) {
-                token_push(&tokens, (Token){.type = RETURN});
+                token_push(&tokens, (Token){.type = RETURN, .len = 6});
                 buffer_clear(&buf);
             }
             else {
@@ -115,6 +116,10 @@ TokenBuffer lexer(char *data) {
         }
         else if (peek() == '/' && src[idx+1] == '*') {
             while (peek() != '*' && src[idx+1] != '/') consume();
+        }
+        else if (peek() == ':' && src[idx+1] == ':') {
+            token_push(&tokens, (Token){.type = DOUBLECOLON});
+            consume();
         }
         else if (peek() == '(') {
             token_push(&tokens, (Token){.type = LPAREN});
