@@ -68,7 +68,7 @@ TokenBuffer lexer(char *data) {
     while (peek()) {
         if (isalpha(peek())) {
             buffer_push(&buf, consume());
-            while (isalnum(peek())) {
+            while (isalnum(peek()) || peek() == ':') {
                 buffer_push(&buf, consume());
             }
 
@@ -77,7 +77,7 @@ TokenBuffer lexer(char *data) {
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "include") == 0) {
-                token_push(&tokens, (Token){.type = MODULE});
+                token_push(&tokens, (Token){.type = INCLUDE});
                 buffer_clear(&buf);
             }
             else if (strcmp(buf.data, "fn") == 0) {
@@ -109,6 +109,12 @@ TokenBuffer lexer(char *data) {
             }
             token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.idx});
             buffer_clear(&buf);
+        }
+        else if (peek() == '/' && src[idx+1] == '/') {
+            while (peek() != '\n') consume();
+        }
+        else if (peek() == '/' && src[idx+1] == '*') {
+            while (peek() != '*' && src[idx+1] != '/') consume();
         }
         else if (peek() == '(') {
             token_push(&tokens, (Token){.type = LPAREN});

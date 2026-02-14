@@ -55,6 +55,7 @@ int main(int argc, char **argv) {
         Token t = tokens.data[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
+            case INCLUDE: puts("INCLUDE"); break;
             case IDENT: printf("IDENT %s\n", t.value); break;
             case SEMI: puts("SEMI"); break;
             case FN: puts("FN"); break;
