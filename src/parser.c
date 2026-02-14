@@ -83,7 +83,7 @@ Module parse_module() {
         fprintf(stderr, "expected identifier for module name (%d)\n", name_token.type);
         exit(1);
     }
-    expect(SEMI, "expected ';' after module name");
+    expect(SEMICOLON, "expected ';' after module name");
 
     Module m;
     m.name = name_token.value;
@@ -107,7 +107,7 @@ Function parse_main() {
     
     Expr *ret_expr = parse_expr();
 
-    expect(SEMI, "expected ';'");
+    expect(SEMICOLON, "expected ';'");
     expect(RBRACE, "expected '}'");
 
     Function fn;

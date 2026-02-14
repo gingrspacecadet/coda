@@ -138,7 +138,7 @@ TokenBuffer lexer(char *data) {
             consume();
         }
         else if (peek() == ';') {
-            token_push(&tokens, (Token){.type = SEMI});
+            token_push(&tokens, (Token){.type = SEMICOLON});
             consume();
         }
         else if (peek() == '+') {

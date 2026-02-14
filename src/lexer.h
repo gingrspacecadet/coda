@@ -8,7 +8,6 @@ typedef enum {
     MODULE,
     INCLUDE,
     IDENT,
-    SEMI,
     FN,
     INT,
     LPAREN,
@@ -20,6 +19,7 @@ typedef enum {
     PLUS,
     MINUS,
     DOUBLECOLON,
+    SEMICOLON,
     _EOF,
 } TokenType;
 

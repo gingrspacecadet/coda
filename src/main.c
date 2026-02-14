@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
             case MODULE: puts("MODULE"); break;
             case INCLUDE: puts("INCLUDE"); break;
             case IDENT: printf("IDENT %s\n", t.value); break;
-            case SEMI: puts("SEMI"); break;
+            case SEMICOLON: puts("SEMICOLON"); break;
             case FN: puts("FN"); break;
             case INT: puts("INT"); break;
             case LPAREN: puts("LPAREN"); break;
