@@ -56,19 +56,39 @@ int main(int argc, char **argv) {
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
             case INCLUDE: puts("INCLUDE"); break;
-            case IDENT: printf("IDENT %s\n", t.value); break;
-            case SEMICOLON: puts("SEMICOLON"); break;
             case FN: puts("FN"); break;
+            case RETURN: puts("RETURN"); break;
+            case IDENT: printf("IDENT %s\n", t.value); break;
+
             case INT: puts("INT"); break;
+            case STRING: printf("STRING %s\n", t.value); break;
+            case CHAR: printf("CHAR %s\n", t.value); break;
+
             case LPAREN: puts("LPAREN"); break;
             case RPAREN: puts("RPAREN"); break;
             case LBRACE: puts("LBRACE"); break;
             case RBRACE: puts("RBRACE"); break;
-            case RETURN: puts("RETURN"); break;
             case NUMBER: printf("NUMBER %s\n", t.value); break;
+            case COLON: puts("COLON"); break;
+            case SEMICOLON: puts("SEMICOLON"); break;
+            case DOUBLECOLON: puts("DOUBLECOLON"); break;
+            case COMMA: puts("COMMA"); break;
+            case DOT: puts("DOT"); break;
+
             case PLUS: puts("PLUS"); break;
             case MINUS: puts("MINUS"); break;
-            case DOUBLECOLON: puts("DOUBLECOLON"); break;
+            case STAR: puts("STAR"); break;
+            case DIV: puts("DIR"); break;
+            case SHLEFT: puts("SHLEFT"); break;
+            case SHRIGHT: puts("SHRIGHT"); break;
+            case EQ: puts("EQ"); break;
+
+            case GREATER: puts("GREATER"); break;
+            case LESS: puts("LESS"); break;
+            case EQ_EQ: puts("EQ_EQ"); break;
+            case BANG_EQ: puts("BANG_EQ"); break;
+            case GREATER_EQ: puts("GREATER_EQ"); break;
+            case LESS_EQ: puts("LESS_EQ"); break;
             case _EOF: puts("EOF"); break;
         }
     }

@@ -93,6 +93,26 @@ void lex_ident(Buffer *buf, TokenBuffer *tokens) {
     buffer_clear(buf);
 }
 
+static char handle_esc(TokenBuffer *tokens) {
+    if (peek() == '\\') {
+        consume();  // backslash
+        char c = peek();
+        consume();
+        switch (peek()) {
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case 'b': return '\b';
+            case '"': return '\"';
+            case '\'': return '\'';
+            case '\\': return '\\';
+            default: return c;
+        }
+    } else {
+        return consume();
+    }
+}
+
 TokenBuffer lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
@@ -117,6 +137,27 @@ TokenBuffer lexer(char *data) {
         }
         else {
             switch (peek()) {
+                case '\'':
+                    consume();          // '
+                    char c = handle_esc(&tokens);
+                    if (peek() != '\'') {
+                        fprintf(stderr, "Lexer error: unterminated char literal at %zu, %zu.", line, col)    ;
+                        exit(1);
+                    }
+                    consume();          // '
+                    char tmp[2] = {c, '\0'};
+                    token_push(&tokens, (Token){.type = CHAR, .value = strdup(tmp), .len = 1});
+                    break;
+                case '"':
+                    consume();  // "
+                    Buffer str = buffer_create(128);    // TODO: longer string literals
+                    while (peek() != '"') {
+                        buffer_push(&str, handle_esc(&tokens));
+                    }
+                    consume();  // "
+                    token_push(&tokens, (Token){.type = STRING, .value = strdup(str.data), .len = str.len});
+                    buffer_clear(&str);
+                    break;
                 case '/':
                     if (src[idx + 1] == '/') {
                         consume(); consume();   // <- this thingy
@@ -141,6 +182,7 @@ TokenBuffer lexer(char *data) {
                         consume(); consume();
                     } else {
                         token_push(&tokens, (Token){.type = COLON});
+                        consume();
                     }
                     break;
                 case '(':
@@ -159,10 +201,34 @@ TokenBuffer lexer(char *data) {
                     token_push(&tokens, (Token){.type = MINUS}); consume(); break;
                 case '*':
                     token_push(&tokens, (Token){.type = STAR}); consume(); break;
+                case '<':
+                    consume();
+                    if (peek() == '<') {
+                        token_push(&tokens, (Token){.type = SHLEFT});
+                        consume();
+                    }
+                    else token_push(&tokens, (Token){.type = LESS});
+                    break;
+                case '>':
+                    consume();
+                    if (peek() == '>') {
+                        consume();
+                        token_push(&tokens, (Token){.type = SHRIGHT});
+                    }
+                    else token_push(&tokens, (Token){.type = GREATER});
+                    break;
+                case '=':
+                    token_push(&tokens, (Token){.type = EQ}); consume(); break;
+                case ',':
+                    token_push(&tokens, (Token){.type = COMMA}); consume(); break;
+                case '.':
+                    token_push(&tokens, (Token){.type = DOT}); consume(); break;
                 case ' ':
-                case '\t': consume(); col++; break;
-                case '\n': consume(); line++; col = 0; break;
-                default: consume(); break;  // TODO: error on unknown char
+                case '\t':
+                case '\n': consume(); break;
+                default:
+                    fprintf(stderr, "Lexer error at %zu, %zu: unknown character %c\n", line, col + 1, peek());
+                    exit(1);
             }
         }
     }

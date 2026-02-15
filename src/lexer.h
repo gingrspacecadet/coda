@@ -15,6 +15,7 @@ typedef enum {
     // Types
     INT,
     STRING,
+    CHAR,
 
     // punctuation
     LPAREN,
@@ -33,6 +34,17 @@ typedef enum {
     MINUS,
     STAR,
     DIV,
+    SHRIGHT,
+    SHLEFT,
+    EQ,
+
+    // comparisons
+    GREATER,
+    LESS,
+    EQ_EQ,
+    BANG_EQ,
+    GREATER_EQ,
+    LESS_EQ,
 
     _EOF,
 } TokenType;

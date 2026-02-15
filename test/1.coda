@@ -1,7 +1,0 @@
-module main;
-
-include std::io;
-
-fn int main() {
-    return 1 + 2 + 3 - 4;
-}

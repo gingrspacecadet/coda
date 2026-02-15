@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+make > /dev/null
+
+expected='MODULE
+INCLUDE
+FN
+RETURN
+IDENT ident
+INT
+STRING string
+CHAR c
+LPAREN
+RPAREN
+LBRACE
+RBRACE
+NUMBER 0
+COLON
+SEMICOLON
+DOUBLECOLON
+COMMA
+DOT
+PLUS
+MINUS
+STAR
+DIR
+SHRIGHT
+SHLEFT
+EQ
+EQ
+GREATER
+LESS
+GREATER
+EQ
+LESS
+EQ
+EOF'
+
+# create temp files and ensure cleanup
+exp_file=$(mktemp)
+act_file=$(mktemp)
+trap 'rm -f "$exp_file" "$act_file"' EXIT
+
+# write expected to file
+printf '%s\n' "$expected" > "$exp_file"
+
+# count expected lines
+lines=$(wc -l < "$exp_file")
+
+# capture only the first $lines lines of stdout (ignore stderr)
+./coda test/lexer.coda 2>/dev/null | head -n "$lines" > "$act_file" || true
+
+# run unified diff
+if diff -u --label expected --label actual "$exp_file" "$act_file"; then
+  printf "\x1b[1;32mLEXER TEST PASSED\n"
+  exit 0
+else
+  echo
+  printf "\x1b[1;31mLEXER TEST FAILED\n"
+  exit 1
+fi
