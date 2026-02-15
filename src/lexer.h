@@ -14,9 +14,11 @@ typedef enum {
     ATTR,
 
     // Types
-    INT,
     STRING,
     CHAR,
+    INT8, INT16, INT32, INT64,
+    UINT8, UINT16, UINT32, UINT64,
+    _NULL,
 
     // punctuation
     LPAREN,
@@ -29,15 +31,16 @@ typedef enum {
     DOUBLECOLON,
     COMMA,
     DOT,
+    AMP,
+    QUESTION,
     
     // operations
     PLUS,
     MINUS,
     STAR,
     DIV,
-    SHRIGHT,
-    SHLEFT,
-    EQ,
+    RSHIFT,
+    LSHIFT,
 
     // comparisons
     GREATER,
@@ -46,6 +49,15 @@ typedef enum {
     BANG_EQ,
     GREATER_EQ,
     LESS_EQ,
+
+    //Assignment
+    EQ,
+    PLUS_EQ,
+    MINUS_EQ,
+    STAR_EQ,
+    DIV_EQ,
+    RSHIFT_EQ,
+    LSHIFT_EQ,
 
     _EOF,
 } TokenType;

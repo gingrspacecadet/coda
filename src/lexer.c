@@ -70,8 +70,16 @@ Keyword keywords[] = {
     {"module", MODULE},
     {"include", INCLUDE},
     {"fn", FN},
-    {"int", INT},
-    {"return", RETURN}
+    {"return", RETURN},
+    {"int8", INT8},
+    {"int16", INT16},
+    {"int32", INT32},
+    {"int64", INT64},
+    {"uint8", UINT8},
+    {"uint16", UINT16},
+    {"uint32", UINT32},
+    {"uint64", UINT64},
+    {"null", _NULL},
 };
 
 void lex_ident(Buffer *buf, TokenBuffer *tokens) {
@@ -169,11 +177,12 @@ TokenBuffer lexer(char *data) {
                     buffer_clear(&str);
                     break;
                 case '/':
-                    if (src[idx + 1] == '/') {
-                        consume(); consume();   // <- this thingy
+                    consume();
+                    if (peek() == '/') {
+                        consume();   // <- this thingy
                         while (peek() && peek() != '\n') consume();
-                    } else if (src[idx + 1] == '*') {
-                        consume(); consume(); /* <- this thingy */
+                    } else if (peek() == '*') {
+                        consume(); /* <- this thingy */
                         while (peek()) {
                             if (peek() == '*' && src[idx+1] == '/') {
                                 consume(); consume(); /* this thingy -> */
@@ -182,18 +191,20 @@ TokenBuffer lexer(char *data) {
                             consume();
                         }
                     } else {
-                        token_push(&tokens, (Token){.type = DIV});
-                        consume();
+                        if (peek() == '=') {
+                            consume();
+                            token_push(&tokens, (Token){.type = DIV_EQ});
+                        }
+                        else token_push(&tokens, (Token){.type = DIV});
                     }
                     break;
                 case ':':
-                    if (src[idx+1] == ':') {
-                        token_push(&tokens, (Token){.type = DOUBLECOLON});
-                        consume(); consume();
-                    } else {
-                        token_push(&tokens, (Token){.type = COLON});
+                    consume();
+                    if (peek() == ':') {
                         consume();
+                        token_push(&tokens, (Token){.type = DOUBLECOLON});
                     }
+                    else token_push(&tokens, (Token){.type = COLON});
                     break;
                 case '(':
                     token_push(&tokens, (Token){.type = LPAREN}); consume(); break;
@@ -206,16 +217,42 @@ TokenBuffer lexer(char *data) {
                 case ';':
                     token_push(&tokens, (Token){.type = SEMICOLON}); consume(); break;
                 case '+':
-                    token_push(&tokens, (Token){.type = PLUS}); consume(); break;
+                    consume();
+                    if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = PLUS_EQ});
+                    }
+                    else token_push(&tokens, (Token){.type = PLUS});
+                    break;
                 case '-':
-                    token_push(&tokens, (Token){.type = MINUS}); consume(); break;
+                    consume();
+                    if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = MINUS_EQ});
+                    }
+                    else token_push(&tokens, (Token){.type = MINUS});
+                    break;
                 case '*':
-                    token_push(&tokens, (Token){.type = STAR}); consume(); break;
+                    consume();
+                    if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = STAR_EQ});
+                    }
+                    else token_push(&tokens, (Token){.type = STAR});
+                    break;
                 case '<':
                     consume();
                     if (peek() == '<') {
-                        token_push(&tokens, (Token){.type = SHLEFT});
                         consume();
+                        if (peek() == '=') {
+                            consume();
+                            token_push(&tokens, (Token){.type = LSHIFT_EQ});
+                        }
+                        else token_push(&tokens, (Token){.type = LSHIFT});
+                    }
+                    else if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = LESS_EQ});
                     }
                     else token_push(&tokens, (Token){.type = LESS});
                     break;
@@ -223,16 +260,34 @@ TokenBuffer lexer(char *data) {
                     consume();
                     if (peek() == '>') {
                         consume();
-                        token_push(&tokens, (Token){.type = SHRIGHT});
+                        if (peek() == '=') {
+                            consume();
+                            token_push(&tokens, (Token){.type = RSHIFT_EQ});
+                        }
+                        else token_push(&tokens, (Token){.type = RSHIFT});
+                    }
+                    else if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = GREATER_EQ});
                     }
                     else token_push(&tokens, (Token){.type = GREATER});
                     break;
                 case '=':
-                    token_push(&tokens, (Token){.type = EQ}); consume(); break;
+                    consume();
+                    if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = EQ_EQ});
+                    }
+                    else token_push(&tokens, (Token){.type = EQ});
+                    break;
                 case ',':
-                    token_push(&tokens, (Token){.type = COMMA}); consume(); break;
+                    consume(); token_push(&tokens, (Token){.type = COMMA}); break;
                 case '.':
-                    token_push(&tokens, (Token){.type = DOT}); consume(); break;
+                    consume(); token_push(&tokens, (Token){.type = DOT}); break;
+                case '&':
+                    consume(); token_push(&tokens, (Token){.type = AMP}); break;
+                case '?':
+                    consume(); token_push(&tokens, (Token){.type = QUESTION}); break;
                 case ' ':
                 case '\t':
                 case '\n': consume(); break;

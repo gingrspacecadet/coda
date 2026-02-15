@@ -9,13 +9,13 @@
 
 void print_program(Program *prog) {
     printf("Module: %s\n", prog->module.name);
-    printf("Main returns: %d\n", prog->main_fn.ret);
+    printf("Main returns: %d\n", prog->main_fn.ret->number);
 }
 
 void emit_expr(FILE *f, Expr *e) {
     if (e->type == EXPR_NUMBER) {
         fprintf(f, "%d", e->number);
-    } else if (e->type = EXPR_BINOP) {
+    } else if (e->type == EXPR_BINOP) {
         emit_expr(f, e->binop.left);
         fprintf(f, " %c ", e->binop.op);
         emit_expr(f, e->binop.right);
@@ -61,9 +61,17 @@ int main(int argc, char **argv) {
             case IDENT: printf("IDENT %s\n", t.value); break;
             case ATTR: printf("ATTR %s\n", t.value); break;
 
-            case INT: puts("INT"); break;
             case STRING: printf("STRING %s\n", t.value); break;
             case CHAR: printf("CHAR %s\n", t.value); break;
+            case INT8: puts("INT8"); break;
+            case INT16: puts("INT16"); break;
+            case INT32: puts("INT32"); break;
+            case INT64: puts("INT64"); break;
+            case UINT8: puts("UINT8"); break;
+            case UINT16: puts("UINT16"); break;
+            case UINT32: puts("UINT32"); break;
+            case UINT64: puts("UINT64"); break;
+            case _NULL: puts("NULL"); break;
 
             case LPAREN: puts("LPAREN"); break;
             case RPAREN: puts("RPAREN"); break;
@@ -75,14 +83,15 @@ int main(int argc, char **argv) {
             case DOUBLECOLON: puts("DOUBLECOLON"); break;
             case COMMA: puts("COMMA"); break;
             case DOT: puts("DOT"); break;
+            case AMP: puts("AMP"); break;
+            case QUESTION: puts("QUESTION"); break;
 
             case PLUS: puts("PLUS"); break;
             case MINUS: puts("MINUS"); break;
             case STAR: puts("STAR"); break;
-            case DIV: puts("DIR"); break;
-            case SHLEFT: puts("SHLEFT"); break;
-            case SHRIGHT: puts("SHRIGHT"); break;
-            case EQ: puts("EQ"); break;
+            case DIV: puts("DIV"); break;
+            case LSHIFT: puts("LSHIFT"); break;
+            case RSHIFT: puts("RSHIFT"); break;
 
             case GREATER: puts("GREATER"); break;
             case LESS: puts("LESS"); break;
@@ -90,6 +99,15 @@ int main(int argc, char **argv) {
             case BANG_EQ: puts("BANG_EQ"); break;
             case GREATER_EQ: puts("GREATER_EQ"); break;
             case LESS_EQ: puts("LESS_EQ"); break;
+
+            case EQ: puts("EQ"); break;
+            case PLUS_EQ: puts("PLUS_EQ"); break;
+            case MINUS_EQ: puts("MINUS_EQ"); break;
+            case STAR_EQ: puts("STAR_EQ"); break;
+            case DIV_EQ: puts("DIV_EQ"); break;
+            case RSHIFT_EQ: puts("RSHIFT_EQ"); break;
+            case LSHIFT_EQ: puts("LSHIFT_EQ"); break;
+
             case _EOF: puts("EOF"); break;
         }
     }
