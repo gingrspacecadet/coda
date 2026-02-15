@@ -5,21 +5,35 @@
 typedef size_t size;
 
 typedef enum {
+    // Keywords
     MODULE,
     INCLUDE,
-    IDENT,
     FN,
+    RETURN,
+    IDENT,
+
+    // Types
     INT,
+    STRING,
+
+    // punctuation
     LPAREN,
     RPAREN,
     LBRACE,
     RBRACE,
-    RETURN,
     NUMBER,
+    COLON,
+    SEMICOLON,
+    DOUBLECOLON,
+    COMMA,
+    DOT,
+    
+    // operations
     PLUS,
     MINUS,
-    DOUBLECOLON,
-    SEMICOLON,
+    STAR,
+    DIV,
+
     _EOF,
 } TokenType;
 

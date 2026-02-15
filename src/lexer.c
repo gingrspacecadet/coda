@@ -61,6 +61,38 @@ void token_push(TokenBuffer *buffer, Token token) {
     buffer->data[buffer->len++] = token;
 }
 
+typedef struct {
+    char *name;
+    TokenType type;
+} Keyword;
+
+Keyword keywords[] = {
+    {"module", MODULE},
+    {"include", INCLUDE},
+    {"fn", FN},
+    {"int", INT},
+    {"return", RETURN}
+};
+
+void lex_ident(Buffer *buf, TokenBuffer *tokens) {
+    for (int i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+        Keyword k = keywords[i];
+        if (strcmp(buf->data, k.name) == 0) {
+            token_push(tokens, (Token){.type = k.type, .len = buf->idx});
+            buffer_clear(buf);
+            return;
+        }
+    }
+
+    if (peek() == '\n') {
+        line++; col = 0;
+    } else {
+        col++;
+    }
+    token_push(tokens, (Token){.type = IDENT, .value = strdup(buf->data), .len = buf->idx});
+    buffer_clear(buf);
+}
+
 TokenBuffer lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
@@ -73,35 +105,7 @@ TokenBuffer lexer(char *data) {
                 buffer_push(&buf, consume());
             }
 
-            if (strcmp(buf.data, "module") == 0) {
-                token_push(&tokens, (Token){.type = MODULE, .len = 6});
-                buffer_clear(&buf);
-            }
-            else if (strcmp(buf.data, "include") == 0) {
-                token_push(&tokens, (Token){.type = INCLUDE, .len = 7});
-                buffer_clear(&buf);
-            }
-            else if (strcmp(buf.data, "fn") == 0) {
-                token_push(&tokens, (Token){.type = FN, .len = 2});
-                buffer_clear(&buf);
-            }
-            else if (strcmp(buf.data, "int") == 0) {
-                token_push(&tokens, (Token){.type = INT, .len = 3});
-                buffer_clear(&buf);
-            }
-            else if (strcmp(buf.data, "return") == 0) {
-                token_push(&tokens, (Token){.type = RETURN, .len = 6});
-                buffer_clear(&buf);
-            }
-            else {
-                if (peek() == '\n') { 
-                    line++; col = 0;
-                } else {
-                    col++;
-                }
-                token_push(&tokens, (Token){.type = IDENT, .value = strdup(buf.data), .len = buf.idx});
-                buffer_clear(&buf);
-            }
+            lex_ident(&buf, &tokens);
         }
         else if (isdigit(peek())) {
             buffer_push(&buf, consume());
@@ -111,50 +115,58 @@ TokenBuffer lexer(char *data) {
             token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.idx});
             buffer_clear(&buf);
         }
-        else if (peek() == '/' && src[idx+1] == '/') {
-            while (peek() != '\n') consume();
-        }
-        else if (peek() == '/' && src[idx+1] == '*') {
-            while (peek() != '*' && src[idx+1] != '/') consume();
-        }
-        else if (peek() == ':' && src[idx+1] == ':') {
-            token_push(&tokens, (Token){.type = DOUBLECOLON});
-            consume();
-        }
-        else if (peek() == '(') {
-            token_push(&tokens, (Token){.type = LPAREN});
-            consume();
-        }
-        else if (peek() == ')') {
-            token_push(&tokens, (Token){.type = RPAREN});
-            consume();
-        }
-        else if (peek() == '{') {
-            token_push(&tokens, (Token){.type = LBRACE});
-            consume();
-        }
-        else if (peek() == '}') {
-            token_push(&tokens, (Token){.type = RBRACE});
-            consume();
-        }
-        else if (peek() == ';') {
-            token_push(&tokens, (Token){.type = SEMICOLON});
-            consume();
-        }
-        else if (peek() == '+') {
-            token_push(&tokens, (Token){.type = PLUS});
-            consume();
-        }
-        else if (peek() == '-') {
-            token_push(&tokens, (Token){.type = MINUS});
-            consume();
-        }
         else {
-            consume();
+            switch (peek()) {
+                case '/':
+                    if (src[idx + 1] == '/') {
+                        consume(); consume();   // <- this thingy
+                        while (peek() && peek() != '\n') consume();
+                    } else if (src[idx + 1] == '*') {
+                        consume(); consume(); /* <- this thingy */
+                        while (peek()) {
+                            if (peek() == '*' && src[idx+1] == '/') {
+                                consume(); consume(); /* this thingy -> */
+                                break;
+                            }
+                            consume();
+                        }
+                    } else {
+                        token_push(&tokens, (Token){.type = DIV});
+                        consume();
+                    }
+                    break;
+                case ':':
+                    if (src[idx+1] == ':') {
+                        token_push(&tokens, (Token){.type = DOUBLECOLON});
+                        consume(); consume();
+                    } else {
+                        token_push(&tokens, (Token){.type = COLON});
+                    }
+                    break;
+                case '(':
+                    token_push(&tokens, (Token){.type = LPAREN}); consume(); break;
+                case ')':
+                    token_push(&tokens, (Token){.type = RPAREN}); consume(); break;
+                case '{':
+                    token_push(&tokens, (Token){.type = LBRACE}); consume(); break;
+                case '}':
+                    token_push(&tokens, (Token){.type = RBRACE}); consume(); break;
+                case ';':
+                    token_push(&tokens, (Token){.type = SEMICOLON}); consume(); break;
+                case '+':
+                    token_push(&tokens, (Token){.type = PLUS}); consume(); break;
+                case '-':
+                    token_push(&tokens, (Token){.type = MINUS}); consume(); break;
+                case '*':
+                    token_push(&tokens, (Token){.type = STAR}); consume(); break;
+                case ' ':
+                case '\t': consume(); col++; break;
+                case '\n': consume(); line++; col = 0; break;
+                default: consume(); break;  // TODO: error on unknown char
+            }
         }
     }
 
     token_push(&tokens, (Token){.type = _EOF});
-
     return tokens;
 }
