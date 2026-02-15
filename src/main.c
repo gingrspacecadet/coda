@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
             case FN: puts("FN"); break;
             case RETURN: puts("RETURN"); break;
             case IDENT: printf("IDENT %s\n", t.value); break;
+            case ATTR: printf("ATTR %s\n", t.value); break;
 
             case INT: puts("INT"); break;
             case STRING: printf("STRING %s\n", t.value); break;

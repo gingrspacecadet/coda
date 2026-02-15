@@ -3,6 +3,7 @@ include
 fn
 return
 ident
+@packed
 int
 "string"
 'c'

@@ -137,6 +137,16 @@ TokenBuffer lexer(char *data) {
         }
         else {
             switch (peek()) {
+                case '@':
+                    consume();  // @
+                    buffer_push(&buf, consume());
+                    while (isalnum(peek()) || peek() == '_') {
+                        buffer_push(&buf, consume());
+                    }
+        
+                    token_push(&tokens, (Token){.type = ATTR, .value = strdup(buf.data), .len = buf.len});
+                    buffer_clear(&buf);
+                    break;
                 case '\'':
                     consume();          // '
                     char c = handle_esc(&tokens);

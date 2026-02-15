@@ -11,6 +11,7 @@ typedef enum {
     FN,
     RETURN,
     IDENT,
+    ATTR,
 
     // Types
     INT,

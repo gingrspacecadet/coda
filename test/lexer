@@ -8,6 +8,7 @@ INCLUDE
 FN
 RETURN
 IDENT ident
+ATTR packed
 INT
 STRING string
 CHAR c
