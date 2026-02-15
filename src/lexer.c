@@ -216,6 +216,10 @@ TokenBuffer lexer(char *data) {
                     token_push(&tokens, (Token){.type = LBRACE}); consume(); break;
                 case '}':
                     token_push(&tokens, (Token){.type = RBRACE}); consume(); break;
+                case '[':
+                    token_push(&tokens, (Token){.type = LBRACK}); consume(); break;
+                case ']':
+                    token_push(&tokens, (Token){.type = RBRACK}); consume(); break;
                 case ';':
                     token_push(&tokens, (Token){.type = SEMICOLON}); consume(); break;
                 case '+':

@@ -12,6 +12,7 @@ typedef enum {
     RETURN,
     IDENT,
     ATTR,
+    MUT,
 
     // Types
     STRING,
@@ -25,6 +26,8 @@ typedef enum {
     RPAREN,
     LBRACE,
     RBRACE,
+    LBRACK,
+    RBRACK,
     NUMBER,
     COLON,
     SEMICOLON,
