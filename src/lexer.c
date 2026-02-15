@@ -184,11 +184,13 @@ TokenBuffer lexer(char *data) {
                     } else if (peek() == '*') {
                         consume(); /* <- this thingy */
                         while (peek()) {
-                            if (peek() == '*' && src[idx+1] == '/') {
-                                consume(); consume(); /* this thingy -> */
-                                break;
-                            }
-                            consume();
+                            if (peek() == '*'){
+                                consume();
+                                if (peek() == '/') {
+                                    consume();
+                                    break;
+                                }
+                            } else consume();
                         }
                     } else {
                         if (peek() == '=') {
