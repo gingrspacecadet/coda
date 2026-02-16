@@ -4,7 +4,7 @@ fn
 return
 ident
 @packed
-int
+mut
 "string"
 'c'
 int8
@@ -18,6 +18,7 @@ uint64
 null
 ()
 {}
+[]
 0
 :
 ;

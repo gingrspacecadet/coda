@@ -6,22 +6,11 @@
 #include <sys/stat.h>
 #include "lexer.h"
 #include "parser.h"
+#include "print.h"
 
-int main(int argc, char **argv) {
-    if (argc < 2) return 1;
-
-    FILE *src_file = fopen(argv[1], "r");
-    fseek(src_file, 0, SEEK_END);
-    size src_size = ftell(src_file);
-    rewind(src_file);
-
-    char *buf = malloc(src_size + 1);
-    fread(buf, 1, src_size, src_file);
-    buf[src_size] = '\0';
-    TokenBuffer tokens = lexer(buf);
-
-    for (int i = 0; i < tokens.len; i++) {
-        Token t = tokens.data[i];
+void pretty_print_tokens(TokenBuffer *tokens) {
+    for (int i = 0; i < tokens->len; i++) {
+        Token t = tokens->data[i];
         switch (t.type) {
             case MODULE: puts("MODULE"); break;
             case INCLUDE: puts("INCLUDE"); break;
@@ -29,6 +18,7 @@ int main(int argc, char **argv) {
             case RETURN: puts("RETURN"); break;
             case IDENT: printf("IDENT %s\n", t.value); break;
             case ATTR: printf("ATTR %s\n", t.value); break;
+            case MUT: puts("MUT"); break;
 
             case STRING: printf("STRING %s\n", t.value); break;
             case CHAR: printf("CHAR %s\n", t.value); break;
@@ -46,6 +36,8 @@ int main(int argc, char **argv) {
             case RPAREN: puts("RPAREN"); break;
             case LBRACE: puts("LBRACE"); break;
             case RBRACE: puts("RBRACE"); break;
+            case LBRACK: puts("LBRACK"); break;
+            case RBRACK: puts("RBRACK"); break;
             case NUMBER: printf("NUMBER %s\n", t.value); break;
             case COLON: puts("COLON"); break;
             case SEMICOLON: puts("SEMICOLON"); break;
@@ -80,11 +72,83 @@ int main(int argc, char **argv) {
             case _EOF: puts("EOF"); break;
         }
     }
+}
 
-    //Program p = parse_program(&tokens);
-    //mkdir("out", 0755);
-    //emit_c(&p, "out/hello.c");
-    //printf("Generated out/hello.c\n");
+int main(int argc, char **argv) {
+    if (argc < 2) return 1;
+
+    FILE *src_file = fopen(argv[1], "r");
+    fseek(src_file, 0, SEEK_END);
+    size src_size = ftell(src_file);
+    rewind(src_file);
+
+    char *buf = malloc(src_size + 1);
+    fread(buf, 1, src_size, src_file);
+    buf[src_size] = '\0';
+    TokenBuffer tokens = lexer(buf);
+
+    //pretty_print_tokens(&tokens);
+
+    // TODO: this is jut a manual test
+    Module m = (Module){
+        .name = "test",
+        .includes = (Include *[]){
+            &(Include){
+                .path = (char*[]){"std", "io"},
+                .path_len = 2,
+                .alias = "foo",
+            },
+            &(Include){
+                .path = (char*[]){"std", "string"},
+                .path_len = 2,
+                .alias = "bar",
+            },
+        },
+        .include_count = 2,
+
+        .decls = (Decl*[]){
+            &(Decl){
+                .kind = DECL_FN,
+                .fn = &(FnDecl){
+                    .attr_count = 1,
+                    .attributes = &(Attribute){
+                        .name = "test"
+                    },
+                    .ret_type = &(TypeRef){
+                        .kind = TYPE_PRIMITIVE,
+                        .primitive_name = "int",
+                    },
+                    .name = "main",
+                    .param_count = 0,
+                    .body = &(Stmt){
+                        .kind = STMT_BLOCK,
+                        .block = {
+                            .stmts = (Stmt*[]){
+                                &(Stmt){
+                                    .kind = STMT_RETURN,
+                                    .ret_expr = &(Expr){
+                                        .kind = EXPR_LIT,
+                                        .resolved_type = &(TypeRef){
+                                            .kind = TYPE_PRIMITIVE,
+                                            .primitive_name = "int",
+                                        },
+                                        .lit = {
+                                            .kind = LIT_INT,
+                                            .int_value = 0,
+                                        }
+                                    },
+                                },
+                            },                            
+                            .stmt_count = 1
+                        }
+                    }
+                }
+            }
+        },
+        .decl_count = 1,
+    };
+
+    pretty_print_module(&m);
 
     return 0;
 }

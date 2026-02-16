@@ -1,0 +1,242 @@
+#include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "parser.h"
+
+static void print_indent(int indent) {
+    for (int i = 0; i < indent; ++i) putchar(' ');
+}
+
+static const char *safe_str(const char *s) {
+    return s ? s : "<null>";
+}
+
+static void print_attributes(Attribute *attrs, size_t count, int indent) {
+    if (!attrs || count == 0) return;
+    for (size_t i = 0; i < count; ++i) {
+        print_indent(indent + 2);
+        printf("@%s", safe_str(attrs[i].name));
+        if (attrs[i].arg_count) {
+            putchar('(');
+            for (size_t j = 0; j < attrs[i].arg_count; ++j) {
+                if (j) printf(", ");
+                printf("%s", safe_str(attrs[i].args[j]));
+            }
+            putchar(')');
+        }
+        putchar('\n');
+    }
+}
+
+static void print_params(Param *params, size_t count, int indent) {
+    if (!params || count == 0) {
+        print_indent(indent + 2);
+        puts("(no params)");
+        return;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        print_indent(indent + 2);
+        printf("- Param %zu: %s", i, safe_str(params[i].name));
+        if (params[i].type) printf(" : (type)");
+        putchar('\n');
+        print_attributes(params[i].attributes, params[i].attr_count, indent + 2);
+    }
+}
+
+static void print_literal(const Literal *lit, int indent) {
+    if (!lit) return;
+    print_indent(indent + 2);
+    switch (lit->kind) {
+        case LIT_INT:    printf("Literal int: %lld\n", (long long)lit->int_value); break;
+        case LIT_FLOAT:  printf("Literal float: %g\n", lit->float_value); break;
+        case LIT_STRING: printf("Literal string: \"%s\"\n", safe_str(lit->str_value)); break;
+        case LIT_BOOL:   printf("Literal bool: %s\n", lit->bool_value ? "true" : "false"); break;
+        case LIT_NULL:   printf("Literal null\n"); break;
+        default:         printf("Literal <unknown>\n"); break;
+    }
+}
+
+static void print_expr(const Expr *e, int indent) {
+    if (!e) {
+        print_indent(indent + 2);
+        puts("<expr null>");
+        return;
+    }
+    switch (e->kind) {
+        case EXPR_LIT:
+            print_literal(&e->lit, indent + 2);
+            break;
+        case EXPR_IDENT:
+            printf("Ident: %s\n", safe_str(e->ident.name));
+            break;
+        case EXPR_PATH:
+            printf("Path:");
+            for (size_t i = 0; i < e->path.comp_count; ++i) {
+                printf(" %s", safe_str(e->path.components[i]));
+                if (i + 1 < e->path.comp_count) printf("::");
+            }
+            putchar('\n');
+            break;
+        case EXPR_UNARY:
+            printf("Unary op %d\n", e->unary.op);
+            print_expr(e->unary.operand, indent + 2);
+            break;
+        case EXPR_BINARY:
+            printf("Binary op %d\n", e->binary.op);
+            print_expr(e->binary.left, indent + 2);
+            print_expr(e->binary.right, indent + 2);
+            break;
+        case EXPR_CALL:
+            printf("Call:\n");
+            print_expr(e->call.callee, indent + 2);
+            for (size_t i = 0; i < e->call.arg_count; ++i) {
+                print_expr(e->call.args[i], indent + 2);
+            }
+            break;
+        default:
+            printf("Expr kind %d (not printed in detail)\n", e->kind);
+            break;
+    }
+}
+
+static void print_stmt(const Stmt *s, int indent) {
+    if (!s) {
+        print_indent(indent + 2);
+        puts("<stmt null>");
+        return;
+    }
+    print_indent(indent + 2);
+    switch (s->kind) {
+        case STMT_RETURN:
+            puts("Return:");
+            print_expr(s->ret_expr, indent + 2);
+            break;
+        case STMT_EXPR:
+            puts("Expr stmt:");
+            print_expr(s->expr, indent + 2);
+            break;
+        case STMT_BLOCK:
+            puts("Block:");
+            for (size_t i = 0; i < s->block.stmt_count; ++i) {
+                print_stmt(s->block.stmts[i], indent + 2);
+            }
+            break;
+        case STMT_IF:
+            puts("If:");
+            print_expr(s->_if.cond, indent + 2);
+            print_stmt(s->_if.then_branch, indent + 2);
+            if (s->_if.else_branch) {
+                print_indent(indent + 2);
+                puts("Else:");
+                print_stmt(s->_if.else_branch, indent + 2);
+            }
+            break;
+        case STMT_FOR:
+            puts("For:");
+            if (s->_for.init) { print_stmt(s->_for.init, indent + 2); }
+            if (s->_for.cond) { print_expr(s->_for.cond, indent + 2); }
+            if (s->_for.post) { print_expr(s->_for.post, indent + 2); }
+            print_stmt(s->_for.body, indent + 2);
+            break;
+        case STMT_EMPTY:
+            puts("Empty stmt");
+            break;
+        default:
+            printf("Stmt kind %d (not printed in detail)\n", s->kind);
+            break;
+    }
+}
+
+static void print_fn_decl(const FnDecl *fn, int indent) {
+    if (!fn) return;
+    print_attributes(fn->attributes, fn->attr_count, indent + 2);
+    print_indent(indent + 2);
+    printf("Function: %s", safe_str(fn->name));
+    if (fn->is_export) printf(" [export]");
+    if (fn->is_extern) printf(" [extern]");
+    if (fn->is_unsafe) printf(" [unsafe]");
+    putchar('\n');
+
+    print_indent(indent + 2);
+    printf("Return type: %s\n", fn->ret_type ? fn->ret_type->kind : "void");
+
+    print_indent(indent + 2);
+    puts("Parameters:");
+    print_params(fn->params, fn->param_count, indent + 2);
+
+    print_indent(indent + 2);
+    puts("Body:");
+    if (fn->body) print_stmt(fn->body, indent + 2);
+    else { print_indent(indent + 2); puts("<no body>"); }
+}
+
+static void print_include(const Include *inc, int indent) {
+    if (!inc) return;
+    print_indent(indent + 2);
+    printf("Include:");
+    if (inc->alias) printf(" (alias %s)", inc->alias);
+    putchar('\n');
+
+    print_indent(indent + 2);
+    printf("Path: ");
+    if (inc->path_len == 0) {
+        printf(" <empty>");
+    } else {
+        for (size_t i = 0; i < inc->path_len; ++i) {
+            if (i) printf("::");
+            printf("%s", safe_str(inc->path[i]));
+        }
+    }
+    putchar('\n');
+}
+
+static void print_decl(const Decl *d, int index, int indent) {
+    if (!d) {
+        print_indent(indent + 2);
+        printf("- Decl %d: <null>\n", index);
+        return;
+    }
+    print_indent(indent + 2);
+    printf("- Decl %d: kind=%d\n", index, d->kind);
+    switch (d->kind) {
+        case DECL_FN:
+            print_fn_decl(d->fn, indent + 2);
+            break;
+        case DECL_INCLUDE:
+            print_include(d->inc, indent + 2);
+            break;
+        case DECL_VAR:
+            print_indent(indent + 2);
+            printf("Var decl (not fully printed)\n");
+            break;
+        case DECL_STRUCT:
+            print_indent(indent + 2);
+            printf("Struct decl (name %s)\n", d->strct ? safe_str(d->strct->name) : "<null>");
+            break;
+        case DECL_ATTR:
+            print_indent(indent + 2);
+            printf("Attribute decl: %s\n", d->attr ? safe_str(d->attr->name) : "<null>");
+            break;
+        default:
+            print_indent(indent + 2);
+            puts("Unknown decl kind");
+            break;
+    }
+}
+
+void pretty_print_module(Module *m) {
+    if (!m) return;
+    puts("=== Module ===");
+    printf("Name: %s\n", safe_str(m->name));
+    printf("Includes (total %zu):\n", m->include_count ? m->include_count : 0);
+    for (size_t i = 0; i < m->include_count; ++i) {
+        print_include(m->includes[i], 2);
+    }
+
+    printf("Declarations (total %zu):\n", m->decl_count ? m->decl_count : 0);
+    for (size_t i = 0; i < m->decl_count; ++i) {
+        print_decl(m->decls[i], (int)i, 2);
+    }
+    puts("=== End Module ===");
+}
