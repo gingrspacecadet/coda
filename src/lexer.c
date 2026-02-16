@@ -71,6 +71,8 @@ Keyword keywords[] = {
     {"include", INCLUDE},
     {"fn", FN},
     {"return", RETURN},
+    {"char", CHAR},
+    {"string", STRING},
     {"int8", INT8},
     {"int16", INT16},
     {"int32", INT32},
@@ -80,6 +82,7 @@ Keyword keywords[] = {
     {"uint32", UINT32},
     {"uint64", UINT64},
     {"null", _NULL},
+    {"mut", MUT},
 };
 
 void lex_ident(Buffer *buf, TokenBuffer *tokens) {
@@ -92,11 +95,7 @@ void lex_ident(Buffer *buf, TokenBuffer *tokens) {
         }
     }
 
-    if (peek() == '\n') {
-        line++; col = 0;
-    } else {
-        col++;
-    }
+    consume(); idx--;
     token_push(tokens, (Token){.type = IDENT, .value = strdup(buf->data), .len = buf->idx});
     buffer_clear(buf);
 }
@@ -164,7 +163,7 @@ TokenBuffer lexer(char *data) {
                     }
                     consume();          // '
                     char tmp[2] = {c, '\0'};
-                    token_push(&tokens, (Token){.type = CHAR, .value = strdup(tmp), .len = 1});
+                    token_push(&tokens, (Token){.type = CHAR_LIT, .value = strdup(tmp), .len = 1});
                     break;
                 case '"':
                     consume();  // "
@@ -173,7 +172,7 @@ TokenBuffer lexer(char *data) {
                         buffer_push(&str, handle_esc(&tokens));
                     }
                     consume();  // "
-                    token_push(&tokens, (Token){.type = STRING, .value = strdup(str.data), .len = str.len});
+                    token_push(&tokens, (Token){.type = STRING_LIT, .value = strdup(str.data), .len = str.len});
                     buffer_clear(&str);
                     break;
                 case '/':

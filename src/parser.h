@@ -38,15 +38,13 @@ struct TypeRef {
     TypeRefKind kind;
     Span span;
 
-    bool is_mutable;
+    bool is_mutable : 1;
+    bool is_optional : 1;
 
     union {
         char *primitive_name;
-
         char *named;
-
         TypeRef *pointee;
-
         struct {
             TypeRef *elem;
         } slice;
@@ -68,7 +66,6 @@ struct Param {
     Attribute *attributes;
     size_t attr_count;
     Span span;
-
     Symbol *symbol;
 };
 
@@ -79,29 +76,24 @@ struct VarDecl {
     Attribute *attributes;
     size_t attr_count;
     Span span;
-
     Symbol *symbol;
-    bool is_mutable;
-    bool is_global;
-    bool is_definitely_initialized;
+    bool is_mutable : 1;
+    bool is_global : 1;
+    bool is_definitely_initialized : 1;
 };
 
 struct FnDecl {
     Attribute *attributes;
     size_t attr_count;
-
-    bool is_export;
-    bool is_extern;
-    bool is_unsafe;
-
+    bool is_export : 1;
+    bool is_extern : 1;
+    bool is_unsafe : 1;
     TypeRef *ret_type;
     char *name;
     Param *params;
     size_t param_count;
-
     Stmt *body;
     Span span;
-
     Symbol *symbol;
     Scope *local_scope;
 };
@@ -110,13 +102,10 @@ struct StructDecl {
     char *name;
     Attribute *attributes;
     size_t attr_count;
-
     Decl **members;
     size_t member_count;
-
-    bool is_export;
+    bool is_export : 1;
     Span span;
-
     Symbol *symbol;
     size_t size_in_bytes;
     size_t align_in_bytes;
@@ -128,7 +117,6 @@ struct Include {
     size_t path_len;
     char *alias;
     Span span;
-
     Module *resolved_module;
 };
 
@@ -144,11 +132,10 @@ typedef struct {
     LiteralKind kind;
     Span span;
     char *raw;
-
     int64_t int_value;
     double  float_value;
     char   *str_value;
-    bool    bool_value;
+    bool    bool_value : 1;
 } Literal;
 
 typedef enum {
@@ -198,50 +185,40 @@ typedef enum {
 struct Expr {
     ExprKind kind;
     Span span;
-
     TypeRef *resolved_type;
     Symbol  *symbol;
-    bool     is_constant;
-
+    bool     is_constant : 1;
     union {
         Literal lit;
-
         struct {
             char *name;
         } ident;
-
         struct {
             char **components;
             size_t comp_count;
         } path;
-
         struct {
             UnaryOp op;
             Expr *operand;
         } unary;
-
         struct {
             BinaryOp op;
             Expr *left;
             Expr *right;
         } binary;
-
         struct {
             Expr *callee;
             Expr **args;
             size_t arg_count;
         } call;
-
         struct {
             Expr *base;
             Expr *index;
         } index;
-
         struct {
             Expr *base;
             char *member;
         } member;
-
         struct {
             TypeRef *to;
             Expr *expr;
@@ -264,38 +241,30 @@ typedef enum {
 struct Stmt {
     StmtKind kind;
     Span span;
-
     Scope *scope;
-
     union {
         VarDecl *var;
         Expr *expr;
-
         struct {
             Stmt **stmts;
             size_t stmt_count;
         } block;
-
         Expr *ret_expr;
-
         struct {
             Expr *cond;
             Stmt *then_branch;
             Stmt *else_branch;
         } _if;
-
         struct {
             Stmt *init;
             Expr *cond;
             Expr *post;
             Stmt *body;
         } _for;
-
         struct {
             Expr *cond;
             Stmt *body;
         } _while;
-
         struct {
             Stmt **stmts;
             size_t stmt_count;
@@ -314,9 +283,7 @@ typedef enum {
 struct Decl {
     DeclKind kind;
     Span span;
-
     Symbol *symbol;
-
     union {
         FnDecl    *fn;
         VarDecl   *var;
@@ -330,12 +297,9 @@ struct Module {
     char *name;
     Include **includes;
     size_t include_count;
-
     Decl **decls;
     size_t decl_count;
-
     Span span;
-
     Scope *module_scope;
 };
 

@@ -13,10 +13,14 @@ typedef enum {
     IDENT,
     ATTR,
     MUT,
+    
+    // literals
+    STRING_LIT,
+    CHAR_LIT,
+    NUMBER,
 
     // Types
-    STRING,
-    CHAR,
+    CHAR, STRING,
     INT8, INT16, INT32, INT64,
     UINT8, UINT16, UINT32, UINT64,
     _NULL,
@@ -28,7 +32,6 @@ typedef enum {
     RBRACE,
     LBRACK,
     RBRACK,
-    NUMBER,
     COLON,
     SEMICOLON,
     DOUBLECOLON,

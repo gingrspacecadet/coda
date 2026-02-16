@@ -49,6 +49,125 @@ static void expect(TokenType expected, const char *msg, ...) {
     }
 }
 
+static Span span(Token a, Token b) {
+    return (Span){
+        .start_col = a.column,
+        .start_line = a.line,
+        .end_col = b.column,
+        .end_line = b.line,
+    };
+}
+
+static char *arena_strdup(Arena *a, const char *s) {
+    size_t n = strlen(s) + 1;
+    char *dst = arena_alloc(a, n);
+    memcpy(dst, s, n);
+    return dst;
+}
+
+TypeRef *parse_type(void) {
+    Token first_tok = peek();
+
+    bool next_is_mut = false;
+
+    while (peek().type == MUT) {
+        consume();
+        next_is_mut = true;
+    }
+
+    TypeRef *base = NULL;
+    Token last_tok = peek();
+
+    if (peek().type == IDENT) {
+        Token id = consume();
+        last_tok = id;
+        base = arena_calloc(arena, sizeof(TypeRef));
+        base->kind = TYPE_NAMED;
+        base->named = arena_strdup(arena, id.value);
+        base->is_mutable = next_is_mut;
+        base->is_optional = false;
+    }
+    else if (peek().type == LPAREN) {
+        consume();
+        TypeRef *inner = parse_type();
+        expect(RPAREN, "Missing closing parenthesis in type");
+        base = inner;
+        last_tok = peek();
+        base->is_mutable = next_is_mut;
+    }
+    else {
+        error("Expected type name or slice");
+        Token fake = peek();
+        base = arena_calloc(arena, sizeof(TypeRef));
+        base->kind = TYPE_NAMED;
+        base->named = arena_strdup(arena, "<error>");
+        base->is_mutable = next_is_mut;
+        base->is_optional = false;
+        last_tok = fake;
+    }
+
+    while (true) {
+        if (peek().type != MUT && peek().type != STAR && peek().type != LBRACK) break;
+
+        bool op_is_mut = false;
+        while (peek().type == MUT) {
+            consume();
+            op_is_mut = true;
+        }
+
+        if (peek().type == STAR) {
+            Token star_tok = consume();
+            last_tok = star_tok;
+
+            TypeRef *ptr = arena_calloc(arena, sizeof(TypeRef));
+            ptr->kind = TYPE_POINTER;
+            ptr->pointee = base;
+            ptr->is_mutable = op_is_mut;
+            ptr->is_optional = false;
+
+            if (peek().type == QUESTION) {
+                consume();
+                ptr->is_optional = true;
+                last_tok = peek();
+            }
+
+            base = ptr;
+            continue;
+        }
+        else if (peek().type == LBRACK) {
+            Token lb = consume();
+            if (peek().type != RBRACK) {
+                error("Expected ']' for slice operator");
+                while (peek().type != RBRACK && peek().type != _EOF) consume();
+            }
+            Token rb = consume();
+            last_tok = rb;
+
+            TypeRef *slice = arena_calloc(arena, sizeof(TypeRef));
+            slice->kind = TYPE_SLICE;
+            slice->slice.elem = base;
+            slice->is_mutable = op_is_mut;
+            slice->is_optional = false;
+
+            if (peek().type == QUESTION) {
+                consume();
+                slice->is_optional = true;
+                last_tok = peek();
+            }
+
+            base = slice;
+            continue;
+        }
+        else {
+            break;
+        }
+    }
+
+    base->span = span(first_tok, last_tok);
+
+    return base;
+}
+
 Include *parse_include() {
     Include *inc = arena_calloc(arena, sizeof(Include));
 

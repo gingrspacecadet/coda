@@ -21,8 +21,11 @@ void pretty_print_tokens(TokenBuffer *tokens) {
             case ATTR: printf("ATTR %s\n", t.value); break;
             case MUT: puts("MUT"); break;
 
-            case STRING: printf("STRING %s\n", t.value); break;
-            case CHAR: printf("CHAR %s\n", t.value); break;
+            case STRING_LIT: printf("STRING_LIT %s\n", t.value); break;
+            case CHAR_LIT: printf("CHAR_LIT %s\n", t.value); break;
+
+            case CHAR: puts("CHAR"); break;
+            case STRING: puts("STRING"); break;
             case INT8: puts("INT8"); break;
             case INT16: puts("INT16"); break;
             case INT32: puts("INT32"); break;
