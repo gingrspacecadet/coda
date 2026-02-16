@@ -199,6 +199,20 @@ FnDecl *parse_fn_sig() {
 
     for (int i = 0; peek().type != RPAREN; i++) {
         Token start = peek();
+        Attribute *attrs = arena_calloc(arena, sizeof(Attribute));
+        size attr_count = 0;
+        for (int j = 0; peek().type == ATTR; j++) {     // consume all the attributes
+            Token attr = consume();
+            Attribute *new = arena_calloc(arena, sizeof(Attribute) * (j + 1));
+            if (attr_count > 0) memcpy(new, attrs, sizeof(Attribute) * attr_count);
+            attrs = new;
+
+            attrs[attr_count++] = (Attribute){
+                .name = attr.value,
+                .span = span(attr, peek()),
+                .arg_count = 0, // TODO: attribute argument parsing
+            };
+        }
         TypeRef *param_type = parse_type();
         Token name = consume();
         if (name.type != IDENT) error("Missing argument name");
@@ -207,6 +221,8 @@ FnDecl *parse_fn_sig() {
             .type = param_type,
             .span = span(start, peek()),
             .name = arena_strdup(arena, name.value),  // TODO: this segfaulted somewhere else so untrustworthy
+            .attr_count = attr_count,
+            .attributes = attrs,
         };
 
         Param *new = arena_alloc(arena, sizeof(Param) * (i + 1));

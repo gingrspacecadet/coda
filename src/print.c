@@ -53,6 +53,7 @@ static void format_type(TypeRef *type) {
     }
 
     if (type->is_mutable) printf(" mut");
+    if (type->is_optional) printf(" opt");
     if (pointer) format_type(type->pointee);
 }
 
@@ -179,13 +180,9 @@ static void print_stmt(const Stmt *s, int indent) {
 
 static void print_fn_decl(const FnDecl *fn, int indent) {
     if (!fn) return;
-    print_attributes(fn->attributes, fn->attr_count, indent + 2);
     print_indent(indent + 2);
-    printf("Function: %s", safe_str(fn->name));
-    if (fn->is_export) printf(" [export]");
-    if (fn->is_extern) printf(" [extern]");
-    if (fn->is_unsafe) printf(" [unsafe]");
-    putchar('\n');
+    printf("Function: %s\n", safe_str(fn->name));
+    print_attributes(fn->attributes, fn->attr_count, indent + 2);
 
     print_indent(indent + 2);
     printf("Return type: %s\n", fn->ret_type->primitive_name);

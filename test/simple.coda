@@ -3,5 +3,5 @@ module simple;
 include std::io;
 include std::string;
 
-fn int main(mut char mut*? e, mut int *foo);
-fn int foo(String args);
+@extern
+fn int main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans);

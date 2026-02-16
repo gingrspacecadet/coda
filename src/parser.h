@@ -85,9 +85,6 @@ struct VarDecl {
 struct FnDecl {
     Attribute *attributes;
     size_t attr_count;
-    bool is_export : 1;
-    bool is_extern : 1;
-    bool is_unsafe : 1;
     TypeRef *ret_type;
     char *name;
     Param *params;
