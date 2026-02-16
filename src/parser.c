@@ -49,13 +49,52 @@ static void expect(TokenType expected, const char *msg, ...) {
     }
 }
 
+Include *parse_include() {
+    Include *inc = arena_calloc(arena, sizeof(Include));
+
+    // caller ensures INCLUDE token but does not consume
+    consume();
+
+    for (int i = 0; true; i++) {
+        Token path = consume();
+        if (path.type != IDENT) error("Expected include path");
+        char **new = arena_alloc(arena, sizeof(char*) * (i + 1));
+        if (inc->path_len > 0) memcpy(new, inc->path, sizeof(char*) * inc->path_len);
+        inc->path = new;
+
+        inc->path[inc->path_len++] = path.value;
+        if (peek().type != DOUBLECOLON) break;
+        consume();
+    }
+
+    expect(SEMICOLON, "Missing include semicolon");
+
+    return inc;
+}
+
 Module *parse_module() {
     expect(MODULE, "Missing module declaration");
+
+    Module *m = arena_calloc(arena, sizeof(Module));
+    
+    // Parse and store module name
     Token modname = consume();
     if (modname.type != IDENT) error("Missing module name");
-    Module *m = arena_alloc(arena, sizeof(Module));
-    m->name = arena_alloc(arena, strlen(modname.value));
+    m->name = arena_alloc(arena, strlen(modname.value) + 1);
     strcpy(m->name, modname.value);
+
+    consume();  // ;
+
+    // Parse all INCLUDEs
+    for (int i = 0; peek().type == INCLUDE; i++) {
+        // Increase the size of the includes buffer
+        Include **new = arena_alloc(arena, sizeof(Include*) * (i + 1));
+        if (m->include_count > 0) memcpy(new, m->includes, sizeof(Include*) * m->include_count);
+        m->includes = new;
+
+        // now append the node
+        m->includes[m->include_count++] = parse_include();
+    }
 
     return m;
 }

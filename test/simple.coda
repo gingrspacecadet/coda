@@ -1,3 +1,4 @@
 module simple;
 
-include test::io;
+include std::io;
+include std::string;

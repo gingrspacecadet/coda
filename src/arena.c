@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "arena.h"
 
 Arena *arena_create() {
@@ -20,6 +21,12 @@ void *arena_alloc(Arena *a, size_t size) {
 
     void *res = a->data + a->idx;
     a->idx += size;
+    return res;
+}
+
+void *arena_calloc(Arena *a, size_t size) {
+    void *res = arena_alloc(a, size);
+    memset(res, 0, size);
     return res;
 }
 
