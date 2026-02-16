@@ -3,10 +3,4 @@ module simple;
 include std::io;
 include std::string;
 
-char a;
-char *a;
-mut char a;
-char mut* a;
-mut char mut* a;
-mut char mut*? a;
-mut char mut*?mut*?mut*? a;
+fn int main(String args)

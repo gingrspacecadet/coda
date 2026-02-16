@@ -38,3 +38,10 @@ void arena_destroy(Arena *a) {
     free(a->data);
     free(a);
 }
+
+char *arena_strdup(Arena *a, const char *s) {
+    size_t n = strlen(s) + 1;
+    char *dst = arena_alloc(a, n);
+    memcpy(dst, s, n);
+    return dst;
+}

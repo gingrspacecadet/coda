@@ -72,7 +72,7 @@ Keyword keywords[] = {
     {"fn", FN},
     {"return", RETURN},
     {"char", CHAR},
-    {"string", STRING},
+    {"String", STRING},
     {"int8", INT8},
     {"int16", INT16},
     {"int32", INT32},

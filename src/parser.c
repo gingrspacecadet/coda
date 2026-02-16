@@ -45,7 +45,6 @@ static void expect(TokenType expected, const char *msg, ...) {
     if (!match(expected)) {
         va_start(args, msg);
         verror(msg, args);
-        exit(1);    //TODO: register error, but still print others THEN crash
     }
 }
 
@@ -58,14 +57,7 @@ static Span span(Token a, Token b) {
     };
 }
 
-static char *arena_strdup(Arena *a, const char *s) {
-    size_t n = strlen(s) + 1;
-    char *dst = arena_alloc(a, n);
-    memcpy(dst, s, n);
-    return dst;
-}
-
-TypeRef *parse_type(void) {
+TypeRef *parse_type() {
     Token first_tok = peek();
 
     bool next_is_mut = false;
@@ -168,6 +160,44 @@ TypeRef *parse_type(void) {
     return base;
 }
 
+FnDecl *parse_fn_sig() {
+    Token start = peek();
+    // caller guarantees FN token
+    consume();  // consume it tho
+
+    TypeRef *ret_type = parse_type();
+    Token fn_name = consume();
+    if (fn_name.type != IDENT) error("Missing function name");
+    expect(LPAREN, "Missing function opening parenthesis");
+    FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
+    // TODO: function arguments
+
+    for (int i = 0; peek().type != RPAREN; i++) {
+        Token start = peek();
+        TypeRef *param_type = parse_type();
+        Token name = consume();
+        if (name.type != IDENT) error("Missing argument name");
+        
+        Param param = {
+            .type = param_type,
+            .span = span(start, peek()),
+            .name = arena_strdup(arena, name.value),  // TODO: this segfaulted somewhere else so untrustworthy
+        };
+
+        Param *new = arena_alloc(arena, sizeof(Param) * (i + 1));
+        if (fn->param_count > 0)  memcpy(new, fn->params, sizeof(Param) * fn->param_count);
+        fn->params = new;
+
+        fn->params[fn->param_count++] = param;
+    }
+    consume();  // )
+
+    fn->name = arena_strdup(arena, fn_name.value);
+    fn->ret_type = ret_type;
+
+    fn->span = span(start, peek());
+}
+
 Include *parse_include() {
     Include *inc = arena_calloc(arena, sizeof(Include));
 
@@ -199,8 +229,7 @@ Module *parse_module() {
     // Parse and store module name
     Token modname = consume();
     if (modname.type != IDENT) error("Missing module name");
-    m->name = arena_alloc(arena, strlen(modname.value) + 1);
-    strcpy(m->name, modname.value);
+    m->name = arena_strdup(arena, modname.value);
 
     consume();  // ;
 
