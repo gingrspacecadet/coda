@@ -7,37 +7,6 @@
 #include "lexer.h"
 #include "parser.h"
 
-void print_program(Program *prog) {
-    printf("Module: %s\n", prog->module.name);
-    printf("Main returns: %d\n", prog->main_fn.ret->number);
-}
-
-void emit_expr(FILE *f, Expr *e) {
-    if (e->type == EXPR_NUMBER) {
-        fprintf(f, "%d", e->number);
-    } else if (e->type == EXPR_BINOP) {
-        emit_expr(f, e->binop.left);
-        fprintf(f, " %c ", e->binop.op);
-        emit_expr(f, e->binop.right);
-    }
-}
-
-void emit_c(Program *prog, const char *out_path) {
-    FILE *f = fopen(out_path, "w");
-    if (!f) {
-        fprintf(stderr, "errorL cannot open %s for writing\n", out_path);
-        exit(1);
-    }
-
-    fprintf(f, "#include <stdio.h>\n\n");
-
-    fprintf(f, "int main(void) {\n    return ");
-    emit_expr(f, prog->main_fn.ret);
-    fprintf(f, ";\n}\n");
-
-    fclose(f);
-}
-
 int main(int argc, char **argv) {
     if (argc < 2) return 1;
 
@@ -112,10 +81,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    Program p = parse_program(&tokens);
-    mkdir("out", 0755);
-    emit_c(&p, "out/hello.c");
-    printf("Generated out/hello.c\n");
+    //Program p = parse_program(&tokens);
+    //mkdir("out", 0755);
+    //emit_c(&p, "out/hello.c");
+    //printf("Generated out/hello.c\n");
 
     return 0;
 }

@@ -159,7 +159,7 @@ TokenBuffer lexer(char *data) {
                     consume();          // '
                     char c = handle_esc(&tokens);
                     if (peek() != '\'') {
-                        fprintf(stderr, "Lexer error: unterminated char literal at %zu, %zu.", line, col)    ;
+                        fprintf(stderr, "Lexer error: unterminated char literal at %zu, %zu.\n", line, col);
                         exit(1);
                     }
                     consume();          // '
