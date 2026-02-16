@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "lexer.h"
+#include "arena.h"
 
 typedef struct {
     size_t start_line;
@@ -359,3 +361,5 @@ enum {
     SYMBOL_FLAG_EXTERN   = 1 << 4,
     SYMBOL_FLAG_MUTABLE  = 1 << 5,
 };
+
+Module *parser(TokenBuffer *t, Arena *a);

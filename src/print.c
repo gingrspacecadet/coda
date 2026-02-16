@@ -159,7 +159,7 @@ static void print_fn_decl(const FnDecl *fn, int indent) {
     putchar('\n');
 
     print_indent(indent + 2);
-    printf("Return type: %s\n", fn->ret_type ? fn->ret_type->kind : "void");
+    printf("Return type: %d\n", fn->ret_type->kind);
 
     print_indent(indent + 2);
     puts("Parameters:");

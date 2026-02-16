@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "print.h"
+#include "arena.h"
 
 void pretty_print_tokens(TokenBuffer *tokens) {
     for (int i = 0; i < tokens->len; i++) {
@@ -86,69 +87,11 @@ int main(int argc, char **argv) {
     fread(buf, 1, src_size, src_file);
     buf[src_size] = '\0';
     TokenBuffer tokens = lexer(buf);
-
-    //pretty_print_tokens(&tokens);
-
-    // TODO: this is jut a manual test
-    Module m = (Module){
-        .name = "test",
-        .includes = (Include *[]){
-            &(Include){
-                .path = (char*[]){"std", "io"},
-                .path_len = 2,
-                .alias = "foo",
-            },
-            &(Include){
-                .path = (char*[]){"std", "string"},
-                .path_len = 2,
-                .alias = "bar",
-            },
-        },
-        .include_count = 2,
-
-        .decls = (Decl*[]){
-            &(Decl){
-                .kind = DECL_FN,
-                .fn = &(FnDecl){
-                    .attr_count = 1,
-                    .attributes = &(Attribute){
-                        .name = "test"
-                    },
-                    .ret_type = &(TypeRef){
-                        .kind = TYPE_PRIMITIVE,
-                        .primitive_name = "int",
-                    },
-                    .name = "main",
-                    .param_count = 0,
-                    .body = &(Stmt){
-                        .kind = STMT_BLOCK,
-                        .block = {
-                            .stmts = (Stmt*[]){
-                                &(Stmt){
-                                    .kind = STMT_RETURN,
-                                    .ret_expr = &(Expr){
-                                        .kind = EXPR_LIT,
-                                        .resolved_type = &(TypeRef){
-                                            .kind = TYPE_PRIMITIVE,
-                                            .primitive_name = "int",
-                                        },
-                                        .lit = {
-                                            .kind = LIT_INT,
-                                            .int_value = 0,
-                                        }
-                                    },
-                                },
-                            },                            
-                            .stmt_count = 1
-                        }
-                    }
-                }
-            }
-        },
-        .decl_count = 1,
-    };
-
-    pretty_print_module(&m);
+    pretty_print_tokens(&tokens);
+    Arena *a = arena_create();
+    Module *module = parser(&tokens, a);
+    pretty_print_module(module);
+    arena_destroy(a);
 
     return 0;
 }
