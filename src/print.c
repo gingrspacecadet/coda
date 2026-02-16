@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "parser.h"
+#include "internal.h"
 
 static void print_indent(int indent) {
     for (int i = 0; i < indent; ++i) putchar(' ');
@@ -29,6 +30,32 @@ static void print_attributes(Attribute *attrs, size_t count, int indent) {
     }
 }
 
+static void format_type(TypeRef *type) {
+    bool pointer = false;
+    switch (type->kind) {
+        case TYPE_NAMED: {
+            printf(" : %s", type->named); 
+            break;
+        }
+        case TYPE_POINTER: {
+            printf(" : *");
+            pointer = true;
+            break;
+        }
+        case TYPE_SLICE: {
+            printf(" : (slice)"); 
+            break;
+        }
+        default: {
+            printf(" : (unknown)");
+            break;
+        }
+    }
+
+    if (type->is_mutable) printf(" mut");
+    if (pointer) format_type(type->pointee);
+}
+
 static void print_params(Param *params, size_t count, int indent) {
     if (!params || count == 0) {
         print_indent(indent + 2);
@@ -38,7 +65,9 @@ static void print_params(Param *params, size_t count, int indent) {
     for (size_t i = 0; i < count; ++i) {
         print_indent(indent + 2);
         printf("- Param %zu: %s", i, safe_str(params[i].name));
-        if (params[i].type) printf(" : (type)");
+        if (params[i].type) {
+            format_type(params[i].type);
+        }
         putchar('\n');
         print_attributes(params[i].attributes, params[i].attr_count, indent + 2);
     }
@@ -159,7 +188,7 @@ static void print_fn_decl(const FnDecl *fn, int indent) {
     putchar('\n');
 
     print_indent(indent + 2);
-    printf("Return type: %d\n", fn->ret_type->kind);
+    printf("Return type: %s\n", fn->ret_type->primitive_name);
 
     print_indent(indent + 2);
     puts("Parameters:");
