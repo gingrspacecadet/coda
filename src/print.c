@@ -32,22 +32,24 @@ static void print_attributes(Attribute *attrs, size_t count, int indent) {
 
 static void format_type(TypeRef *type) {
     bool pointer = false;
+    bool slice = false;
     switch (type->kind) {
         case TYPE_NAMED: {
-            printf(" : %s", type->named); 
+            printf(": %s", type->named); 
             break;
         }
         case TYPE_POINTER: {
-            printf(" : *");
+            printf(": *");
             pointer = true;
             break;
         }
         case TYPE_SLICE: {
-            printf(" : (slice)"); 
+            printf(": slice"); 
+            slice = true;
             break;
         }
         default: {
-            printf(" : (unknown)");
+            printf(": (unknown)");
             break;
         }
     }
@@ -55,6 +57,7 @@ static void format_type(TypeRef *type) {
     if (type->is_mutable) printf(" mut");
     if (type->is_optional) printf(" opt");
     if (pointer) format_type(type->pointee);
+    if (slice) format_type(type->slice.elem);
 }
 
 static void print_params(Param *params, size_t count, int indent) {
@@ -185,7 +188,9 @@ static void print_fn_decl(const FnDecl *fn, int indent) {
     print_attributes(fn->attributes, fn->attr_count, indent + 2);
 
     print_indent(indent + 2);
-    printf("Return type: %s\n", fn->ret_type->primitive_name);
+    printf("Return type");
+    format_type(fn->ret_type);
+    putc('\n', stdout);
 
     print_indent(indent + 2);
     puts("Parameters:");

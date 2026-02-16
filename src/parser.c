@@ -170,6 +170,92 @@ TypeRef *parse_type(void) {
     return base;
 }
 
+Stmt *parse_if_stmt() {
+    Token start = consume();    // if
+
+    expect(LPAREN, "Expected '(' after if");
+    Expr *cond = parse_expr();
+    expect(RPAREN, "Expected ')' after if condition");
+}
+
+Stmt *parse_return_stmt() {
+    Token start = consume();    // return
+    Expr *value = NULL;
+    if (peek().type != SEMICOLON) {
+        value = parse_expr();
+    }
+
+    expect(SEMICOLON, "Expected semicolon after return");
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_RETURN;
+    s->ret_expr = value;
+    s->span = span(start, peek());
+
+    return s;
+}
+
+// forward decl for recursive parse_block()
+Stmt *parse_stmt();
+
+Stmt *parse_block_stmt() {
+    Token start = consume();    // {
+
+    Stmt **stmts = NULL;
+    size count = 0;
+    for (int i = 0; peek().type != RBRACE; i++) {
+        Stmt **new = arena_calloc(arena, sizeof(Stmt*) * (i + 1));
+        if (count > 0) memcpy(new, stmts, sizeof(Stmt*) * count);
+        stmts = new;
+
+        stmts[count++] = parse_stmt();
+    }
+
+    expect(RBRACE, "Expected '}' to close the block");
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_BLOCK;
+    s->block.stmts = stmts;
+    s->block.stmt_count = count;
+    s->span = span(start, peek());
+
+    return s;
+}
+
+Stmt *parse_expr_stmt() {
+    Token start = peek();
+    Expr *e = parse_expr(); //TODO: implement expression parsing
+    expect(SEMICOLON, "Expected semicolon after expression");
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_EXPR;
+    s->expr = e;
+    s->span = span(start, peek());
+    return s;
+}
+
+Stmt *parse_var_stmt() {
+    Token start = peek();
+    TypeRef *type = parse_type();
+
+    Token name = consume();
+    if (name.type != IDENT) error("Expected variable name");
+
+    VarDecl *var = arena_calloc(arena, sizeof(VarDecl));
+    var->type = type;
+    var->name = name.value;
+    var->span = span(start, name);
+
+    expect(SEMICOLON, "Expected semicolon after variable declaration");
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_VAR;
+    s->var = var;
+    s->span = span(start, peek());
+
+    return s;
+}
+
 FnDecl *parse_fn_sig() {
     Token start = peek();
     FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
