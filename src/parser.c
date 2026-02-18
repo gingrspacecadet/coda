@@ -11,12 +11,22 @@ static TokenBuffer *tokens = NULL;
 static bool failed = false;
 static Arena *arena = NULL;
 
+static void error(const char *msg, ...);
+
 static Token peek() {
-    return tokens->data[tokens->pos];
+    Token t = tokens->data[tokens->pos];
+    if (t.type == _EOF) error("Unexpected end of token stream");
+    else return t;
+
+    exit(1);
 }
 
 static Token consume() {
-    return tokens->data[tokens->pos++];
+    Token t = tokens->data[tokens->pos++];
+    if (t.type == _EOF) error("Unexpected end of token stream");
+    else return t;
+    
+    exit(1);
 }
 
 static int match(TokenType expected) {
@@ -39,6 +49,7 @@ static void error(const char *msg, ...) {
     va_list args;
     va_start(args, msg);
     verror(msg, args);
+    va_end(args);
 }
 
 static void expect(TokenType expected, const char *msg, ...) {
@@ -46,6 +57,7 @@ static void expect(TokenType expected, const char *msg, ...) {
     if (!match(expected)) {
         va_start(args, msg);
         verror(msg, args);
+        va_end(args);
     }
 }
 
@@ -170,12 +182,8 @@ TypeRef *parse_type(void) {
     return base;
 }
 
-Stmt *parse_if_stmt() {
-    Token start = consume();    // if
+Expr *parse_expr() {
 
-    expect(LPAREN, "Expected '(' after if");
-    Expr *cond = parse_expr();
-    expect(RPAREN, "Expected ')' after if condition");
 }
 
 Stmt *parse_return_stmt() {
@@ -222,6 +230,77 @@ Stmt *parse_block_stmt() {
     return s;
 }
 
+Stmt *parse_var_stmt();
+
+Stmt *parse_for_stmt() {
+    Token start = consume();    // for
+
+    expect(LPAREN, "Expected '(' after for");
+    Stmt *init = parse_var_stmt();
+    expect(SEMICOLON, "Expected ';' after for initialiser");
+    Expr *cond = parse_expr();
+    expect(SEMICOLON, "Expected ';' after for condition");
+    Expr *inc = parse_expr();
+    expect(RPAREN, "Expected ')' after for incrementer");
+    
+    if (peek().type != '{') error("Expected '{' for for statement");
+    Stmt *body = parse_block_stmt();
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_FOR;
+    s->_for.init = init;
+    s->_for.cond = cond;
+    s->_for.post = inc;
+    s->_for.body = body;
+    s->span = span(start, peek());
+
+    return s;
+}
+
+Stmt *parse_while_stmt() {
+    Token start = consume();    // while
+
+    expect(LPAREN, "Expected '(' after while");
+    Expr *cond = parse_expr();
+    expect(RPAREN, "Expected ')' after while condition");
+
+    if (peek().type != LBRACE) error("Expected '{' for while statement");
+    Stmt *branch = parse_block_stmt();
+    
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_WHILE;
+    s->_while.body = branch;
+    s->_while.cond = cond;
+    s->span = span(start, peek());
+
+    return s;
+}
+
+Stmt *parse_if_stmt() {
+    Token start = consume();    // if
+
+    expect(LPAREN, "Expected '(' after if");
+    Expr *cond = parse_expr();
+    expect(RPAREN, "Expected ')' after if condition");
+
+    if (peek().type != LBRACE) error("Expected '{' for if statement");
+    Stmt *then = parse_block_stmt();
+    Stmt *_else = NULL;
+    if (match(ELSE)) {
+        if (peek().type != LBRACE) error("Expected '{' for else statement");
+        _else = parse_block_stmt();
+    }
+
+    Stmt *s = arena_calloc(arena, sizeof(Stmt));
+    s->kind = STMT_IF;
+    s->_if.cond = cond;
+    s->_if.then_branch = then;
+    s->_if.else_branch = _else;
+    s->span = span(start, peek());
+
+    return s;
+}
+
 Stmt *parse_expr_stmt() {
     Token start = peek();
     Expr *e = parse_expr(); //TODO: implement expression parsing
@@ -256,26 +335,65 @@ Stmt *parse_var_stmt() {
     return s;
 }
 
-FnDecl *parse_fn_sig() {
-    Token start = peek();
-    FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
+Stmt *parse_stmt() {
+    Token t = peek();
+
+    switch (t.type) {
+        case RETURN: return parse_return_stmt();
+        case FOR: return parse_for_stmt();
+        case IF: return parse_if_stmt();
+        case WHILE: return parse_while_stmt();
+        case SEMICOLON: {
+            Token start = consume();
+            Stmt *s = arena_calloc(arena, sizeof(Stmt));
+            s->kind = STMT_EMPTY;
+            s->span = span(start, start);
+            return s;
+        }
+        default: break;
+    }
+
+    if (is_builtin_type_token(t.type) || t.type == MUT) {
+        //Variable declaration
+        return parse_var_stmt();
+    }
+
+    // fallback
+    return parse_expr_stmt();
+}
+
+void collect_attributes(Attribute **out_attr, size *out_count) {
+    if (!out_attr || !out_count) return;
+
+    Attribute *attrs = NULL;
+    size count = 0;
+
     for (int i = 0; peek().type == ATTR; i++) {
         Attribute *new = arena_calloc(arena, sizeof(Attribute) * (i + 1));
-        if (fn->attr_count > 0) memcpy(new, fn->attributes, sizeof(Param) * fn->attr_count);
-        fn->attributes = new;
+        if (count > 0) memcpy(new, attrs, sizeof(Attribute) * count);
+        attrs = new;
 
         Token tattr = consume();
-        if (peek().type == LPAREN) {     // Attribute has argument(s)
-            // TODO: add expression parsing here
+        if (peek().type == LPAREN) {
+            // TODO: parse_expr();
         }
 
         Attribute attr = (Attribute){
             .name = arena_strdup(arena, tattr.value),
-            .args = 0,  // TODO: placeholder
+            .args = 0,  //TODO: placeholder
             .span = span(tattr, peek()),
         };
-        fn->attributes[fn->attr_count++] = attr;
+        attrs[count++] = attr;
     }
+
+    *out_attr = attrs;
+    *out_count = count;
+}
+
+FnDecl *parse_fn_sig() {
+    Token start = peek();
+    FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
+    collect_attributes(&fn->attributes, &fn->attr_count);
     consume();  // FN
 
     TypeRef *ret_type = parse_type();
@@ -285,20 +403,11 @@ FnDecl *parse_fn_sig() {
 
     for (int i = 0; peek().type != RPAREN; i++) {
         Token start = peek();
-        Attribute *attrs = arena_calloc(arena, sizeof(Attribute));
-        size attr_count = 0;
-        for (int j = 0; peek().type == ATTR; j++) {     // consume all the attributes
-            Token attr = consume();
-            Attribute *new = arena_calloc(arena, sizeof(Attribute) * (j + 1));
-            if (attr_count > 0) memcpy(new, attrs, sizeof(Attribute) * attr_count);
-            attrs = new;
 
-            attrs[attr_count++] = (Attribute){
-                .name = attr.value,
-                .span = span(attr, peek()),
-                .arg_count = 0, // TODO: attribute argument parsing
-            };
-        }
+        Attribute *attrs = NULL;
+        size attr_count = 0;
+        collect_attributes(&attrs, &attr_count);
+
         TypeRef *param_type = parse_type();
         Token name = consume();
         if (name.type != IDENT) error("Missing argument name");
@@ -311,7 +420,7 @@ FnDecl *parse_fn_sig() {
             .attributes = attrs,
         };
 
-        Param *new = arena_alloc(arena, sizeof(Param) * (i + 1));
+        Param *new = arena_calloc(arena, sizeof(Param) * (i + 1));
         if (fn->param_count > 0)  memcpy(new, fn->params, sizeof(Param) * fn->param_count);
         fn->params = new;
 
@@ -339,11 +448,11 @@ Include *parse_include() {
     for (int i = 0; true; i++) {
         Token path = consume();
         if (path.type != IDENT) error("Expected include path");
-        char **new = arena_alloc(arena, sizeof(char*) * (i + 1));
+        char **new = arena_calloc(arena, sizeof(char*) * (i + 1));
         if (inc->path_len > 0) memcpy(new, inc->path, sizeof(char*) * inc->path_len);
         inc->path = new;
 
-        inc->path[inc->path_len++] = path.value;
+        inc->path[inc->path_len++] = arena_strdup(arena, path.value);
         if (peek().type != DOUBLECOLON) break;
         consume();
     }
@@ -370,7 +479,7 @@ Module *parse_module() {
     // Parse all INCLUDEs
     for (int i = 0; peek().type == INCLUDE; i++) {
         // Increase the size of the includes buffer
-        Include **new = arena_alloc(arena, sizeof(Include*) * (i + 1));
+        Include **new = arena_calloc(arena, sizeof(Include*) * (i + 1));
         if (m->include_count > 0) memcpy(new, m->includes, sizeof(Include*) * m->include_count);
         m->includes = new;
 

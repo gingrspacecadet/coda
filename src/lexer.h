@@ -13,6 +13,10 @@ typedef enum {
     IDENT,
     ATTR,
     MUT,
+    IF,
+    ELSE,
+    FOR,
+    WHILE,
     
     // literals
     STRING_LIT,
@@ -39,22 +43,25 @@ typedef enum {
     DOT,
     AMP,
     QUESTION,
+    PERCENT,
     
     // operations
     PLUS,
     MINUS,
     STAR,
-    DIV,
+    SLASH,
     RSHIFT,
     LSHIFT,
+    OR,
+    AND,
 
     // comparisons
-    GREATER,
-    LESS,
-    EQ_EQ,
-    BANG_EQ,
-    GREATER_EQ,
-    LESS_EQ,
+    GT,
+    LT,
+    EQEQ,
+    NEQ,
+    GE,
+    LE,
 
     //Assignment
     EQ,

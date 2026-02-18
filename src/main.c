@@ -54,16 +54,16 @@ void pretty_print_tokens(TokenBuffer *tokens) {
             case PLUS: puts("PLUS"); break;
             case MINUS: puts("MINUS"); break;
             case STAR: puts("STAR"); break;
-            case DIV: puts("DIV"); break;
+            case SLASH: puts("SLASH"); break;
             case LSHIFT: puts("LSHIFT"); break;
             case RSHIFT: puts("RSHIFT"); break;
 
-            case GREATER: puts("GREATER"); break;
-            case LESS: puts("LESS"); break;
-            case EQ_EQ: puts("EQ_EQ"); break;
-            case BANG_EQ: puts("BANG_EQ"); break;
-            case GREATER_EQ: puts("GREATER_EQ"); break;
-            case LESS_EQ: puts("LESS_EQ"); break;
+            case GT: puts("GT"); break;
+            case LT: puts("LT"); break;
+            case EQEQ: puts("EQEQ"); break;
+            case NEQ: puts("NEQ"); break;
+            case GE: puts("GE"); break;
+            case LE: puts("LE"); break;
 
             case EQ: puts("EQ"); break;
             case PLUS_EQ: puts("PLUS_EQ"); break;

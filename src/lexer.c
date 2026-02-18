@@ -70,6 +70,10 @@ Keyword keywords[] = {
     {"module", MODULE},
     {"include", INCLUDE},
     {"fn", FN},
+    {"if", IF},
+    {"else", ELSE},
+    {"for", FOR},
+    {"while", WHILE},
     {"return", RETURN},
     {"char", CHAR},
     {"String", STRING},
@@ -196,7 +200,7 @@ TokenBuffer lexer(char *data) {
                             consume();
                             token_push(&tokens, (Token){.type = DIV_EQ});
                         }
-                        else token_push(&tokens, (Token){.type = DIV});
+                        else token_push(&tokens, (Token){.type = SLASH});
                     }
                     break;
                 case ':':
@@ -257,9 +261,9 @@ TokenBuffer lexer(char *data) {
                     }
                     else if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = LESS_EQ});
+                        token_push(&tokens, (Token){.type = LE});
                     }
-                    else token_push(&tokens, (Token){.type = LESS});
+                    else token_push(&tokens, (Token){.type = LT});
                     break;
                 case '>':
                     consume();
@@ -273,15 +277,15 @@ TokenBuffer lexer(char *data) {
                     }
                     else if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = GREATER_EQ});
+                        token_push(&tokens, (Token){.type = GE});
                     }
-                    else token_push(&tokens, (Token){.type = GREATER});
+                    else token_push(&tokens, (Token){.type = GT});
                     break;
                 case '=':
                     consume();
                     if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = EQ_EQ});
+                        token_push(&tokens, (Token){.type = EQEQ});
                     }
                     else token_push(&tokens, (Token){.type = EQ});
                     break;
@@ -289,8 +293,6 @@ TokenBuffer lexer(char *data) {
                     consume(); token_push(&tokens, (Token){.type = COMMA}); break;
                 case '.':
                     consume(); token_push(&tokens, (Token){.type = DOT}); break;
-                case '&':
-                    consume(); token_push(&tokens, (Token){.type = AMP}); break;
                 case '?':
                     consume(); token_push(&tokens, (Token){.type = QUESTION}); break;
                 case ' ':
