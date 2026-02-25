@@ -4,4 +4,6 @@ include std::io;
 include std::string;
 
 @extern
-fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans);
+fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans) {
+    return 1;
+}

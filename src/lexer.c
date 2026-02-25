@@ -77,6 +77,8 @@ Keyword keywords[] = {
     {"return", RETURN},
     {"char", CHAR},
     {"String", STRING},
+    {"true", TRUE},
+    {"false", FALSE},
     {"int8", INT8},
     {"int16", INT16},
     {"int32", INT32},
@@ -85,6 +87,7 @@ Keyword keywords[] = {
     {"uint16", UINT16},
     {"uint32", UINT32},
     {"uint64", UINT64},
+    {"bool", BOOL},
     {"null", _NULL},
     {"mut", MUT},
 };
@@ -233,6 +236,14 @@ TokenBuffer lexer(char *data) {
                     }
                     else token_push(&tokens, (Token){.type = PLUS});
                     break;
+                case '!':
+                    consume();
+                    if (peek() == '=') {
+                        consume();
+                        token_push(&tokens, (Token){.type = BANG_EQ});
+                    }
+                    else token_push(&tokens, (Token){.type = BANG});
+                    break;
                 case '-':
                     consume();
                     if (peek() == '=') {
@@ -261,9 +272,9 @@ TokenBuffer lexer(char *data) {
                     }
                     else if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = LE});
+                        token_push(&tokens, (Token){.type = LESS_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = LT});
+                    else token_push(&tokens, (Token){.type = LESS});
                     break;
                 case '>':
                     consume();
@@ -277,15 +288,15 @@ TokenBuffer lexer(char *data) {
                     }
                     else if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = GE});
+                        token_push(&tokens, (Token){.type = GREATER_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = GT});
+                    else token_push(&tokens, (Token){.type = GREATER});
                     break;
                 case '=':
                     consume();
                     if (peek() == '=') {
                         consume();
-                        token_push(&tokens, (Token){.type = EQEQ});
+                        token_push(&tokens, (Token){.type = EQ_EQ});
                     }
                     else token_push(&tokens, (Token){.type = EQ});
                     break;

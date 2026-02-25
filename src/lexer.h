@@ -22,11 +22,14 @@ typedef enum {
     STRING_LIT,
     CHAR_LIT,
     NUMBER,
+    TRUE,
+    FALSE,
 
     // Types
     CHAR, STRING,
     INT8, INT16, INT32, INT64,
     UINT8, UINT16, UINT32, UINT64,
+    BOOL,
     _NULL,
 
     // punctuation
@@ -44,6 +47,9 @@ typedef enum {
     AMP,
     QUESTION,
     PERCENT,
+    BANG,
+    CARET,
+    PIPE,
     
     // operations
     PLUS,
@@ -56,12 +62,14 @@ typedef enum {
     AND,
 
     // comparisons
-    GT,
-    LT,
-    EQEQ,
-    NEQ,
-    GE,
-    LE,
+    GREATER,
+    LESS,
+    EQ_EQ,
+    BANG_EQ,
+    GREATER_EQ,
+    LESS_EQ,
+    AND_AND,
+    OR_OR,
 
     //Assignment
     EQ,

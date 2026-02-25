@@ -1,5 +1,0 @@
-#include <stdio.h>
-
-int main(void) {
-    return 1 + 2 + 3 - 4;
-}

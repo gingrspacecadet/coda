@@ -15,18 +15,12 @@ static void error(const char *msg, ...);
 
 static Token peek() {
     Token t = tokens->data[tokens->pos];
-    if (t.type == _EOF) error("Unexpected end of token stream");
-    else return t;
-
-    exit(1);
+    return t;
 }
 
 static Token consume() {
     Token t = tokens->data[tokens->pos++];
-    if (t.type == _EOF) error("Unexpected end of token stream");
-    else return t;
-    
-    exit(1);
+    return t;
 }
 
 static int match(TokenType expected) {
@@ -41,8 +35,8 @@ static void verror(const char *msg, va_list args) {
     fprintf(stderr, "Parse error at line %zu, column %zu: ", peek().line, peek().column);
     vfprintf(stderr, msg, args);
     fprintf(stderr, " (got %d)\n", peek().type);
-    failed = true;
-    while (peek().type != SEMICOLON) consume();  // skip to sync point
+    putc('\n', stderr);
+    exit(1);
 }
 
 static void error(const char *msg, ...) {
@@ -182,8 +176,264 @@ TypeRef *parse_type(void) {
     return base;
 }
 
-Expr *parse_expr() {
+Expr *expr_new_lit(Token t) {
+    Expr *e = arena_calloc(arena, sizeof(Expr));
+    e->kind = EXPR_LIT;
+    e->lit.raw = arena_strdup(arena, t.value ? t.value : "");
+    e->lit.span = span(t, t);
 
+    if (t.type == NUMBER) {
+        e->lit.kind = LIT_INT;
+        e->lit.int_value = strtoll(t.value, NULL, 0);
+    } else if (t.type == STRING) {
+        e->lit.kind = LIT_STRING;
+        e->lit.str_value = arena_strdup(arena, t.value);
+    } else if (t.type == TRUE || t.type == FALSE) {
+        e->lit.kind = LIT_BOOL;
+        e->lit.bool_value = (t.type == TRUE);
+    } else if (t.type == _NULL) {
+        e->lit.kind = LIT_NULL;
+    } else {
+        error("Unknown expression literal %s", t.value);
+    }
+    e->span = e->lit.span;
+    return e;
+}
+
+Expr *expr_new_ident(Token t) {
+    char **comps = arena_calloc(arena, sizeof(char*));
+    size n = 0;
+    comps[n++] = arena_strdup(arena, t.value);
+
+    Token last = t;
+    while (peek().type == DOUBLECOLON) {
+        consume();  // ::
+        Token comp = consume();
+        if (comp.type != IDENT) {
+            error("Expected identifier after '::' in path");
+            break;
+        }
+        char **new = arena_calloc(arena, sizeof(Stmt) * (n + 1));
+        if (n > 0) memcpy(new, comps, sizeof(char*) * n);
+        comps = new;
+
+        comps[n++] = arena_strdup(arena, comp.value);
+        last = comp;
+    }
+
+    Expr *e = arena_calloc(arena, sizeof(Expr));
+    if (n == 1) {
+        e->kind = EXPR_IDENT;
+        e->ident.name = comps[0];
+        e->span = span(t, last);
+    } else {
+        e->kind = EXPR_PATH;
+        e->path.components = comps;
+        e->path.comp_count = n;
+        e->span = span(t, last);
+    }
+
+    return e;
+}
+
+int token_to_unary(TokenType t, UnaryOp *out) {
+    switch (t) {
+        case MINUS: *out = UOP_NEG; return 1;
+        case BANG: *out = UOP_NOT; return 1;
+        case STAR: *out = UOP_DEREF; return 1;
+        case AMP: *out = UOP_ADDR; return 1;
+        default: return 0;
+    }
+}
+
+int bp_for_binary(TokenType t, int *right_assoc, BinaryOp *out) {
+    *right_assoc = 0;
+
+    switch (t) {
+        case STAR:  *out = BINOP_MUL;  return 60;
+        case SLASH:   *out = BINOP_DIV;  return 60;
+        case PERCENT:*out = BINOP_MOD; return 60;
+
+        case PLUS:  *out = BINOP_ADD;  return 50;
+        case MINUS: *out = BINOP_SUB;  return 50;
+
+        case LSHIFT:   *out = BINOP_SHL;  return 45;
+        case RSHIFT:   *out = BINOP_SHR;  return 45;
+
+        case LESS:    *out = BINOP_LT;   return 40;
+        case LESS_EQ:    *out = BINOP_LE;   return 40;
+        case GREATER:    *out = BINOP_GT;   return 40;
+        case GREATER_EQ:    *out = BINOP_GE;   return 40;
+
+        case EQ_EQ:  *out = BINOP_EQ;   return 35;
+        case BANG_EQ:   *out = BINOP_NE;   return 35;
+
+        case AMP:   *out = BINOP_AND;  return 32;
+        case CARET: *out = BINOP_XOR;  return 28;
+        case PIPE:  *out = BINOP_OR;   return 24;
+
+        case AND_AND: *out = BINOP_LOGICAL_AND; return 15;
+        case OR_OR:   *out = BINOP_LOGICAL_OR;  return 10;
+
+        case EQ: *out = BINOP_ASSIGN; *right_assoc = 1; return 5;
+
+        default:
+            return 0;
+    }
+}
+
+Expr *parse_expr_bp(int min_bp);
+
+Expr *parse_expr_prefix() {
+    Token t = peek();
+
+    if (t.type == NUMBER || t.type == STRING || t.type == TRUE || t.type == FALSE || t.type == _NULL) {
+        consume();
+        return expr_new_lit(t);
+    }
+
+    if (t.type == IDENT) {
+        consume();
+        return expr_new_ident(t);
+    }
+
+    if (t.type == LPAREN) {
+        consume();
+
+        if (is_builtin_type_token(peek().type) || peek().type == MUT || peek().type == IDENT) {
+            // TODO: type casting (maybe)
+        }
+        Expr *inner = parse_expr_bp(0);
+        expect(RPAREN, "Expected ')'");
+        return inner;
+    }
+
+    UnaryOp uop;
+    if (token_to_unary(t.type, &uop)) {
+        consume();
+        Expr *operand = parse_expr_bp(80);
+        Expr *e = arena_calloc(arena, sizeof(Expr));
+        e->kind = EXPR_UNARY;
+        e->unary.op = uop;
+        e->unary.operand = operand;
+        e->span = span(t, peek());
+        return e;
+    }
+
+    error("Unexpected token in expression");
+    consume();
+    Expr *e = arena_calloc(arena, sizeof(Expr));
+    e->kind = EXPR_LIT;
+    e->lit.kind = LIT_INT;
+    e->lit.int_value = 0;
+    e->span = span(t, t);
+    return e;
+}
+
+Expr *handle_postfix(Expr *left) {
+    while (1) {
+        Token next = peek();
+        if (next.type == LPAREN) {
+            Token start = consume();
+            Expr **args = NULL;
+            size arg_count = 0;
+            if (peek().type != RPAREN) {
+                while (1) {
+                    Expr *arg = parse_expr_bp(0);
+                    Expr **new = arena_calloc(arena, sizeof(Expr*) + (arg_count + 1));
+                    if (arg_count > 0) memcpy(new, args, sizeof(Expr*) * arg_count);
+                    args = new;
+                    args[arg_count++] = arg;
+
+                    if (peek().type != COMMA) break;
+                    consume();  // ,
+                }
+            }
+            Token end = consume();  // )
+            Expr *call = arena_calloc(arena, sizeof(Expr));
+            call->kind = EXPR_CALL;
+            call->call.callee = left;
+            call->call.args = args;
+            call->call.arg_count = arg_count;
+            call->span = span(start, end);
+            left = call;
+            continue;
+        } else if (next.type == LBRACK) {
+            Token lb = consume();
+            Expr *idx = parse_expr_bp(0);
+            Token rb = consume();
+            if (rb.type != RBRACK) {
+                error("Expected ']'");
+            }
+            Expr *index = arena_calloc(arena, sizeof(Expr));
+            index->kind = EXPR_INDEX;
+            index->index.base = left;
+            index->index.index = idx;
+            index->span = span(next, rb);
+            left = index;
+            consume();  // ]
+            continue;
+        } else if (next.type == DOT) {
+            consume();
+            Token mem = consume();
+            if (mem.type != IDENT) {
+                error("Expected identifier after '.'");
+                mem = (Token){.type = IDENT, .value = "<error>", .line = mem.line, .column = mem.column};
+            }
+            Expr *m = arena_calloc(arena, sizeof(Expr));
+            m->kind = EXPR_MEMBER;
+            m->member.base = left;
+            m->member.member = arena_strdup(arena, mem.value);
+            m->span = span(next, peek());
+            left = m;
+            continue;
+        } else {
+            break;
+        }
+    }
+    
+    return left;
+}
+
+Expr *parse_expr_bp(int min_bp) {
+    Token t = peek();
+    Expr *left = parse_expr_prefix();
+
+    left = handle_postfix(left);
+
+    while (1) {
+        Token next =  peek();
+        if (next.type == _EOF || next.type == SEMICOLON || next.type == COMMA || next.type == RPAREN || next.type == RBRACK) {
+            break;
+        }
+
+        BinaryOp binop;
+        int right_assoc = 0;
+        int bp = bp_for_binary(next.type, &right_assoc, &binop);
+        if (bp == 0 || bp <= min_bp) break;
+
+        Token op_tok = consume();
+
+        int rbp = right_assoc ? bp - 1 : bp;
+
+        Expr *right = parse_expr_bp(rbp);
+
+        Expr *b = arena_calloc(arena, sizeof(Expr));
+        b->kind = EXPR_BINARY;
+        b->binary.op = binop;
+        b->binary.left = left;
+        b->binary.right = right;
+        b->span = span(t, peek());
+        left = b;
+
+        left = handle_postfix(left);
+    }
+
+    return left;
+}
+
+Expr *parse_expr() {
+    return parse_expr_bp(0);
 }
 
 Stmt *parse_return_stmt() {
@@ -415,7 +665,7 @@ FnDecl *parse_fn_sig() {
         Param param = {
             .type = param_type,
             .span = span(start, peek()),
-            .name = arena_strdup(arena, name.value),  // TODO: this segfaulted somewhere else so untrustworthy
+            .name = arena_strdup(arena, name.value),
             .attr_count = attr_count,
             .attributes = attrs,
         };
@@ -429,6 +679,58 @@ FnDecl *parse_fn_sig() {
         consume();  // ,
     }
     consume();  // )
+
+    fn->name = arena_strdup(arena, fn_name.value);
+    fn->ret_type = ret_type;
+
+    fn->span = span(start, peek());
+
+    return fn;
+}
+
+FnDecl *parse_fn() {
+    Token start = peek();
+    FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
+    collect_attributes(&fn->attributes, &fn->attr_count);
+    consume();  // FN
+
+    TypeRef *ret_type = parse_type();
+    Token fn_name = consume();
+    if (fn_name.type != IDENT) error("Missing function name");
+    expect(LPAREN, "Missing function opening parenthesis");
+
+    for (int i = 0; peek().type != RPAREN; i++) {
+        Token start = peek();
+
+        Attribute *attrs = NULL;
+        size attr_count = 0;
+        collect_attributes(&attrs, &attr_count);
+
+        TypeRef *param_type = parse_type();
+        Token name = consume();
+        if (name.type != IDENT) error("Missing argument name");
+        
+        Param param = {
+            .type = param_type,
+            .span = span(start, peek()),
+            .name = arena_strdup(arena, name.value),
+            .attr_count = attr_count,
+            .attributes = attrs,
+        };
+
+        Param *new = arena_calloc(arena, sizeof(Param) * (i + 1));
+        if (fn->param_count > 0)  memcpy(new, fn->params, sizeof(Param) * fn->param_count);
+        fn->params = new;
+
+        fn->params[fn->param_count++] = param;
+        if (peek().type != COMMA) break;
+        consume();  // ,
+    }
+    consume();  // )
+
+    if (peek().type == LBRACE) {
+        fn->body = parse_block_stmt();
+    }
 
     fn->name = arena_strdup(arena, fn_name.value);
     fn->ret_type = ret_type;
@@ -492,7 +794,7 @@ Module *parse_module() {
     m->decl_count = 1;
     m->decls[0] = arena_calloc(arena, sizeof(Decl));
     m->decls[0]->kind = DECL_FN;
-    m->decls[0]->fn = parse_fn_sig();
+    m->decls[0]->fn = parse_fn();
 
     m->span = span(start, peek());
     return m;
