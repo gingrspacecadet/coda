@@ -18,7 +18,7 @@ static void print_attributes(Attribute *attrs, size_t count, int indent) {
     for (size_t i = 0; i < count; ++i) {
         print_indent(indent + 2);
         printf("@%s", safe_str(attrs[i].name));
-        if (attrs[i].arg_count) {
+        if (attrs[i].arg_count > 0) {
             putchar('(');
             for (size_t j = 0; j < attrs[i].arg_count; ++j) {
                 if (j) printf(", ");
@@ -101,10 +101,10 @@ static void print_expr(const Expr *e, int indent) {
             print_literal(&e->lit, indent + 2);
             break;
         case EXPR_IDENT:
-            printf("Ident: %s\n", safe_str(e->ident.name));
+            print_indent(indent + 2); printf("Ident: %s\n", safe_str(e->ident.name));
             break;
         case EXPR_PATH:
-            printf("Path:");
+            print_indent(indent + 2); printf("Path:");
             for (size_t i = 0; i < e->path.comp_count; ++i) {
                 printf(" %s", safe_str(e->path.components[i]));
                 if (i + 1 < e->path.comp_count) printf("::");
@@ -112,23 +112,23 @@ static void print_expr(const Expr *e, int indent) {
             putchar('\n');
             break;
         case EXPR_UNARY:
-            printf("Unary op %d\n", e->unary.op);
+            print_indent(indent + 2); printf("Unary op %d\n", e->unary.op);
             print_expr(e->unary.operand, indent + 2);
             break;
         case EXPR_BINARY:
-            printf("Binary op %d\n", e->binary.op);
+            print_indent(indent + 2); printf("Binary op %d\n", e->binary.op);
             print_expr(e->binary.left, indent + 2);
             print_expr(e->binary.right, indent + 2);
             break;
         case EXPR_CALL:
-            printf("Call:\n");
+            print_indent(indent + 2); printf("Call:\n");
             print_expr(e->call.callee, indent + 2);
             for (size_t i = 0; i < e->call.arg_count; ++i) {
                 print_expr(e->call.args[i], indent + 2);
             }
             break;
         default:
-            printf("Expr kind %d (not printed in detail)\n", e->kind);
+            print_indent(indent + 2); printf("Expr kind %d (not printed in detail)\n", e->kind);
             break;
     }
 }
@@ -174,6 +174,15 @@ static void print_stmt(const Stmt *s, int indent) {
             break;
         case STMT_EMPTY:
             puts("Empty stmt");
+            break;
+        case STMT_VAR:
+            printf("Var");
+            format_type(s->var->type);
+            printf(" %s", s->var->name);
+            if (s->var->init) {
+                printf(" = ");
+                print_expr(s->var->init, -4);
+            } else putc('\n', stdout);
             break;
         default:
             printf("Stmt kind %d (not printed in detail)\n", s->kind);
@@ -262,12 +271,12 @@ void pretty_print_module(Module *m) {
     printf("Name: %s\n", safe_str(m->name));
     printf("Includes (total %zu):\n", m->include_count ? m->include_count : 0);
     for (size_t i = 0; i < m->include_count; ++i) {
-        print_include(m->includes[i], 2);
+        print_include(m->includes[i], 0);
     }
 
     printf("Declarations (total %zu):\n", m->decl_count ? m->decl_count : 0);
     for (size_t i = 0; i < m->decl_count; ++i) {
-        print_decl(m->decls[i], (int)i, 2);
+        print_decl(m->decls[i], (int)i, 0);
     }
     puts("=== End Module ===");
 }

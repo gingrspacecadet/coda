@@ -3,7 +3,26 @@ module simple;
 include std::io;
 include std::string;
 
-@extern
+@extern(1, 2)
 fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans) {
+    int e;
+    int8 e;
+    int16 e;
+    int32 e;
+    int64 e;
+    uint e;
+    uint8 e;
+    uint16 e;
+    uint32 e;
+    uint64 e;
+    bool e;
+    null e;
+    char e;
+    String e;
+
+    e = 67;
+
+    for (int i = 0; i < 12; i += 1);
+
     return 1;
 }
