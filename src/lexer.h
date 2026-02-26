@@ -17,6 +17,8 @@ typedef enum {
     ELSE,
     FOR,
     WHILE,
+    BREAK,
+    CONTINUE,
     
     // literals
     STRING_LIT,
