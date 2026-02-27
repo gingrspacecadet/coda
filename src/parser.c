@@ -185,7 +185,7 @@ Expr *expr_new_lit(Token t) {
     if (t.type == NUMBER) {
         e->lit.kind = LIT_INT;
         e->lit.int_value = strtoll(t.value, NULL, 0);
-    } else if (t.type == STRING) {
+    } else if (t.type == STRING_LIT) {
         e->lit.kind = LIT_STRING;
         e->lit.str_value = arena_strdup(arena, t.value);
     } else if (t.type == TRUE || t.type == FALSE) {
@@ -287,7 +287,7 @@ Expr *parse_expr_bp(int min_bp);
 Expr *parse_expr_prefix() {
     Token t = peek();
 
-    if (t.type == NUMBER || t.type == STRING || t.type == TRUE || t.type == FALSE || t.type == _NULL) {
+    if (t.type == NUMBER || t.type == STRING_LIT || t.type == TRUE || t.type == FALSE || t.type == _NULL) {
         consume();
         return expr_new_lit(t);
     }
