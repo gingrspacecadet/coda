@@ -493,7 +493,7 @@ Stmt *parse_for_stmt() {
     Expr *inc = parse_expr();
     expect(RPAREN, "Expected ')' after for incrementer");
     
-    if (peek().type != '{') error("Expected '{' for for statement");
+    if (peek().type != LBRACE) error("Expected '{' for for statement");
     Stmt *body = parse_block_stmt();
 
     Stmt *s = arena_calloc(arena, sizeof(Stmt));
@@ -553,7 +553,7 @@ Stmt *parse_if_stmt() {
 
 Stmt *parse_expr_stmt() {
     Token start = peek();
-    Expr *e = parse_expr(); //TODO: implement expression parsing
+    Expr *e = parse_expr();
     expect(SEMICOLON, "Expected semicolon after expression");
 
     Stmt *s = arena_calloc(arena, sizeof(Stmt));
@@ -631,7 +631,7 @@ void collect_attributes(Attribute **out_attr, size *out_count) {
 
         Attribute attr = (Attribute){
             .name = arena_strdup(arena, tattr.value),
-            .args = 0,  //TODO: placeholder
+            .args = 0,
             .span = span(tattr, peek()),
         };
 

@@ -165,6 +165,11 @@ static void print_stmt(const Stmt *s, int indent) {
                 print_stmt(s->_if.else_branch, indent + 2);
             }
             break;
+        case STMT_WHILE:
+            puts("While:");
+            print_expr(s->_while.cond, indent + 2);
+            print_stmt(s->_while.body, indent + 2);
+            break;
         case STMT_FOR:
             puts("For:");
             if (s->_for.init) { print_stmt(s->_for.init, indent + 2); }
