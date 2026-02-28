@@ -74,6 +74,8 @@ Keyword keywords[] = {
     {"else", ELSE},
     {"for", FOR},
     {"while", WHILE},
+    {"break", BREAK},
+    {"continue", CONTINUE},
     {"return", RETURN},
     {"char", CHAR},
     {"String", STRING},

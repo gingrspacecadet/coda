@@ -185,7 +185,7 @@ Expr *expr_new_lit(Token t) {
     if (t.type == NUMBER) {
         e->lit.kind = LIT_INT;
         e->lit.int_value = strtoll(t.value, NULL, 0);
-    } else if (t.type == STRING) {
+    } else if (t.type == STRING_LIT) {
         e->lit.kind = LIT_STRING;
         e->lit.str_value = arena_strdup(arena, t.value);
     } else if (t.type == TRUE || t.type == FALSE) {
@@ -287,7 +287,7 @@ Expr *parse_expr_bp(int min_bp);
 Expr *parse_expr_prefix() {
     Token t = peek();
 
-    if (t.type == NUMBER || t.type == STRING || t.type == TRUE || t.type == FALSE || t.type == _NULL) {
+    if (t.type == NUMBER || t.type == STRING_LIT || t.type == TRUE || t.type == FALSE || t.type == _NULL) {
         consume();
         return expr_new_lit(t);
     }
@@ -362,9 +362,7 @@ Expr *handle_postfix(Expr *left) {
             Token lb = consume();
             Expr *idx = parse_expr_bp(0);
             Token rb = consume();
-            if (rb.type != RBRACK) {
-                error("Expected ']'");
-            }
+            expect(RBRACK, "Expected ']'");
             Expr *index = arena_calloc(arena, sizeof(Expr));
             index->kind = EXPR_INDEX;
             index->index.base = left;
@@ -461,7 +459,7 @@ Stmt *parse_block_stmt() {
 
     Stmt **stmts = NULL;
     size count = 0;
-    for (int i = 0; peek().type != RBRACE; i++) {
+    for (int i = 0; peek().type != RBRACE && peek().type != _EOF; i++) {
         Stmt **new = arena_calloc(arena, sizeof(Stmt*) * (i + 1));
         if (count > 0) memcpy(new, stmts, sizeof(Stmt*) * count);
         stmts = new;
@@ -481,16 +479,36 @@ Stmt *parse_block_stmt() {
 }
 
 Stmt *parse_var_stmt();
+Stmt *parse_expr_stmt();
 
 Stmt *parse_for_stmt() {
     Token start = consume();    // for
 
     expect(LPAREN, "Expected '(' after for");
-    Stmt *init = parse_var_stmt();
+
+    // init: either var decl, expr stmt, or empty
+    Stmt *init = NULL;
+    if (peek().type != SEMICOLON) {
+        if (is_builtin_type_token(peek().type) || peek().type == MUT) {
+            init = parse_var_stmt();
+        } else {
+            init = parse_expr_stmt(); // parse and expect trailing ;
+        }
+    } else {
+        // empty init; consume the semicolon below
+    }
     expect(SEMICOLON, "Expected ';' after for initialiser");
-    Expr *cond = parse_expr();
+
+    Expr *cond = NULL;
+    if (peek().type != SEMICOLON) {
+        cond = parse_expr(); // parse expression; does not consume trailing ')', stops at ';'
+    }
     expect(SEMICOLON, "Expected ';' after for condition");
-    Expr *inc = parse_expr();
+
+    Expr *inc = NULL;
+    if (peek().type != RPAREN) {
+        inc = parse_expr();
+    }
     expect(RPAREN, "Expected ')' after for incrementer");
     
     if (peek().type != LBRACE) error("Expected '{' for for statement");
@@ -510,9 +528,8 @@ Stmt *parse_for_stmt() {
 Stmt *parse_while_stmt() {
     Token start = consume();    // while
 
-    expect(LPAREN, "Expected '(' after while");
-    Expr *cond = parse_expr();
-    expect(RPAREN, "Expected ')' after while condition");
+    if (peek().type != LPAREN) error("Expected '(' after while");
+    Expr *cond = parse_expr();  // parse_expr consumes '(' and ')'
 
     if (peek().type != LBRACE) error("Expected '{' for while statement");
     Stmt *branch = parse_block_stmt();
@@ -529,9 +546,9 @@ Stmt *parse_while_stmt() {
 Stmt *parse_if_stmt() {
     Token start = consume();    // if
 
-    expect(LPAREN, "Expected '(' after if");
-    Expr *cond = parse_expr();
-    expect(RPAREN, "Expected ')' after if condition");
+    // Let the expression parser handle parentheses: it will consume '(' and its matching ')'
+    if (peek().type != LPAREN) error("Expected '(' after if");
+    Expr *cond = parse_expr();  // parse_expr consumes the '(' and ')' for the condition
 
     if (peek().type != LBRACE) error("Expected '{' for if statement");
     Stmt *then = parse_block_stmt();

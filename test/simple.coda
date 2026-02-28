@@ -22,17 +22,16 @@ fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?
 
     e = 67;
 
-    for (int i = 0; i < 12; i = i + 1) {
-
+    for (int i = 0; i < 12; i = 1) {
+        return i;
     }
 
-    if (i < 10) {
+    if (x < 0) { return; }
 
-    }
+    while ((a + b) > 0) { return; }
+    for (int i = 0; i < n; i = i + 1) {}
 
-    while (six < seven) {
-
-    }
+    io::puts("hi");
 
     return 1;
 }
