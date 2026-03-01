@@ -90,6 +90,42 @@ static void print_literal(const Literal *lit, int indent) {
     }
 }
 
+static char *binop_to_str(BinaryOp binop) {
+    switch (binop) {
+        case BINOP_ADD: return "+";
+        case BINOP_ADD_ASSIGN: return "+=";
+        case BINOP_AND: return "&";
+        case BINOP_ASSIGN: return "=";
+        case BINOP_DIV: return "/";
+        case BINOP_EQ: return "==";
+        case BINOP_GE: return ">=";
+        case BINOP_GT: return ">";
+        case BINOP_LE: return "<=";
+        case BINOP_LOGICAL_AND: return "&&";
+        case BINOP_LOGICAL_OR: return "||";
+        case BINOP_LT: return "<";
+        case BINOP_MOD: return "%";
+        case BINOP_MUL: return "*";
+        case BINOP_NE: return "!=";
+        case BINOP_OR: return "|";
+        case BINOP_SHL: return "<<";
+        case BINOP_SHR: return ">>";
+        case BINOP_SUB: return "-";
+        case BINOP_XOR: return "^";
+        default: return "<unknown>";
+    }
+}
+
+static char *uop_to_str(UnaryOp uop) {
+    switch (uop) {
+        case UOP_ADDR: return "&";
+        case UOP_DEREF: return "*";
+        case UOP_NEG: return "-";
+        case UOP_NOT: return "~";
+        default: return "<unknown>" ;
+    }
+}
+
 static void print_expr(const Expr *e, int indent) {
     if (!e) {
         print_indent(indent + 2);
@@ -104,19 +140,19 @@ static void print_expr(const Expr *e, int indent) {
             print_indent(indent + 2); printf("Ident: %s\n", safe_str(e->ident.name));
             break;
         case EXPR_PATH:
-            print_indent(indent + 2); printf("Path:");
+            print_indent(indent + 2); printf("Path: ");
             for (size_t i = 0; i < e->path.comp_count; ++i) {
-                printf(" %s", safe_str(e->path.components[i]));
+                printf("%s", safe_str(e->path.components[i]));
                 if (i + 1 < e->path.comp_count) printf("::");
             }
             putchar('\n');
             break;
         case EXPR_UNARY:
-            print_indent(indent + 2); printf("Unary op %d\n", e->unary.op);
+            print_indent(indent + 2); printf("Unary op %s\n", uop_to_str(e->unary.op));
             print_expr(e->unary.operand, indent + 2);
             break;
         case EXPR_BINARY:
-            print_indent(indent + 2); printf("Binary op %d\n", e->binary.op);
+            print_indent(indent + 2); printf("Binary op %s\n", binop_to_str(e->binary.op));
             print_expr(e->binary.left, indent + 2);
             print_expr(e->binary.right, indent + 2);
             break;

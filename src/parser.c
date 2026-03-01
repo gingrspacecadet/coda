@@ -690,59 +690,11 @@ void collect_attributes(Attribute **out_attr, size *out_count) {
     *out_count = count;
 }
 
-// FnDecl *parse_fn_sig() {
-//     Token start = peek();
-//     FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
-//     collect_attributes(&fn->attributes, &fn->attr_count);
-//     consume();  // FN
-
-//     TypeRef *ret_type = parse_type();
-//     Token fn_name = consume();
-//     if (fn_name.type != IDENT) error("Missing function name");
-//     expect(LPAREN, "Missing function opening parenthesis");
-
-//     for (int i = 0; peek().type != RPAREN; i++) {
-//         Token start = peek();
-
-//         Attribute *attrs = NULL;
-//         size attr_count = 0;
-//         collect_attributes(&attrs, &attr_count);
-
-//         TypeRef *param_type = parse_type();
-//         Token name = consume();
-//         if (name.type != IDENT) error("Missing argument name");
-        
-//         Param param = {
-//             .type = param_type,
-//             .span = span(start, peek()),
-//             .name = arena_strdup(arena, name.value),
-//             .attr_count = attr_count,
-//             .attributes = attrs,
-//         };
-
-//         Param *new = arena_calloc(arena, sizeof(Param) * (i + 1));
-//         if (fn->param_count > 0)  memcpy(new, fn->params, sizeof(Param) * fn->param_count);
-//         fn->params = new;
-
-//         fn->params[fn->param_count++] = param;
-//         if (peek().type != COMMA) break;
-//         consume();  // ,
-//     }
-//     consume();  // )
-
-//     fn->name = arena_strdup(arena, fn_name.value);
-//     fn->ret_type = ret_type;
-
-//     fn->span = span(start, peek());
-
-//     return fn;
-// }
-
 FnDecl *parse_fn() {
     Token start = peek();
     FnDecl *fn = arena_calloc(arena, sizeof(FnDecl));
     collect_attributes(&fn->attributes, &fn->attr_count);
-    consume();  // FN
+    consume();  // fn
 
     TypeRef *ret_type = parse_type();
     Token fn_name = consume();
