@@ -321,13 +321,6 @@ Expr *parse_expr_prefix() {
     }
 
     error("Unexpected token in expression");
-    consume();
-    Expr *e = arena_calloc(arena, sizeof(Expr));
-    e->kind = EXPR_LIT;
-    e->lit.kind = LIT_INT;
-    e->lit.int_value = 0;
-    e->span = span(t, t);
-    return e;
 }
 
 Expr *handle_postfix(Expr *left) {
@@ -478,6 +471,7 @@ Stmt *parse_block_stmt() {
     return s;
 }
 
+void collect_attributes(Attribute **out_attr, size *out_count);
 Stmt *parse_var_stmt();
 Stmt *parse_expr_stmt();
 
@@ -580,8 +574,11 @@ Stmt *parse_expr_stmt() {
     return s;
 }
 
+// This does not handle attributes
+// Must be handled by caller
 Stmt *parse_var_stmt() {
     Token start = peek();
+
     TypeRef *type = parse_type();
 
     Token name = consume();
@@ -609,6 +606,12 @@ Stmt *parse_var_stmt() {
 Stmt *parse_stmt() {
     Token t = peek();
 
+    Attribute *attrs;
+    size attr_count;
+    collect_attributes(&attrs, &attr_count);
+
+    t = peek();
+
     switch (t.type) {
         case RETURN: return parse_return_stmt();
         case FOR: return parse_for_stmt();
@@ -626,7 +629,10 @@ Stmt *parse_stmt() {
 
     if (is_builtin_type_token(t.type) || t.type == MUT) {
         //Variable declaration
-        return parse_var_stmt();
+        Stmt *s = parse_var_stmt();
+        s->var->attributes = attrs;
+        s->var->attr_count = attr_count;
+        return s;
     }
 
     // fallback
@@ -654,6 +660,11 @@ void collect_attributes(Attribute **out_attr, size *out_count) {
 
         if (peek().type == LPAREN) {
             consume();  // (
+
+            if (peek().type == RPAREN) {
+                error("'()' must contain at least one argument");
+            }
+
             size arg_count = 0;
             char **args = NULL;
             while (1) {
@@ -820,6 +831,8 @@ Decl *parse_decl() {
     if (is_builtin_type_token(t.type) || t.type == MUT) {
         // Variable decl
         Stmt *v = parse_var_stmt();
+        v->var->attributes = attrs;
+        v->var->attr_count = attr_count;
         expect(SEMICOLON, "Expected semicolon after variable decl");
         d->kind = DECL_VAR;
         d->var = v->var;
@@ -828,6 +841,8 @@ Decl *parse_decl() {
         // Function decl
         d->kind = DECL_FN;
         d->fn = parse_fn();
+        d->fn->attributes = attrs;
+        d->fn->attr_count = attr_count;
     }
     else {
         // TODO: potentially expand this to more

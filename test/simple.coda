@@ -5,6 +5,7 @@ include std::string;
 
 int a = b;
 
+@antidisestablishmentarianism
 @extern(1, 2)
 fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans) {
     int e;
@@ -13,7 +14,7 @@ fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?
     int32 e;
     int64 e;
     uint e;
-    uint8 e;
+    @attr uint8 e;
     uint16 e;
     uint32 e;
     uint64 e;

@@ -188,6 +188,7 @@ static void print_stmt(const Stmt *s, int indent) {
                 printf(" = ");
                 print_expr(s->var->init, -4);
             } else putc('\n', stdout);
+            print_attributes(s->var->attributes, s->var->attr_count, indent + 2);
             break;
         default:
             printf("Stmt kind %d (not printed in detail)\n", s->kind);

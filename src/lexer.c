@@ -162,7 +162,7 @@ TokenBuffer lexer(char *data) {
                         buffer_push(&buf, consume());
                     }
         
-                    token_push(&tokens, (Token){.type = ATTR, .value = strdup(buf.data), .len = buf.len});
+                    token_push(&tokens, (Token){.type = ATTR, .value = strdup(buf.data), .len = buf.idx});
                     buffer_clear(&buf);
                     break;
                 case '\'':

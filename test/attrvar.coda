@@ -1,0 +1,6 @@
+module attrvar;
+
+@attr(1)
+fn int main() {
+    @attr uint8 test = 3;
+}
