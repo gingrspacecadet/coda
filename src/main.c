@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     // lex it
     TokenBuffer tokens = lexer(buf);
-    pretty_print_tokens(&tokens);
+    // pretty_print_tokens(&tokens);
     Arena *a = arena_create();
 
     // parse it

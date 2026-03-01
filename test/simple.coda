@@ -3,6 +3,8 @@ module simple;
 include std::io;
 include std::string;
 
+int a = b;
+
 @extern(1, 2)
 fn int[] *? *? mut* main(@extern mut char mut*? e, mut int *foo, char mut*?mut*?mut*? beans) {
     int e;

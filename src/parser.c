@@ -804,6 +804,41 @@ Include *parse_include() {
     return inc;
 }
 
+Decl *parse_decl() {
+    Token start = peek();
+
+    Decl *d = arena_calloc(arena, sizeof(Decl));
+
+    Attribute *attrs;
+    size attr_count;
+    if (start.type == ATTR) {
+        collect_attributes(&attrs, &attr_count);
+    }
+
+    Token t = peek();
+
+    if (is_builtin_type_token(t.type) || t.type == MUT) {
+        // Variable decl
+        Stmt *v = parse_var_stmt();
+        expect(SEMICOLON, "Expected semicolon after variable decl");
+        d->kind = DECL_VAR;
+        d->var = v->var;
+    }
+    else if (t.type == FN) {
+        // Function decl
+        d->kind = DECL_FN;
+        d->fn = parse_fn();
+    }
+    else {
+        // TODO: potentially expand this to more
+        error("Expected declaration!");
+    }
+
+    d->span = span(start, peek());
+
+    return d;
+}
+
 Module *parse_module() {
     Token start = peek();
     expect(MODULE, "Missing module declaration");
@@ -828,12 +863,15 @@ Module *parse_module() {
         m->includes[m->include_count++] = parse_include();
     }
 
-    //TODO: temporarily parse a function signature
     m->decls = arena_calloc(arena, sizeof(Decl*));
-    m->decl_count = 1;
-    m->decls[0] = arena_calloc(arena, sizeof(Decl));
-    m->decls[0]->kind = DECL_FN;
-    m->decls[0]->fn = parse_fn();
+    m->decl_count = 0;
+    while (peek().type != _EOF) {
+        Decl **new = arena_calloc(arena, sizeof(Decl*) * (m->decl_count + 1));
+        if (m->decl_count > 0) memcpy(new, m->decls, sizeof(Decl*) * m->decl_count);
+        m->decls = new;
+
+        m->decls[m->decl_count++] = parse_decl();
+    }
 
     m->span = span(start, peek());
     return m;
