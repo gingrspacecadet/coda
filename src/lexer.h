@@ -101,9 +101,9 @@ typedef struct {
 } TokenBuffer;
 
 typedef struct {
-    const char const *source;
-    size source_index;
+    char *src;
+    size idx;
     TokenBuffer tokens;
 } LexerContext;
 
-TokenBuffer lexer(char *src);
+LexerContext lexer(char *src);

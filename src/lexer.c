@@ -131,10 +131,15 @@ static char handle_esc(TokenBuffer *tokens) {
     }
 }
 
-TokenBuffer lexer(char *data) {
+LexerContext lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
     src = data;
+    LexerContext ctx = {
+        .src = data,
+        .idx = 0,
+        .tokens = tokens,
+    };
 
     while (peek()) {
         if (isalpha(peek())) {
@@ -321,5 +326,5 @@ TokenBuffer lexer(char *data) {
     }
 
     token_push(&tokens, (Token){.type = _EOF});
-    return tokens;
+    return ctx;
 }
