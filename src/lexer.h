@@ -106,4 +106,4 @@ typedef struct {
     TokenBuffer tokens;
 } LexerContext;
 
-LexerContext *lexer(char *src);
+LexerContext lexer(char *src);

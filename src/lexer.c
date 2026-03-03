@@ -128,15 +128,16 @@ static char handle_esc(LexerContext *ctx) {
     }
 }
 
-LexerContext *lexer(char *data) {
+LexerContext lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
-    LexerContext *ctx = malloc(sizeof(LexerContext));
-    *ctx = (LexerContext){
+    LexerContext lctx = {
         .src = data,
         .idx = 0,
         .tokens = tokens,
     };
+
+    LexerContext *ctx = &lctx;
 
     while (peek(ctx)) {
         if (isalpha(peek(ctx))) {
@@ -323,5 +324,5 @@ LexerContext *lexer(char *data) {
     }
 
     token_push(ctx, (Token){.type = _EOF});
-    return ctx;
+    return lctx;
 }
