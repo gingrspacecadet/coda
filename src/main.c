@@ -22,12 +22,12 @@ int main(int argc, char **argv) {
     buf[src_size] = '\0';
 
     // lex it
-    LexerContext lctx = lexer(buf);
+    LexerContext *lctx = lexer(buf);
     // pretty_print_tokens(&tokens);
     Arena *a = arena_create();
 
     // parse it
-    Module *module = parser(&lctx.tokens, a);
+    Module *module = parser(&lctx->tokens, a);
     pretty_print_module(module);
 
     arena_destroy(a);

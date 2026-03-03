@@ -5,24 +5,21 @@
 #include <stdio.h>
 #include "lexer.h"
 
-static char *src = NULL;
-static int idx = 0;
-
-static char peek() {
-    return src[idx];
+static char peek(LexerContext *ctx) {
+    return ctx->src[ctx->idx];
 }
 
 static size line = 1, col = 1;
 
-static char consume() {
-    if (!(src + idx)) return '\0';
-    if (src[idx] == '\n') {
+static char consume(LexerContext *ctx) {
+    if (!(ctx->src + ctx->idx)) return '\0';
+    if (ctx->src[ctx->idx] == '\n') {
         line++;
         col = 0;
     } else {
         col++;
     }
-    return src[idx++];
+    return ctx->src[ctx->idx++];
 }
 
 typedef struct {
@@ -54,11 +51,11 @@ TokenBuffer tokenbuffer_create(size elements) {
     };
 }
 
-void token_push(TokenBuffer *buffer, Token token) {
-    if (buffer->len >= buffer->cap) return;
+void token_push(LexerContext *ctx, Token token) {
+    if (ctx->tokens.len >= ctx->tokens.cap) return;
     token.line = line;
     token.column = col - token.len;
-    buffer->data[buffer->len++] = token;
+    ctx->tokens.data[ctx->tokens.len++] = token;
 }
 
 typedef struct {
@@ -96,27 +93,27 @@ Keyword keywords[] = {
     {"mut", MUT},
 };
 
-void lex_ident(Buffer *buf, TokenBuffer *tokens) {
+void lex_ident(LexerContext *ctx, Buffer *buf) {
     for (int i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
         Keyword k = keywords[i];
         if (strcmp(buf->data, k.name) == 0) {
-            token_push(tokens, (Token){.type = k.type, .len = buf->idx});
+            token_push(ctx, (Token){.type = k.type, .len = buf->idx});
             buffer_clear(buf);
             return;
         }
     }
 
-    consume(); idx--;
-    token_push(tokens, (Token){.type = IDENT, .value = strdup(buf->data), .len = buf->idx});
+    consume(ctx); ctx->idx--;
+    token_push(ctx, (Token){.type = IDENT, .value = strdup(buf->data), .len = buf->idx});
     buffer_clear(buf);
 }
 
-static char handle_esc(TokenBuffer *tokens) {
-    if (peek() == '\\') {
-        consume();  // backslash
-        char c = peek();
-        consume();
-        switch (peek()) {
+static char handle_esc(LexerContext *ctx) {
+    if (peek(ctx) == '\\') {
+        consume(ctx);  // backslash
+        char c = peek(ctx);
+        consume(ctx);
+        switch (peek(ctx)) {
             case 'n': return '\n';
             case 't': return '\t';
             case 'r': return '\r';
@@ -127,204 +124,204 @@ static char handle_esc(TokenBuffer *tokens) {
             default: return c;
         }
     } else {
-        return consume();
+        return consume(ctx);
     }
 }
 
-LexerContext lexer(char *data) {
+LexerContext *lexer(char *data) {
     TokenBuffer tokens = tokenbuffer_create(1024);
     Buffer buf = buffer_create(64);
-    src = data;
-    LexerContext ctx = {
+    LexerContext *ctx = malloc(sizeof(LexerContext));
+    *ctx = (LexerContext){
         .src = data,
         .idx = 0,
         .tokens = tokens,
     };
 
-    while (peek()) {
-        if (isalpha(peek())) {
-            buffer_push(&buf, consume());
-            while (isalnum(peek()) || peek() == '_') {
-                buffer_push(&buf, consume());
+    while (peek(ctx)) {
+        if (isalpha(peek(ctx))) {
+            buffer_push(&buf, consume(ctx));
+            while (isalnum(peek(ctx)) || peek(ctx) == '_') {
+                buffer_push(&buf, consume(ctx));
             }
 
-            lex_ident(&buf, &tokens);
+            lex_ident(ctx, &buf);
         }
-        else if (isdigit(peek())) {
-            buffer_push(&buf, consume());
-            while (isdigit(peek())) {
-                buffer_push(&buf, consume());
+        else if (isdigit(peek(ctx))) {
+            buffer_push(&buf, consume(ctx));
+            while (isdigit(peek(ctx))) {
+                buffer_push(&buf, consume(ctx));
             }
-            token_push(&tokens, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.idx});
+            token_push(ctx, (Token){.type = NUMBER, .value = strdup(buf.data), .len = buf.idx});
             buffer_clear(&buf);
         }
         else {
-            switch (peek()) {
+            switch (peek(ctx)) {
                 case '@':
-                    consume();  // @
-                    buffer_push(&buf, consume());
-                    while (isalnum(peek()) || peek() == '_') {
-                        buffer_push(&buf, consume());
+                    consume(ctx);  // @
+                    buffer_push(&buf, consume(ctx));
+                    while (isalnum(peek(ctx)) || peek(ctx) == '_') {
+                        buffer_push(&buf, consume(ctx));
                     }
         
-                    token_push(&tokens, (Token){.type = ATTR, .value = strdup(buf.data), .len = buf.idx});
+                    token_push(ctx, (Token){.type = ATTR, .value = strdup(buf.data), .len = buf.idx});
                     buffer_clear(&buf);
                     break;
                 case '\'':
-                    consume();          // '
-                    char c = handle_esc(&tokens);
-                    if (peek() != '\'') {
+                    consume(ctx);          // '
+                    char c = handle_esc(ctx);
+                    if (peek(ctx) != '\'') {
                         fprintf(stderr, "Lexer error: unterminated char literal at %zu, %zu.\n", line, col);
                         exit(1);
                     }
-                    consume();          // '
+                    consume(ctx);          // '
                     char tmp[2] = {c, '\0'};
-                    token_push(&tokens, (Token){.type = CHAR_LIT, .value = strdup(tmp), .len = 1});
+                    token_push(ctx, (Token){.type = CHAR_LIT, .value = strdup(tmp), .len = 1});
                     break;
                 case '"':
-                    consume();  // "
+                    consume(ctx);  // "
                     Buffer str = buffer_create(128);    // TODO: longer string literals
-                    while (peek() != '"') {
-                        buffer_push(&str, handle_esc(&tokens));
+                    while (peek(ctx) != '"') {
+                        buffer_push(&str, handle_esc(ctx));
                     }
-                    consume();  // "
-                    token_push(&tokens, (Token){.type = STRING_LIT, .value = strdup(str.data), .len = str.len});
+                    consume(ctx);  // "
+                    token_push(ctx, (Token){.type = STRING_LIT, .value = strdup(str.data), .len = str.len});
                     buffer_clear(&str);
                     break;
                 case '/':
-                    consume();
-                    if (peek() == '/') {
-                        consume();   // <- this thingy
-                        while (peek() && peek() != '\n') consume();
-                    } else if (peek() == '*') {
-                        consume(); /* <- this thingy */
-                        while (peek()) {
-                            if (peek() == '*'){
-                                consume();
-                                if (peek() == '/') {
-                                    consume();
+                    consume(ctx);
+                    if (peek(ctx) == '/') {
+                        consume(ctx);   // <- this thingy
+                        while (peek(ctx) && peek(ctx) != '\n') consume(ctx);
+                    } else if (peek(ctx) == '*') {
+                        consume(ctx); /* <- this thingy */
+                        while (peek(ctx)) {
+                            if (peek(ctx) == '*'){
+                                consume(ctx);
+                                if (peek(ctx) == '/') {
+                                    consume(ctx);
                                     break;
                                 }
-                            } else consume();
+                            } else consume(ctx);
                         }
                     } else {
-                        if (peek() == '=') {
-                            consume();
-                            token_push(&tokens, (Token){.type = DIV_EQ});
+                        if (peek(ctx) == '=') {
+                            consume(ctx);
+                            token_push(ctx, (Token){.type = DIV_EQ});
                         }
-                        else token_push(&tokens, (Token){.type = SLASH});
+                        else token_push(ctx, (Token){.type = SLASH});
                     }
                     break;
                 case ':':
-                    consume();
-                    if (peek() == ':') {
-                        consume();
-                        token_push(&tokens, (Token){.type = DOUBLECOLON});
+                    consume(ctx);
+                    if (peek(ctx) == ':') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = DOUBLECOLON});
                     }
-                    else token_push(&tokens, (Token){.type = COLON});
+                    else token_push(ctx, (Token){.type = COLON});
                     break;
                 case '(':
-                    token_push(&tokens, (Token){.type = LPAREN}); consume(); break;
+                    token_push(ctx, (Token){.type = LPAREN}); consume(ctx); break;
                 case ')':
-                    token_push(&tokens, (Token){.type = RPAREN}); consume(); break;
+                    token_push(ctx, (Token){.type = RPAREN}); consume(ctx); break;
                 case '{':
-                    token_push(&tokens, (Token){.type = LBRACE}); consume(); break;
+                    token_push(ctx, (Token){.type = LBRACE}); consume(ctx); break;
                 case '}':
-                    token_push(&tokens, (Token){.type = RBRACE}); consume(); break;
+                    token_push(ctx, (Token){.type = RBRACE}); consume(ctx); break;
                 case '[':
-                    token_push(&tokens, (Token){.type = LBRACK}); consume(); break;
+                    token_push(ctx, (Token){.type = LBRACK}); consume(ctx); break;
                 case ']':
-                    token_push(&tokens, (Token){.type = RBRACK}); consume(); break;
+                    token_push(ctx, (Token){.type = RBRACK}); consume(ctx); break;
                 case ';':
-                    token_push(&tokens, (Token){.type = SEMICOLON}); consume(); break;
+                    token_push(ctx, (Token){.type = SEMICOLON}); consume(ctx); break;
                 case '+':
-                    consume();
-                    if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = PLUS_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = PLUS_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = PLUS});
+                    else token_push(ctx, (Token){.type = PLUS});
                     break;
                 case '!':
-                    consume();
-                    if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = BANG_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = BANG_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = BANG});
+                    else token_push(ctx, (Token){.type = BANG});
                     break;
                 case '-':
-                    consume();
-                    if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = MINUS_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = MINUS_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = MINUS});
+                    else token_push(ctx, (Token){.type = MINUS});
                     break;
                 case '*':
-                    consume();
-                    if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = STAR_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = STAR_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = STAR});
+                    else token_push(ctx, (Token){.type = STAR});
                     break;
                 case '<':
-                    consume();
-                    if (peek() == '<') {
-                        consume();
-                        if (peek() == '=') {
-                            consume();
-                            token_push(&tokens, (Token){.type = LSHIFT_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '<') {
+                        consume(ctx);
+                        if (peek(ctx) == '=') {
+                            consume(ctx);
+                            token_push(ctx, (Token){.type = LSHIFT_EQ});
                         }
-                        else token_push(&tokens, (Token){.type = LSHIFT});
+                        else token_push(ctx, (Token){.type = LSHIFT});
                     }
-                    else if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = LESS_EQ});
+                    else if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = LESS_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = LESS});
+                    else token_push(ctx, (Token){.type = LESS});
                     break;
                 case '>':
-                    consume();
-                    if (peek() == '>') {
-                        consume();
-                        if (peek() == '=') {
-                            consume();
-                            token_push(&tokens, (Token){.type = RSHIFT_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '>') {
+                        consume(ctx);
+                        if (peek(ctx) == '=') {
+                            consume(ctx);
+                            token_push(ctx, (Token){.type = RSHIFT_EQ});
                         }
-                        else token_push(&tokens, (Token){.type = RSHIFT});
+                        else token_push(ctx, (Token){.type = RSHIFT});
                     }
-                    else if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = GREATER_EQ});
+                    else if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = GREATER_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = GREATER});
+                    else token_push(ctx, (Token){.type = GREATER});
                     break;
                 case '=':
-                    consume();
-                    if (peek() == '=') {
-                        consume();
-                        token_push(&tokens, (Token){.type = EQ_EQ});
+                    consume(ctx);
+                    if (peek(ctx) == '=') {
+                        consume(ctx);
+                        token_push(ctx, (Token){.type = EQ_EQ});
                     }
-                    else token_push(&tokens, (Token){.type = EQ});
+                    else token_push(ctx, (Token){.type = EQ});
                     break;
                 case ',':
-                    consume(); token_push(&tokens, (Token){.type = COMMA}); break;
+                    consume(ctx); token_push(ctx, (Token){.type = COMMA}); break;
                 case '.':
-                    consume(); token_push(&tokens, (Token){.type = DOT}); break;
+                    consume(ctx); token_push(ctx, (Token){.type = DOT}); break;
                 case '?':
-                    consume(); token_push(&tokens, (Token){.type = QUESTION}); break;
+                    consume(ctx); token_push(ctx, (Token){.type = QUESTION}); break;
                 case ' ':
                 case '\t':
-                case '\n': consume(); break;
+                case '\n': consume(ctx); break;
                 default:
-                    fprintf(stderr, "Lexer error at %zu, %zu: unknown character %c\n", line, col + 1, peek());
+                    fprintf(stderr, "Lexer error at %zu, %zu: unknown character %c\n", line, col + 1, peek(ctx));
                     exit(1);
             }
         }
     }
 
-    token_push(&tokens, (Token){.type = _EOF});
+    token_push(ctx, (Token){.type = _EOF});
     return ctx;
 }
