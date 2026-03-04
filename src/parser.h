@@ -93,6 +93,7 @@ struct FnDecl {
     Span span;
     Symbol *symbol;
     Scope *local_scope;
+    bool is_export : 1;
 };
 
 struct StructDecl {

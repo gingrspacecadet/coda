@@ -235,6 +235,8 @@ LexerContext lexer(char *data) {
                     token_push(ctx, (Token){.type = RBRACK}); consume(ctx); break;
                 case ';':
                     token_push(ctx, (Token){.type = SEMICOLON}); consume(ctx); break;
+                case '&':
+                    token_push(ctx, (Token){.type = AMP}); consume(ctx); break;
                 case '+':
                     consume(ctx);
                     if (peek(ctx) == '=') {
