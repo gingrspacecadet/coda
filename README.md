@@ -130,3 +130,12 @@ fn ret_type (args, ...) * name;
 ```
 
 with the standard pointer semantics occuring.
+
+## Defining custom types
+
+Custom types are defined as such:
+
+```
+alias name = type;
+```
+They may have attributes, namely `@export`.
