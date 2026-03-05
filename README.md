@@ -9,8 +9,6 @@ A fresh attempt at a systems language, without all that clutter!
 ## Safety and UB
 Coda is designed in such a way that undefined behaviour (UB) is intentionally difficult to do. Anything that could potentially cause it **must** be wrapped in an `unsafe` block. Unitialised reads are compile-time errors, integer overflow is defined (wrap), implicit integer <-> pointer casts are forbidden, and pointer arithmetic is `unsafe`.
 
-There are also some optional assistances to keep code clean and safe, for example `@null` which inserts runtime checks for null dereferences.
-
 ## Null shenanigans
 `?` can be used when declaring a pointer type to specify whether the pointer can or can not be null. Without it, the compiler will throw an error if there is any possibility of a null dereference, otherwise it will ignore
 
@@ -20,9 +18,6 @@ There are also some optional assistances to keep code clean and safe, for exampl
 - `[u]int(8|16|32|64)` - fixed-width integers
 - `bool` - logically boolean, but stored in one byte for ABI compatibility (unless a struct is `@packed` or for explicit bitfields)
 - `string` - A builtin structure containing the pointer and the length (aka an array with runtime known width)
-- `err` - return type alias for functions that return status
-  - `OK` - always 0
-  - `ERROR` - every occurence in a function body in order is assigned a sequential integer starting at 1
 - `int` - QOL alias for `int32`
 - `uint` - QOL alias for `uint32`
 - `null` - pointer to `0x0`
@@ -77,7 +72,6 @@ fn word pci_read_word(word dev, word bus, word func, word addr);
 ```
 As always, parameters are immutable by default.  
 Any array types passed or specified in the arguments immediately decay into raw pointers.  
-Functions defined with the return type `err` will always return `OK` (0) on success, and `ERROR` (!0) on failure.
 
 ## Arrays
 Sizes are compile-time constants, used for pre-allocating room on the stack for a known amount of data.  
@@ -97,7 +91,6 @@ Any pointer arithmetic is considered "unsafe" and will throw an error unless it 
 Explicit `unsafe` is required for:
 - pointer arithmetic (except for arrays with known bounds)
 - integer <-> pointer casts  
-The compiler can and will assume that all pointers are not `null` unless explicitly marked with the `@null` parameter.
 
 ## `export` semantics
 Only exported symbols are accessible from other modules
@@ -127,3 +120,13 @@ asm {
 ```
 Inside the block, you follow standard nasm
 sytax, except for the fact that you can input variables which get converted. Inputs, outputs and constraints are inferred.
+
+## Function pointers
+
+Function pointers take the following declaration:
+
+```
+fn ret_type (args, ...) * name;
+```
+
+with the standard pointer semantics occuring.
