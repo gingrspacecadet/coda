@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "path": "src",
+        },
+        {
+            "path": "test"
+        },
+        {
+            "path": "coda-lsp"
+        },
+        {
+            "path": "."
+        }
+    ]
+}

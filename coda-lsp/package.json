@@ -1,0 +1,25 @@
+{
+  "name": "coda-lsp",
+  "displayName": "CODA LSP",
+  "description": "LSP for the CODA language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "coda",
+      "aliases": ["CODA", "coda"],
+      "extensions": [".coda"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "coda",
+      "scopeName": "source.coda",
+      "path": "./syntaxes/coda.tmLanguage.json"
+    }]
+  }
+}
