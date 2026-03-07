@@ -14,7 +14,6 @@ Scope *scope_new(Scope *parent) {
     return s;
 }
 
-
 Symbol *scope_lookup_local(Scope *sc, char *name) {
     for (size i = 0; i < sc->sym_count; i++) {
         if (strcmp(sc->symbols[i]->name, name) == 0) return sc->symbols[i];
