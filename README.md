@@ -55,9 +55,9 @@ int foo = 9;
 
 ### Mutability
 ```
-char *mut input;      // mutable pointer to immutable data
+char mut* input;      // mutable pointer to immutable data
 mut char *input;      // immutable pointer to mutable data
-mut char *mut input;  // mutable pointer to mutable data
+mut char mut* input;  // mutable pointer to mutable data
 ```
 This also makes deeper pointer chains more easily readable:
 ```
@@ -71,15 +71,19 @@ Functions must always start with `fn`, followed by the return type, then the nam
 fn word pci_read_word(word dev, word bus, word func, word addr);
 ```
 As always, parameters are immutable by default.  
-Any array types passed or specified in the arguments immediately decay into raw pointers.  
 
-## Arrays
-Sizes are compile-time constants, used for pre-allocating room on the stack for a known amount of data.  
+## Arrays and Slices
+Arrays are not supported, as they are just syntax sugar for pointers.
+
+Slices are used in lieu of arrays, and they are built-in structures representing `(ptr, len)`. 
+Slice syntax: `T[n]`
+
+Sizes (`n`) are compile-time constants, used for pre-allocating room on the stack for a known amount of data.  
 We do not support dynamic arrays (for now!)
 
 Notes:
 * Sizes are compile time constants
-* Arrays decay to pointers only when passed to parameters that are declared as pointers
+* Slices do not decay to pointers implicitly.
 
 ## Scalar-based type casting
 Casting a type to another type with a greater width is allowed implicitly, whilst the inverse is not (it must be explicitly casted).
@@ -139,3 +143,38 @@ Custom types are defined as such:
 alias name = type;
 ```
 They may have attributes, namely `@export`.
+
+## Grammar
+```
+identifier ::= [A-Za-z_]+
+module-decl ::= "module" identifier ";"
+include-decl ::= "include" identifier [ "::" identifier ]+ ";"
+attr ::= "@" identifier
+type ::= base-type | pointer-type | array-type | "type" "enum" identifier "{" enum-list "}"
+pointer-type ::= type "*" nullable?
+nullable ::= "?"
+fn-decl ::= "fn" type identifier "(" param-list? ")" ( "{" stmt* "}" | ";" )
+```
+
+## Unsafe
+
+`unsafe {...}` permits operations that the compiler cannot statically guarantee safe:
+- integer<->pointer casts
+- pointer arithmetic
+- raw reads of possible uninitialised memory
+- inline assembly
+
+## Nullability
+`T*?` denotes a nullable pointer. `T*` denotes a non-null pointer; the compiler must prove non-nullness at compile time or emit an error.  
+Implicit dereference of `T*?` is a compile error, explicit check or pattern required:
+```
+if p != null {
+  let x = *p;
+}
+```
+
+## Casting
+
+Widening integer conversions are implicit. Narrowing conversions require an explicit cast.  
+Integer overflow uses two's complement wrapping semantics, the compiler must not assume overflow is impossible  
+integer <-> pointer casts are only allowed inside `unsafe`
