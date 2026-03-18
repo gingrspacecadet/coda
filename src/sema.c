@@ -90,6 +90,26 @@ void module_insert_decls(Module *m) {
     }
 }
 
-void resolve_names(Module *m) {
-    
+Module *load_module_file(char *path) {
+    FILE *f = fopen(path, "r");
+    fseek(f, 0, SEEK_END);
+    size size = ftell(f);
+    rewind(f);
+    char *buf = malloc(size + 1);
+    fread(buf, 1, size, f);
+    buf[size] = '\0';
+
+    LexerContext lctx = lexer(buf);
+    Arena *a = arena_create();
+
+    Module *m = parser(&lctx.tokens, a);
+    arena_destroy(a);
+
+    return m;
+}
+
+void module_resolve_includes(Module *m) {
+    for (size_t i = 0; i < m->include_count; i++) {
+        
+    }
 }
