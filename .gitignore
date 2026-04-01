@@ -2,4 +2,5 @@
 coda
 
 *.o
+*.d
 out/

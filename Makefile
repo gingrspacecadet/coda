@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g -Werror
+CXXFLAGS = -g -Werror -MMD -MD
 
 SRCS = $(shell find src/ -type f -name "*.cpp" 2>/dev/null)
 OBJS = $(patsubst %.cpp,%.o,$(SRCS))
@@ -19,3 +19,5 @@ $(TARGET): $(OBJS)
 clean:
 	@find -type f -name *.o -delete
 	@rm -f $(TARGET)
+
+-include $(patsubst %.o,%.d,$(OBJS))
