@@ -1,0 +1,5 @@
+# final binary
+coda
+
+*.o
+out/
