@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g -Werror -MMD -MD
+CXXFLAGS = -g -Werror -MMD -MD -std=c++23
 
 SRCS = $(shell find src/ -type f -name "*.cpp" 2>/dev/null)
 OBJS = $(patsubst %.cpp,%.o,$(SRCS))

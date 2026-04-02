@@ -2,6 +2,10 @@ module idea;
 
 include std::io;
 
+struct Test {
+    int test;
+}
+
 fn int main(string[] args) {
     return 0;
 }

@@ -557,6 +557,12 @@ StructDecl *Parser::ParseStructDecl() {
     CollectAttributes(strct->attributes);
     consume();  // struct
 
+    auto name = consume();
+    if (name.type != TokenType::IDENT) {
+        error("Expected struct name");
+    }
+    strct->name = name.value.value();
+
     expect(TokenType::LBRACE, "Expected '{' for struct");
 
     while (peek() && peek()->type != TokenType::RBRACE) {
@@ -565,6 +571,8 @@ StructDecl *Parser::ParseStructDecl() {
         if (!name || name->type != TokenType::IDENT) {
             error("Expected member name");
         }
+        consume();
+        expect(TokenType::SEMICOLON, "Expected semicolon after member");
 
         auto decl = make<Decl>();
         decl->data = make<VarDecl>(
@@ -714,11 +722,15 @@ void TypeRef::Print(int indent) {
 
 void VarDecl::Print(int indent) {
     PrintIndent(indent + 2);
-    std::cout << "Var " << name;
+    std::cout << "Var " << name << '\n';
 }
 
 void StructDecl::Print(int indent) {
-
+    PrintIndent(indent + 2);
+    std::cout << "Struct: " << name << '\n';
+    for (auto& m : members) {
+        m->Print(indent + 2);
+    }
 }
 
 void Param::Print(int indent) {

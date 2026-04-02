@@ -25,6 +25,7 @@ static Keyword keywords[] = {
     {"struct", TokenType::STRUCT},
     {"union", TokenType::UNION},
     {"enum", TokenType::ENUM},
+    {"type", TokenType::TYPE},
     {"mut", TokenType::MUT},
     {"if", TokenType::IF},
     {"else", TokenType::ELSE},
