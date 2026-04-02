@@ -552,7 +552,37 @@ Stmt *Parser::ParseBlockStmt() {
     return s;
 }
 
-FnDecl *Parser::ParseFnDecl(std::vector<Attribute>& attrs) {
+StructDecl *Parser::ParseStructDecl() {
+    auto strct = make<StructDecl>();
+    CollectAttributes(strct->attributes);
+    consume();  // struct
+
+    expect(TokenType::LBRACE, "Expected '{' for struct");
+
+    consume();
+
+    while (peek() && peek()->type != TokenType::RBRACE) {
+        auto type = ParseType();
+        auto name = peek();
+        if (!name || name->type != TokenType::IDENT) {
+            error("Expected member name");
+        }
+
+        auto decl = make<Decl>();
+        decl->data = make<VarDecl>(
+            type,
+            name.value().value.value()
+        );
+
+        strct->members.push_back(decl);
+    }
+
+    expect(TokenType::RBRACE, "Expected closing '}' for struct");
+
+    return strct;
+}
+
+FnDecl *Parser::ParseFnDecl() {
     auto fn = make<FnDecl>();
     CollectAttributes(fn->attributes);
     consume();  // fn
@@ -605,7 +635,7 @@ Decl *Parser::ParseDecl() {
     if (!t) error("Unexpected end of input in declaration");
 
     if (t->type == TokenType::FN) {
-        d->data = ParseFnDecl(attrs); // Example of assigning to variant
+        d->data = ParseFnDecl();
     } else if (t->type == TokenType::STRUCT) {
         error("Not implemented yet");
         // d->data = ParseStructDecl(attrs);

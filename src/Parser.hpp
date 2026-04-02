@@ -240,7 +240,8 @@ public:
     Module *ParseModule();
     Include *ParseInclude();
     Decl *ParseDecl();
-    FnDecl *ParseFnDecl(std::vector<Attribute>& out);
+    FnDecl *ParseFnDecl();
+    StructDecl *ParseStructDecl();
     TypeRef *ParseType();
     Stmt *ParseBlockStmt();
     Stmt *ParseStmt();
