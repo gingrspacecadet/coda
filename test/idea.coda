@@ -1,5 +1,7 @@
 module idea;
 
-fn int main(string[] args) {
-    return 0;
-}
+include std::io;
+
+//fn int main(string[] args) {
+//    return 0;
+//}

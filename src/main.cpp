@@ -1,12 +1,13 @@
 #include <iostream>
 #include "Lexer.hpp"
+#include "Parser.hpp"
 
 int main(void) {
-    Coda::Lexer lexer("test/idea.coda");
+    Lexer lexer("test/idea.coda");
 
-    std::vector<Coda::Token> tokens = lexer.Lex();
-    for (const auto& t : tokens) {
-        std::cout << t << ' ';
-    }
-    std::cout << std::endl;
+    std::vector<Token> tokens = lexer.Lex();
+    
+    MemoryArena arena;
+    Parser parser(tokens, arena);
+    Module *module = parser.ParseModule();
 }
