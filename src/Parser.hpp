@@ -85,7 +85,7 @@ enum class BinaryOp {
     MUL, DIV, MOD, ADD, SUB, SHL, SHR, 
     LT, LE, GT, GE, EQ, NE, 
     AND, XOR, OR, LOG_AND, LOG_OR, 
-    ASSIGN, ADD_ASSIGN 
+    ASSIGN, ADD_ASSIGN
 };
 
 enum class SymbolFlags : uint32_t {
@@ -101,28 +101,31 @@ enum class SymbolFlags : uint32_t {
 struct Attribute {
     std::string name;
     std::vector<std::string> args;
+
+    void Print(int indent);
 };
 
 struct TypeRef {
-    struct Primitive { std::string name; };
     struct Named     { std::string name; };
     struct Pointer   { TypeRef *pointee; };
     struct Array     { TypeRef *elem; };
 
-    std::variant<Primitive, Named, Pointer, Array> data;
+    std::variant<Named, Pointer, Array> data;
     bool is_mutable = false;
     bool is_optional = false;
     Symbol *type_symbol = nullptr;
 
-    TypeRef(std::variant<Primitive, Named, Pointer, Array> data, bool mut = false)
+    TypeRef(std::variant<Named, Pointer, Array> data, bool mut = false)
         : data(std::move(data)), is_mutable(mut) {}
+
+    void Print(int indent);
 };
 
 struct Literal {
-    enum class Type { INT, FLOAT, STRING, BOOL };
+    enum class Type { INT, FLOAT, STRING, BOOL, CHAR };
     Type type;
     std::string raw;
-    std::variant<int64_t, double, std::string, bool> value;
+    std::variant<int64_t, double, std::string, bool, char> value;
 };
 
 struct Expr {
@@ -142,6 +145,8 @@ struct Expr {
 
     Expr(std::variant<Literal, Ident, Path, Unary, Binary, Call, Index, Member, Cast> data)
         : data(data) {}
+
+    void Print(int indent);
 };
 
 struct Stmt {
@@ -157,6 +162,8 @@ struct Stmt {
 
     Stmt(std::variant<VarDecl*, Expr*, Block, Return, If, For, While, Unsafe> data)
         : data(data) {}
+
+    void Print(int indent);
 };
 
 struct Param {
@@ -164,6 +171,8 @@ struct Param {
     std::string name;
     std::vector<Attribute> attributes;
     Symbol *symbol = nullptr;
+
+    void Print(int indent);
 };
 
 struct VarDecl {
@@ -177,6 +186,8 @@ struct VarDecl {
 
     VarDecl(TypeRef *type, std::string& name)
         : type(type), name(name) {}
+
+    void Print(int indent);
 };
 
 struct FnDecl {
@@ -188,11 +199,15 @@ struct FnDecl {
     Symbol *symbol = nullptr;
     Scope *local_scope = nullptr;
     bool is_export = false;
+
+    void Print(int indent);
 };
 
 struct Decl {
     std::variant<FnDecl*, VarDecl*, StructDecl*, Include*, Attribute*> data;
     Symbol *symbol = nullptr;
+
+    void Print(int indent);
 };
 
 struct StructDecl {
@@ -204,12 +219,16 @@ struct StructDecl {
     size_t align = 0;
     std::vector<size_t> field_offsets;
     bool is_export = false;
+
+    void Print(int indent);
 };
 
 struct Include {
     std::vector<std::string> path;
-    std::string alias;
+    std::optional<std::string> alias;
     Module *resolved = nullptr;
+
+    void Print(int indent);
 };
 
 struct Symbol {
@@ -230,6 +249,8 @@ struct Module {
     std::vector<Include*> includes;
     std::vector<Decl*> decls;
     Scope *scope = nullptr;
+
+    void Print(int indent = 0);
 };
 
 class Parser {

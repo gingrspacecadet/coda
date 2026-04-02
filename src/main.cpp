@@ -10,4 +10,6 @@ int main(void) {
     MemoryArena arena;
     Parser parser(tokens, arena);
     Module *module = parser.ParseModule();
+
+    module->Print();
 }
