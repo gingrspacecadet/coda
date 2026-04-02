@@ -250,6 +250,11 @@ public:
     Expr *ExprNewLit(Token& t);
     Expr *ExprNewIdent(Token& t);
     Expr *ExprHandlePostfix(Expr *left);
+    Stmt *ParseReturnStmt();
+    Stmt *ParseForStmt();
+    Stmt *ParseIfStmt();
+    Stmt *ParseWhileStmt();
+    Stmt *ParseExprStmt();
     void CollectAttributes(std::vector<Attribute>& out);
 
 private:

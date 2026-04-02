@@ -2,6 +2,6 @@ module idea;
 
 include std::io;
 
-//fn int main(string[] args) {
-//    return 0;
-//}
+fn int main(string[] args) {
+    return 0;
+}

@@ -333,7 +333,7 @@ Expr *Parser::ExprHandlePostfix(Expr *left) {
     return left;
 }
 
-Expr *Parser::ParseExpr(int min_bp = 0) {
+Expr *Parser::ParseExpr(int min_bp) {
     Expr *left = ParseExprPrefix();
     left = ExprHandlePostfix(left);
 
@@ -362,6 +362,123 @@ Expr *Parser::ParseExpr(int min_bp = 0) {
 
         left = ExprHandlePostfix(left);
     }
+
+    return left;
+}
+
+Stmt *Parser::ParseReturnStmt() {
+    consume();
+    Expr *value = nullptr;
+    if (!peek() || peek()->type != TokenType::SEMICOLON) {
+        value = ParseExpr();
+    }
+
+    expect(TokenType::SEMICOLON, "Expected semicolon after return");
+
+    auto s = make<Stmt>(
+        Stmt::Return{
+            .value = value
+        }
+    );
+
+    return s;
+}
+
+Stmt *Parser::ParseForStmt() {
+    consume();
+
+    expect(TokenType::LPAREN, "Expected '(' after 'for'");
+
+    Stmt *init = nullptr;
+    if (auto t = peek(); !t || t->type != TokenType::SEMICOLON) {
+        if (t->type == TokenType::IDENT || t->type == TokenType::MUT) {
+            init = ParseVarStmt();
+        } else {
+            init = ParseExprStmt();
+        }
+    } else {
+        // empty!
+    }
+    expect(TokenType::SEMICOLON, "Expected ';' after initialiser");
+
+    Expr *cond = nullptr;
+    if (auto t = peek(); !t || t->type != TokenType::SEMICOLON) {
+        cond = ParseExpr();
+    }
+    expect(TokenType::SEMICOLON, "Expected ';' after for condition");
+
+    Expr *post = nullptr;
+    if (auto t = peek(); !t || t->type != TokenType::RPAREN) {
+        post = ParseExpr();
+    }
+    expect(TokenType::RPAREN, "Expected ')' after for incrementer");
+
+    if (auto t = peek(); !t || t->type != TokenType::LBRACE) {
+        error("Expected '{' for for statement");
+    }
+    Stmt *body = ParseBlockStmt();
+
+    auto s = make<Stmt>(
+        Stmt::For{
+            .init = init,
+            .cond = cond,
+            .post = post,
+            .body = body
+        }
+    );
+
+    return s;
+}
+
+Stmt *Parser::ParseIfStmt() {
+    consume();
+    if (auto t = peek(); !t || t->type != TokenType::LPAREN) {
+        error("Expected '(' after if");
+    }
+    auto cond = ParseExpr();
+
+    if (auto t = peek(); !t || t->type != TokenType::LBRACE) {
+        error("Expected '{' for if block");
+    }
+    auto then = ParseBlockStmt();
+    Stmt *_else = nullptr;
+    if (auto t = peek(); t && t->type == TokenType::ELSE) {
+        if (auto t = peek(); !t || t->type != TokenType::LBRACE) {
+            error("Expected '{' for else statement");
+        }
+        _else = ParseBlockStmt();
+    }
+
+    auto s = make<Stmt>(
+        Stmt::If{
+            .cond = cond,
+            .then_branch = then,
+            .else_branch = _else,
+        }
+    );
+
+    return s;
+}
+
+Stmt *Parser::ParseWhileStmt() {
+    if (auto t = peek(); !t || t->type != TokenType::LPAREN) {
+        error("Expected '(' after while");
+    }
+    auto cond = ParseExpr();
+
+    if (auto t = peek(); !t || t->type != TokenType::LBRACE) {
+        error("Expected '{' for while statement");
+    }
+    auto branch = ParseBlockStmt();
+
+    auto s = make<Stmt>(
+        Stmt::While{
+            .cond = cond,
+            .body = branch,
+        }
+    );
+
+    return s;
 }
 
 Stmt *Parser::ParseVarStmt() {
@@ -386,6 +503,14 @@ Stmt *Parser::ParseVarStmt() {
         v
     );
 
+    return s;
+}
+
+Stmt *Parser::ParseExprStmt() {
+    auto e = ParseExpr();
+    expect(TokenType::SEMICOLON, "Expected semicolon after expression");
+
+    auto s = make<Stmt>(e);
     return s;
 }
 
@@ -480,8 +605,9 @@ Decl *Parser::ParseDecl() {
     if (!t) error("Unexpected end of input in declaration");
 
     if (t->type == TokenType::FN) {
-        // d->data = ParseFnDecl(attrs); // Example of assigning to variant
+        d->data = ParseFnDecl(attrs); // Example of assigning to variant
     } else if (t->type == TokenType::STRUCT) {
+        error("Not implemented yet");
         // d->data = ParseStructDecl(attrs);
     } else {
         error("Expected declaration (fn, struct, var)");
