@@ -89,13 +89,18 @@ TypeRef *Parser::ParseType() {
 
         if (auto t = peek(); t && t->type == TokenType::LBRACK) {
             Token lb = consume();
+            size_t length = 0;
+            if (auto t = peek(); t && t->type == TokenType::INT_LIT) {
+                consume();
+                length = std::strtoul(t->value.value().c_str(), NULL, 10);  // TODO: more bases
+            }
             if (auto t = peek(); t && t->type != TokenType::RBRACK) {
                 error("Expected ']' for array operator");
             }
             Token rb = consume();
 
             auto array = make<TypeRef>(
-                TypeRef::Array{ .elem = base },
+                TypeRef::Array{ .elem = base, .length = length },
                 is_mut
             );
 
@@ -578,11 +583,7 @@ StructDecl *Parser::ParseStructDecl() {
         consume();
         expect(TokenType::SEMICOLON, "Expected semicolon after member");
 
-        auto decl = make<Decl>();
-        decl->data = make<VarDecl>(
-            nullptr,
-            name.value().value.value()
-        );
+        auto decl = make<VarDecl>(type, name.value().value.value());
 
         strct->members.push_back(decl);
     }
@@ -590,6 +591,38 @@ StructDecl *Parser::ParseStructDecl() {
     expect(TokenType::RBRACE, "Expected closing '}' for struct");
 
     return strct;
+}
+
+UnionDecl *Parser::ParseUnionDecl() {
+    auto onion = make<UnionDecl>();
+    CollectAttributes(onion->attributes);
+    consume();  // union
+
+    auto name = consume();
+    if (name.type != TokenType::IDENT) {
+        error("Expected union name");
+    }
+    onion->name = name.value.value();
+
+    expect(TokenType::LBRACE, "Expected '{' for union");
+
+    while (peek() && peek()->type != TokenType::RBRACE) {
+        auto type = ParseType();
+        auto name = peek();
+        if (!name || name->type != TokenType::IDENT) {
+            error("Expected member name");
+        }
+        consume();
+        expect(TokenType::SEMICOLON, "Expected semicolon after member");
+
+        auto decl = make<VarDecl>(type, name.value().value.value());
+
+        onion->members.push_back(decl);
+    }
+
+    expect(TokenType::RBRACE, "Expected closing '}' for union");
+
+    return onion;
 }
 
 FnDecl *Parser::ParseFnDecl() {
@@ -648,6 +681,8 @@ Decl *Parser::ParseDecl() {
         d->data = ParseFnDecl();
     } else if (t->type == TokenType::STRUCT) {
         d->data = ParseStructDecl();
+    } else if (t->type == TokenType::UNION) {
+        d->data = ParseUnionDecl();
     } else {
         error("Expected declaration (fn, struct, var)");
     }

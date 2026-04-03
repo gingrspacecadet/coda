@@ -32,6 +32,7 @@ void TypeRef::Print(int indent) {
         }
         else if constexpr (std::is_same_v<T, Array>) {
             std::cout << "array";
+            std::cout << " (len " << value.length << ")";
             array = true;
         } else {
             std::cout << "<unknown>";
@@ -46,12 +47,25 @@ void TypeRef::Print(int indent) {
 
 void VarDecl::Print(int indent) {
     PrintIndent(indent + 2);
-    std::cout << "Var " << name << '\n';
+    std::cout << "Var " << name;
+    if (type) {
+        type->Print(0);
+    }
+
+    std::cout << '\n';
 }
 
 void StructDecl::Print(int indent) {
     PrintIndent(indent + 2);
     std::cout << "Struct: " << name << '\n';
+    for (auto& m : members) {
+        m->Print(indent + 2);
+    }
+}
+
+void UnionDecl::Print(int indent) {
+    PrintIndent(indent + 2);
+    std::cout << "Union: " << name << '\n';
     for (auto& m : members) {
         m->Print(indent + 2);
     }

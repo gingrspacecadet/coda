@@ -8,6 +8,7 @@ struct Decl;
 struct VarDecl;
 struct FnDecl;
 struct StructDecl;
+struct UnionDecl;
 struct TypeRef;
 struct Symbol;
 struct Scope;
@@ -100,7 +101,7 @@ struct Attribute {
 struct TypeRef {
     struct Named     { std::string name; };
     struct Pointer   { TypeRef *pointee; };
-    struct Array     { TypeRef *elem; };
+    struct Array     { TypeRef *elem; size_t length = 0; };
 
     std::variant<Named, Pointer, Array> data;
     bool is_mutable = false;
@@ -196,7 +197,7 @@ struct FnDecl {
 };
 
 struct Decl {
-    std::variant<FnDecl*, VarDecl*, StructDecl*, Include*, Attribute*> data;
+    std::variant<FnDecl*, VarDecl*, StructDecl*, UnionDecl*, Include*, Attribute*> data;
     Symbol *symbol = nullptr;
 
     void Print(int indent);
@@ -204,7 +205,20 @@ struct Decl {
 
 struct StructDecl {
     std::string name;
-    std::vector<Decl*> members;
+    std::vector<VarDecl*> members;
+    std::vector<Attribute> attributes;
+    Symbol *symbol = nullptr;
+    size_t size = 0;
+    size_t align = 0;
+    std::vector<size_t> field_offsets;
+    bool is_export = false;
+
+    void Print(int indent);
+};
+
+struct UnionDecl {
+    std::string name;
+    std::vector<VarDecl*> members;
     std::vector<Attribute> attributes;
     Symbol *symbol = nullptr;
     size_t size = 0;
@@ -257,6 +271,7 @@ public:
     Decl *ParseDecl();
     FnDecl *ParseFnDecl();
     StructDecl *ParseStructDecl();
+    UnionDecl *ParseUnionDecl();
     TypeRef *ParseType();
     Stmt *ParseBlockStmt();
     Stmt *ParseStmt();

@@ -6,6 +6,11 @@ struct Test {
     int test;
 }
 
+union Onion {
+    uint32 bigboi;
+    uint8[4] littleboi;
+}
+
 fn int test() {
     return 1;
 }
