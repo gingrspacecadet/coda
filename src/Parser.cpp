@@ -527,7 +527,11 @@ Stmt *Parser::ParseStmt() {
         case TokenType::FOR: return ParseForStmt();
         case TokenType::IF: return ParseIfStmt();
         case TokenType::WHILE: return ParseWhileStmt();
-        case TokenType::IDENT:
+        case TokenType::IDENT: {
+            if (auto t = peek(1); t && t->type == TokenType::DOUBLECOLON) {
+                return ParseExprStmt();
+            } 
+        }
         case TokenType::MUT: return ParseVarStmt();
         default: break;
     }
@@ -823,8 +827,8 @@ void Expr::Print(int indent) {
         else if constexpr (std::is_same_v<T, Path>) {
             std::cout << "Path: ";
             for (size_t i = 0; i < value.components.size(); i++) {
-                std::cout << value.components.at(i);
                 if (i) std::cout << "::";
+                std::cout << value.components.at(i);
             }
             std::cout << '\n';
         }
@@ -840,8 +844,10 @@ void Expr::Print(int indent) {
         else if constexpr (std::is_same_v<T, Call>) {
             std::cout << "Call:\n";
             value.callee->Print(indent + 2);
+            PrintIndent(indent + 4);
+            std::cout << "Args:\n";
             for (auto& a : value.args) {
-                a->Print(indent + 2);
+                a->Print(indent + 4);
             }
         }
         else {
@@ -892,6 +898,14 @@ void Stmt::Print(int indent) {
             for (auto& s : value.stmts) {
                 s->Print(indent + 2);
             }
+        }
+        else if constexpr (std::is_same_v<T, VarDecl*>) {
+            std::cout << "VarDecl:\n";
+            value->Print(indent + 2);
+        }
+        else if constexpr (std::is_same_v<T, Expr*>) {
+            std::cout << "Expr:\n";
+            value->Print(indent + 2);
         }
         else {
             std::cout << "Unknown\n";

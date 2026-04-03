@@ -8,5 +8,5 @@ struct Test {
 
 fn int main(string[] args) {
     io::println("Hello, world!");
-    return 0x0AA;
+    return 0;
 }
