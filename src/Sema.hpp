@@ -1,20 +1,32 @@
 #pragma once
 
-#include "pch.hpp"
 #include "Parser.hpp"
+#include "pch.hpp"
 
 class Analyser {
 public:
-    Analyser(Module *module)
-        : m_Module(module) {}
+    explicit Analyser(MemoryArena& arena);
 
-    Scope *NewScope(Scope *parent);
-    void CreateSymbolTable();
+    void Analyse(Module* mod);
+
 private:
-    Module *m_Module = nullptr;
+    MemoryArena& m_Arena;
+    
+    Scope* m_GlobalScope = nullptr;
+    Scope* m_CurrentScope = nullptr;
+    FnDecl* m_CurrentFunction = nullptr;
+    
+    void EnterScope(Scope* existing_scope = nullptr);
+    void LeaveScope();
+    
+    Symbol* DeclareSymbol(const std::string& name, SymbolFlags flags);
+    Symbol* LookupSymbol(const std::string& name);
 
-    template<typename T, typename... Args>
-    T *make(Args&&... args) {
-        return m_Module->arena.alloc<T>(std::forward<Args>(args)...);
-    }
+    void InjectBuiltinTypes();
+
+    void RegisterGlobals(Module* mod);
+    void ResolveTypes(Module* mod);
+    void ResolveTypeRef(TypeRef *type);
+    void CalculateStructLayout(StructDecl *str);
+    void CheckBodies(Module* mod);
 };

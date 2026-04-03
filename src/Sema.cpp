@@ -1,33 +1,291 @@
 #include "Sema.hpp"
 
-Scope *Analyser::NewScope(Scope *parent) {
-    Scope *s = m_Module->arena.alloc<Scope>();
-    s->parent = parent;
-    return s;
+Analyser::Analyser(MemoryArena& arena) : m_Arena(arena) {
+    m_GlobalScope = m_Arena.alloc<Scope>();
+    m_CurrentScope = m_GlobalScope;
+
+    InjectBuiltinTypes();
 }
 
-void Analyser::CreateSymbolTable() {
-    m_Module->scope = NewScope(nullptr);
-    for (auto& d : m_Module->decls) {
-        auto s = m_Module->arena.alloc<Symbol>();
-        s->defined_in = m_Module->scope;
-        s->decl = d;
-        
-        std::visit([s](auto const& value) {
-            s->name = value->name;
-        }, d->data);
+void Analyser::Analyse(Module* mod) {
+    mod->scope = m_GlobalScope;
 
-        m_Module->scope->symbols.push_back(s);
+    // RegisterGlobals(mod);
+    // ResolveTypes(mod);
+    // CheckBodies(mod);
+}
 
-        if (std::holds_alternative<FnDecl*>(d->data)) {
-            FnDecl *fn = std::get<FnDecl*>(d->data);
-            fn->local_scope = NewScope(m_Module->scope);
-            for (auto& p : fn->params) {
-                auto s = m_Module->arena.alloc<Symbol>();
-                s->name = p.name;
-                s->type = p.type;
-                fn->local_scope->symbols.push_back(s);
+void Analyser::EnterScope(Scope* existing_scope) {
+    if (existing_scope) {
+        existing_scope->parent = m_CurrentScope;
+        m_CurrentScope = existing_scope;
+    } else {
+        Scope* new_scope = m_Arena.alloc<Scope>();
+        new_scope->parent = m_CurrentScope;
+        m_CurrentScope = new_scope;
+    }
+}
+
+void Analyser::LeaveScope() {
+    if (m_CurrentScope && m_CurrentScope->parent) {
+        m_CurrentScope = m_CurrentScope->parent;
+    }
+}
+
+Symbol* Analyser::DeclareSymbol(const std::string& name, SymbolFlags flags) {
+    for (Symbol* sym : m_CurrentScope->symbols) {
+        if (sym->name == name) {
+            std::cerr << "Semantic Error: Symbol '" << name << "' is already defined in this scope.\n";
+            exit(1);
+        }
+    }
+
+    Symbol* sym = m_Arena.alloc<Symbol>();
+    sym->name = name;
+    sym->flags = static_cast<uint32_t>(flags);
+    sym->defined_in = m_CurrentScope;
+    
+    m_CurrentScope->symbols.push_back(sym);
+    return sym;
+}
+
+Symbol* Analyser::LookupSymbol(const std::string& name) {
+    Scope* scope = m_CurrentScope;
+    
+    while (scope != nullptr) {
+        for (Symbol* sym : scope->symbols) {
+            if (sym->name == name) {
+                return sym;
             }
+        }
+        scope = scope->parent;
+    }
+    
+    return nullptr;
+}
+
+void Analyser::InjectBuiltinTypes() {
+    const char* builtins[] = {
+        "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64",
+        "char", "string",
+        "bool",
+        "none"
+    };
+
+    for (const char* type_name : builtins) {
+        Symbol* sym = DeclareSymbol(type_name, SymbolFlags::TYPE);
+        
+        TypeRef* type_ref = m_Arena.alloc<TypeRef>(
+            TypeRef::Named{type_name}, false
+        );
+        type_ref->type_symbol = sym;
+        
+        sym->type = type_ref;
+    }
+}
+
+void Analyser::RegisterGlobals(Module *mod) {
+    m_CurrentScope = m_GlobalScope;
+
+    for (auto d : mod->decls) {
+        if (auto **fn = std::get_if<FnDecl*>(&d->data)) {
+            SymbolFlags flags = SymbolFlags::FN;
+            if ((*fn)->is_export) flags = static_cast<SymbolFlags>(static_cast<uint32_t>(flags) | static_cast<uint32_t>(SymbolFlags::EXPORT));
+
+            Symbol *sym = DeclareSymbol((*fn)->name, flags);
+            sym->decl = d;
+            d->symbol = sym;
+            (*fn)->symbol = sym;
+        }
+        else if (auto **str = std::get_if<StructDecl*>(&d->data)) {
+            Symbol *sym = DeclareSymbol((*str)->name, SymbolFlags::TYPE);
+            sym->decl = d;
+            d->symbol = sym;
+            (*str)->symbol = sym;
+        }
+        else if (auto **unn = std::get_if<UnionDecl*>(&d->data)) {
+            Symbol *sym = DeclareSymbol((*unn)->name, SymbolFlags::TYPE);
+            sym->decl = d;
+            d->symbol = sym;
+            (*unn)->symbol = sym;
+        }
+        else if (auto **var = std::get_if<VarDecl*>(&d->data)) {
+            std::cerr << "Semantic error: Global variables are not allowed" << std::endl;
+            exit(1);
+        }
+    }
+}
+
+void Analyser::ResolveTypeRef(TypeRef *type) {
+    if (!type) return;
+
+    std::visit([&](auto& value) {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, TypeRef::Named>) {
+            Symbol *sym = LookupSymbol(value.name);
+            if (!sym || !(sym->flags & (uint32_t)SymbolFlags::TYPE)) {
+                std::cout << "Error: Unknown type '" << value.name << "'\n";
+                exit(1); 
+            }
+            type->type_symbol = sym;
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Pointer>) {
+            ResolveTypeRef(value.pointee);
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Array>) {
+            ResolveTypeRef(value.elem);
+        }
+    }, type->data);
+}
+
+static size_t GetTypeSize(TypeRef *type) {
+    if (!type) return 0;
+
+    return std::visit([&](auto& value) -> size_t {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, TypeRef::Pointer>) {
+            return 8;   // TODO: different pointer sizes on different architectures
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Array>) {
+            return GetTypeSize(value.elem) * value.length;
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Named>) {
+            Symbol *sym = type->type_symbol;
+            if (!sym) return 0;
+
+            if (sym->name == "int8" || sym->name == "uint8"
+             || sym->name == "bool" || sym->name == "char") {
+                return 1;
+            }
+            if (sym->name == "int16" || sym->name == "uint16") {
+                return 2;
+            }
+            if (sym->name == "int32" || sym->name == "uint32") {
+                return 4;
+            }
+            if (sym->name == "int64" || sym->name == "uint64"
+             || sym->name == "int"   || sym->name == "uint") {
+                return 8;
+            }
+            if (sym->name == "string") {
+                return 16;  // ptr + len
+            }
+
+            if (auto **str = std::get_if<StructDecl*>(&sym->decl->data)) {
+                return (*str)->size;
+            }
+            if (auto **unn = std::get_if<UnionDecl*>(&sym->decl->data)) {
+                return (*unn)->size;
+            }
+
+            return 0;
+        }
+
+        return 0;
+    }, type->data);
+}
+
+static size_t GetTypeAlign(TypeRef *type) {
+    if (!type) return 1;
+
+    return std::visit([&](auto& value) -> size_t {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, TypeRef::Pointer>) {
+            return 8;
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Array>) {
+            return GetTypeAlign(value.elem);
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Named>) {
+            Symbol *sym = type->type_symbol;
+            if (!sym) return 1;
+
+            if (sym->name == "int8" || sym->name == "uint8"
+             || sym->name == "bool" || sym->name == "char") {
+                return 1;
+            }
+            if (sym->name == "int16" || sym->name == "uint16") {
+                return 2;
+            }
+            if (sym->name == "int32" || sym->name == "uint32") {
+                return 4;
+            }
+            if (sym->name == "int64" || sym->name == "uint64"
+             || sym->name == "int"   || sym->name == "uint") {
+                return 8;
+            }
+            if (sym->name == "string") {
+                return 8;  // ptr + len
+            }
+            if (auto **str = std::get_if<StructDecl*>(&sym->decl->data)) {
+                return (*str)->align;
+            }
+            if (auto **unn = std::get_if<UnionDecl*>(&sym->decl->data)) {
+                return (*unn)->align;
+            }
+            return 1;
+        }
+        return 1;
+    }, type->data);
+}
+
+void Analyser::CalculateStructLayout(StructDecl *str) {
+    size_t cur_offset = 0;
+    size_t max_align = 1;
+
+    for (auto m : str->members) {
+        size_t size = GetTypeSize(m->type);
+        size_t align = GetTypeAlign(m->type);
+
+        if (align > max_align) max_align = align;
+
+        if (cur_offset % align != 0) {
+            cur_offset += (align - (cur_offset % align));
+        }
+
+        str->field_offsets.push_back(cur_offset);
+
+        cur_offset += size;
+    }
+
+    if (cur_offset % max_align != 0) {
+        cur_offset += (max_align - (cur_offset % max_align));
+    }
+
+    str->size = cur_offset;
+    str->align = max_align;
+}
+
+void Analyser::ResolveTypes(Module *mod) {
+    m_CurrentScope = m_GlobalScope;
+
+    for (auto d : mod->decls) {
+        if (auto **fn = std::get_if<FnDecl*>(&d->data)) {
+            ResolveTypeRef((*fn)->ret_type);
+
+            for (auto& p : (*fn)->params) {
+                ResolveTypeRef(p.type);
+            }
+        }
+        else if (auto **str = std::get_if<StructDecl*>(&d->data)) {
+            for (auto m : (*str)->members) {
+                ResolveTypeRef(m->type);
+            }
+
+            CalculateStructLayout(*str);
+        }
+        else if (auto **unn = std::get_if<UnionDecl*>(&d->data)) {
+            for (auto m : (*unn)->members) {
+                ResolveTypeRef(m->type);
+            }
+        }
+        else if (auto **var = std::get_if<VarDecl*>(&d->data)) {
+            std::cerr << "Semantic error: Global variables are not allowed" << std::endl;
+            exit(1);
         }
     }
 }
