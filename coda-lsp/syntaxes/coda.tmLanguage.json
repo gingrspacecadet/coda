@@ -16,6 +16,9 @@
 		},
 		{
 			"include": "#comments"
+		},
+		{
+			"include": "#attributes"
 		}
 	],
 	"repository": {
@@ -23,7 +26,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.coda",
-					"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|u?int(8|16|32|64)?)\\b"
+					"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|u?int(8|16|32|64)?|char|string|none|type|null|mut)\\b"
 				}
 			]
 		},
@@ -87,6 +90,10 @@
 				{
 					"name": "punctuation.terminator.semicolon.coda",
 					"match": ";"
+				},
+				{
+					"name": "storage.modifier.pointer.coda",
+					"match": "\\*"
 				}
 			]
 		},
@@ -95,6 +102,14 @@
 				{
 					"name": "comment.line.coda",
 					"match": "//.*"
+				}
+			]
+		},
+		"attributes": {
+			"patterns": [
+				{
+					"name": "keyword.operator.coda",
+					"match": "@[a-zA-Z]+(\\([\\(]*\\))?"
 				}
 			]
 		}

@@ -1,20 +1,66 @@
+// module declaration!
 module idea;
 
+// some common includes
+// including a path imports all exported symbols
+// into the current namespace
 include std::io;
+include std::system::handle;
 
-struct Test {
-    int test;
+// the ':' allows you to specify the namespace to add them under
+include custom::thingy : yay;
+
+@packed
+struct Vec3 {
+    int x;
+    int y;
+    int z;
 }
 
 union Onion {
-    uint32 bigboi;
-    uint8[4] littleboi;
+    uint32 long;
+    uint8[4] short;
 }
 
-fn int test() {
-    return 1;
+// `@extern` disables name mangling
+@extern fn void foo();
+
+fn int bar(string mut* baz) {
+    int x = 0;
+    
+    for (int i = 0; i < baz.len; i++) {
+        x += baz[i]; 
+    }
+
+    return x;
 }
 
+// this function returns an optional function pointer
+// of which said function pointer returns an int
+// and takes an optional, mutable pointer to a char
+fn fn int (char mut*?) *? test() {
+    return null;    // built in type
+}
+
+// this aliases "loooooong" to the 
+// super long function pointer type
+// you can now use "loooooong" instead of this mess
+// and it'll work the same
+type loooooong = fn int (fn char (uint32 *?) *) *;
+
+@export // export this function so it can be ran
 fn int main(string[] args) {
-    return test();
+    // the array type holds size and data
+    if (args.len != 2) {
+        // string literals like "foo" are stored as `string` types,
+        // not char*, but they can explicitly decay
+        io::println("Missing requires arguments!");
+    }
+
+    // Coda supports c-like for loops
+    for (int i = 0; i < args.len; i++) {
+        io::println(args[i]);
+    }
+
+
 }
