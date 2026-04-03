@@ -1,3 +1,4 @@
+#include "pch.hpp"
 #include "Parser.hpp"
 
 Include *Parser::ParseInclude() {

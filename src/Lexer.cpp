@@ -1,3 +1,4 @@
+#include "pch.hpp"
 #include "Lexer.hpp"
 
 Lexer::Lexer(const std::string& path): m_Path(path) {
