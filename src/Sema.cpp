@@ -233,7 +233,7 @@ static size_t GetTypeAlign(TypeRef *type) {
     }, type->data);
 }
 
-void Analyser::CalculateStructLayout(StructDecl *str) {
+static void CalculateStructLayout(StructDecl *str) {
     size_t cur_offset = 0;
     size_t max_align = 1;
 
@@ -260,6 +260,22 @@ void Analyser::CalculateStructLayout(StructDecl *str) {
     str->align = max_align;
 }
 
+static void CalculateUnionLayout(UnionDecl *unn) {
+    size_t max_offset = 0;
+    size_t max_align = 1;
+
+    for (auto m : unn->members) {
+        size_t size = GetTypeSize(m->type);
+        size_t align = GetTypeAlign(m->type);
+
+        if (align > max_align) max_align = align;
+        if (size > max_offset) max_offset = size;
+    }
+
+    unn->size = max_offset;
+    unn->align = max_align;
+}
+
 void Analyser::ResolveTypes(Module *mod) {
     m_CurrentScope = m_GlobalScope;
 
@@ -282,6 +298,8 @@ void Analyser::ResolveTypes(Module *mod) {
             for (auto m : (*unn)->members) {
                 ResolveTypeRef(m->type);
             }
+
+            CalculateUnionLayout(*unn);
         }
         else if (auto **var = std::get_if<VarDecl*>(&d->data)) {
             std::cerr << "Semantic error: Global variables are not allowed" << std::endl;

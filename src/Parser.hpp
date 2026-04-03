@@ -223,7 +223,6 @@ struct UnionDecl {
     Symbol *symbol = nullptr;
     size_t size = 0;
     size_t align = 0;
-    std::vector<size_t> field_offsets;
     bool is_export = false;
 
     void Print(int indent);

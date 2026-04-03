@@ -27,6 +27,5 @@ private:
     void RegisterGlobals(Module* mod);
     void ResolveTypes(Module* mod);
     void ResolveTypeRef(TypeRef *type);
-    void CalculateStructLayout(StructDecl *str);
     void CheckBodies(Module* mod);
 };
