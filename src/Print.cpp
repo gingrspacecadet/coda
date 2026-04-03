@@ -263,14 +263,14 @@ void FnDecl::Print(int indent) {
 
 void Decl::Print(int indent) {
     PrintIndent(indent + 2);
-    std::cout << "- Decl: type = " << data.index() << '\n';
+    std::cout << "Decl: type = " << data.index() << '\n';
     std::visit([indent](auto& value) {
         value->Print(indent + 2);
     }, data);
 }
 
 void Include::Print(int indent) {
-    PrintIndent(indent + 2);
+    PrintIndent(indent);
     std::cout << "Include:";
     if (alias) std::cout << " (alias " << alias.value() << ")";
     std::cout << '\n';
@@ -293,7 +293,7 @@ void Module::Print(int indent) {
     std::cout << "Name: " << name << '\n';
     std::cout << "Includes: (total " << includes.size() << "):\n";
     for (const auto& i : includes) {
-        i->Print(indent);
+        i->Print(indent + 2);
     }
     for (const auto& d : decls) {
         d->Print(indent);

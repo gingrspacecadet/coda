@@ -13,6 +13,9 @@
 		},
 		{
 			"include": "#numbers"
+		},
+		{
+			"include": "#comments"
 		}
 	],
 	"repository": {
@@ -84,6 +87,14 @@
 				{
 					"name": "punctuation.terminator.semicolon.coda",
 					"match": ";"
+				}
+			]
+		},
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.coda",
+					"match": "//.*"
 				}
 			]
 		}

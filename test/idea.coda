@@ -6,7 +6,10 @@ struct Test {
     int test;
 }
 
+fn int test() {
+    return 1;
+}
+
 fn int main(string[] args) {
-    io::println("Hello, world!");
-    return 0;
+    return test();
 }
