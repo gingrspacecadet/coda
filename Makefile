@@ -19,11 +19,11 @@ $(TARGET): $(OBJS)
 $(PCH_GCH): $(PCH)
 	$(CXX) $(CXXFLAGS) -x c++-header -o $@ $<
 
-%.o: %.c | $(PCH_GCH)
+%.o: %.cpp | $(PCH_GCH)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	@find -type f -name *.o -delete
+	@find -type f -regex '.*\.\(o\|d\|gch\)' -delete
 	@rm -f $(TARGET)
 
 -include $(patsubst %.o,%.d,$(OBJS))

@@ -1,9 +1,5 @@
 #pragma once
 
-#include <string>
-#include <optional>
-#include <vector>
-
 enum class TokenType {
     MODULE,
     INCLUDE,
