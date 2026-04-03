@@ -3,4 +3,5 @@ coda
 
 *.o
 *.d
+*.gch
 out/

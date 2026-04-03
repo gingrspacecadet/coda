@@ -1,7 +1,3 @@
-#include <sstream>
-#include <fstream>
-#include <cctype>
-#include <iostream>
 #include "Lexer.hpp"
 
 Lexer::Lexer(const std::string& path): m_Path(path) {
