@@ -79,6 +79,8 @@ std::vector<Token> Lexer::Lex() {
     while (peek().has_value()) {
         buf.clear();
 
+        size_t start = m_Index;
+
         if (std::isspace(peek().value())) {
             consume();
         }
@@ -102,7 +104,6 @@ std::vector<Token> Lexer::Lex() {
             switch (peek().value()) {
                 case '@': {
                     consume();
-
                     tokens.push_back((Token){.type = TokenType::AT});
                     break;
                 }
@@ -130,6 +131,7 @@ std::vector<Token> Lexer::Lex() {
                     break;
                 }
                 case '/': {
+                    size_t start = 
                     consume();
                     if (peek().has_value() && peek().value() == '/') {
                         consume();
@@ -308,6 +310,10 @@ std::vector<Token> Lexer::Lex() {
                 }
             }
         }
+
+        tokens.back().span = (Span){ .start = start, .length = m_Index - start, };
+        tokens.back().line = m_LineNum;
+        tokens.back().col = m_ColNum;
     }
 
     m_Index = 0;

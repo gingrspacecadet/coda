@@ -7,6 +7,7 @@
 #include <optional>
 #include <variant>
 #include <memory>
+#include <sstream>
 #include <functional>
 #include "Lexer.hpp"
 
@@ -255,8 +256,10 @@ struct Module {
 
 class Parser {
 public:
-    Parser(std::vector<Token>& tokens, MemoryArena& arena) 
-        : m_Tokens(tokens), m_Arena(arena) {}
+    Parser(const std::string& path)
+        : m_Lexer(path) {
+            m_Tokens = m_Lexer.Lex();
+        }
 
     Module *ParseModule();
     Include *ParseInclude();
@@ -280,8 +283,9 @@ public:
     void CollectAttributes(std::vector<Attribute>& out);
 
 private:
-    std::vector<Token>& m_Tokens;
-    MemoryArena& m_Arena;
+    Lexer m_Lexer;
+    std::vector<Token> m_Tokens;
+    MemoryArena m_Arena;
     size_t m_Index = 0;
 
     template<typename T, typename... Args>
@@ -299,8 +303,92 @@ private:
     }
 
     [[noreturn]] void error(const std::string& msg) {
-        std::cerr << "Parser Error: " << msg << std::endl;
+        auto t = peek();
+        constexpr const char* BOLD_WHITE = "\x1b[1;37m";
+        constexpr const char* RED = "\x1b[1;31m";
+        constexpr const char* RESET = "\x1b[0m";
+
+        if (!t) {
+            std::cout << BOLD_WHITE << m_Lexer.GetPath() << ":0:0: "
+                    << RED << "error: " << RESET << msg << '\n';
+            std::cout << RED << "error: " << RESET << "at end of file\n";
+            std::exit(1);
+        }
+
+        std::string_view file_view(m_Lexer.GetFileContents());
+        size_t span_start = t->span.start;
+        size_t span_len = t->span.length;
+
+        size_t line_start = span_start;
+        while (line_start > 0 && file_view[line_start - 1] != '\n') --line_start;
+        size_t line_end = span_start;
+        while (line_end < file_view.size() && file_view[line_end] != '\n') ++line_end;
+
+        std::string_view line_view = file_view.substr(line_start, line_end - line_start);
+
+        size_t col = t->col ? t->col : (span_start - line_start + 1);
+
+        std::string printable_line;
+        printable_line.reserve(line_view.size());
+        for (char c : line_view) {
+            if (c == '\t') printable_line.append(4, ' ');
+            else printable_line.push_back(c);
+        }
+
+        size_t caret_pos = 0;
+        for (size_t i = 0, src_i = 0; i < printable_line.size() && src_i < (span_start - line_start); ++src_i) {
+            if (file_view[line_start + src_i] == '\t') {
+                caret_pos += 4;
+            } else {
+                ++caret_pos;
+            }
+        }
+
+        size_t caret_len = 1;
+        if (span_len > 0) {
+            size_t cols = 0;
+            for (size_t i = 0; i < span_len && (line_start + (span_start - line_start) + i) < line_end; ++i) {
+                char c = file_view[span_start + i];
+                cols += (c == '\t') ? 4 : 1;
+            }
+            caret_len = std::max<size_t>(1, cols);
+        }
+
+        std::cout << BOLD_WHITE << m_Lexer.GetPath() << ':' << t->line << ':' << col << ": "
+                << RED << "error: " << RESET << msg << '\n';
+
+        std::ostringstream gutter;
+        gutter << t->line;
+        std::string gutter_str = gutter.str();
+        std::cout << gutter_str << " | " << printable_line << '\n';
+
+        std::string underline;
+        underline.append(gutter_str.size(), ' ');
+        underline.append(" | ");
+        underline.append(RED);
+        underline.append(caret_pos, ' ');
+        underline.append(1, '^');
+        underline.append(caret_len - 1, '~');
+
+        std::cout << underline << RESET << '\n';
+
         std::exit(1);
+    }
+
+    template<typename... Args>
+    [[noreturn]] void error(std::string_view fmt, Args&&... args) {
+        auto args_tuple = std::make_tuple(std::forward<Args>(args)...);
+
+        auto fmt_args = std::apply(
+            [](auto&... elems) {
+                return std::make_format_args(elems...);
+            },
+            args_tuple
+        );
+
+        std::string msg = std::vformat(fmt, fmt_args);
+
+        error(msg);
     }
 
     void expect(TokenType type, const std::string& msg) {

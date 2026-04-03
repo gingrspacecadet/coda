@@ -3,12 +3,7 @@
 #include "Parser.hpp"
 
 int main(void) {
-    Lexer lexer("test/idea.coda");
-
-    std::vector<Token> tokens = lexer.Lex();
-    
-    MemoryArena arena;
-    Parser parser(tokens, arena);
+    Parser parser("test/idea.coda");
     Module *module = parser.ParseModule();
 
     module->Print();

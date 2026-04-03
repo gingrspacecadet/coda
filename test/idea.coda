@@ -7,5 +7,6 @@ struct Test {
 }
 
 fn int main(string[] args) {
-    return 0;
+    io::println("Hello, world!");
+    return 0x0AA;
 }

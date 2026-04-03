@@ -486,7 +486,7 @@ Stmt *Parser::ParseVarStmt() {
 
     Token name = consume();
     if (name.type != TokenType::IDENT) {
-        error("Expected variable name");
+        error("Expected variable name, got '{}'", TokenTypeToString(name.type));
     }
 
     auto v = make<VarDecl>(

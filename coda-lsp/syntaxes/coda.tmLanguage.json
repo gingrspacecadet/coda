@@ -7,14 +7,22 @@
 		},
 		{
 			"include": "#strings"
+		},
+		{
+			"include": "#punctuation"
+		},
+		{
+			"include": "#numbers"
 		}
 	],
 	"repository": {
 		"keywords": {
-			"patterns": [{
-				"name": "keyword.control.coda",
-				"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include)\\b"
-			}]
+			"patterns": [
+				{
+					"name": "keyword.control.coda",
+					"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|u?int(8|16|32|64)?)\\b"
+				}
+			]
 		},
 		"strings": {
 			"name": "string.quoted.double.coda",
@@ -24,6 +32,58 @@
 				{
 					"name": "constant.character.escape.coda",
 					"match": "\\\\."
+				}
+			]
+		},
+		"numbers": {
+			"patterns": [
+				{
+					"name": "constant.numeric.float.coda",
+					"match": "\\b\\d+(?:_\\d+)*\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
+				},
+				{
+					"name": "constant.numeric.float.leading-dot.coda",
+					"match": "\\b\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
+				},
+				{
+					"name": "constant.numeric.hex.coda",
+					"match": "\\b0x[0-9A-Fa-f]+(?:_[0-9A-Fa-f]+)*\\b"
+				},
+				{
+					"name": "constant.numeric.binary.coda",
+					"match": "\\b0b[01]+(?:_[01]+)*\\b"
+				},
+				{
+					"name": "constant.numeric.octal.coda",
+					"match": "\\b0o[0-7]+(?:_[0-7]+)*\\b"
+				},
+				{
+					"name": "constant.numeric.integer.coda",
+					"match": "\\b\\d+(?:_\\d+)*\\b"
+				}
+			]
+		},
+		"punctuation": {
+			"patterns": [
+				{
+					"name": "punctuation.separator.double-colon.coda",
+					"match": "::"
+				},
+				{
+					"name": "punctuation.separator.colon.coda",
+					"match": ":"
+				},
+				{
+					"name": "punctuation.separator.comma.coda",
+					"match": ","
+				},
+				{
+					"name": "punctuation.access.dot.coda",
+					"match": "\\."
+				},
+				{
+					"name": "punctuation.terminator.semicolon.coda",
+					"match": ";"
 				}
 			]
 		}
