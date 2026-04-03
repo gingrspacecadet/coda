@@ -4,4 +4,4 @@ coda
 *.o
 *.d
 *.gch
-out/
+out*

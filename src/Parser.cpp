@@ -694,7 +694,7 @@ Decl *Parser::ParseDecl() {
 Module *Parser::ParseModule() {
     expect(TokenType::MODULE, "Missing module declaration");
     
-    Module *m = make<Module>();
+    Module *m = make<Module>(m_Arena);
 
     Token modname = consume();
     if (modname.type != TokenType::IDENT) {

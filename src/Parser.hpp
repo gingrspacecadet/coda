@@ -197,7 +197,7 @@ struct FnDecl {
 };
 
 struct Decl {
-    std::variant<FnDecl*, VarDecl*, StructDecl*, UnionDecl*, Include*, Attribute*> data;
+    std::variant<FnDecl*, VarDecl*, StructDecl*, UnionDecl*> data;
     Symbol *symbol = nullptr;
 
     void Print(int indent);
@@ -255,6 +255,11 @@ struct Module {
     std::vector<Include*> includes;
     std::vector<Decl*> decls;
     Scope *scope = nullptr;
+
+    MemoryArena& arena;
+
+    Module(MemoryArena& arena)
+        : arena(arena) {}
 
     void Print(int indent = 0);
 };
