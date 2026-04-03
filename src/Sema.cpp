@@ -19,7 +19,7 @@ void Analyser::CreateSymbolTable() {
 
         m_Module->scope->symbols.push_back(s);
 
-        if (std::is_same_v<std::decay_t<decltype(d)>, FnDecl*>) {
+        if (std::holds_alternative<FnDecl*>(d->data)) {
             FnDecl *fn = std::get<FnDecl*>(d->data);
             fn->local_scope = NewScope(m_Module->scope);
             for (auto& p : fn->params) {
