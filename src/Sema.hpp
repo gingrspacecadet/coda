@@ -28,4 +28,9 @@ private:
     void ResolveTypes(Module* mod);
     void ResolveTypeRef(TypeRef *type);
     void CheckBodies(Module* mod);
+    void CheckFunctionBody(FnDecl *fn);
+    void CheckStmt(Stmt *stmt);
+    TypeRef *CheckExpr(Expr *expr);
+
+    bool TypesEqual(TypeRef *a, TypeRef *b);
 };

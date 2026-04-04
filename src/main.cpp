@@ -1,6 +1,7 @@
 #include "pch.hpp"
 #include "Lexer.hpp"
 #include "Parser.hpp"
+#include "Sema.hpp"
 
 extern void Emit(Module *module);
 
@@ -10,5 +11,7 @@ int main(void) {
 
     // module->Print();
 
-    Emit(module);
+    // Emit(module);
+    Analyser analyser(module->arena);
+    analyser.Analyse(module);
 }

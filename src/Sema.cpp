@@ -10,9 +10,9 @@ Analyser::Analyser(MemoryArena& arena) : m_Arena(arena) {
 void Analyser::Analyse(Module* mod) {
     mod->scope = m_GlobalScope;
 
-    // RegisterGlobals(mod);
-    // ResolveTypes(mod);
-    // CheckBodies(mod);
+    RegisterGlobals(mod);
+    ResolveTypes(mod);
+    CheckBodies(mod);
 }
 
 void Analyser::EnterScope(Scope* existing_scope) {
@@ -306,4 +306,162 @@ void Analyser::ResolveTypes(Module *mod) {
             exit(1);
         }
     }
+}
+
+void Analyser::CheckStmt(Stmt *stmt) {
+    if (!stmt) return;
+
+    stmt->scope = m_CurrentScope;
+
+    std::visit([&](auto& value) {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, Stmt::Block>) {
+            EnterScope();
+            for (auto s : value.stmts) {
+                CheckStmt(s);
+            }
+            LeaveScope();
+        }
+        else if constexpr (std::is_same_v<T, VarDecl*>) {
+            VarDecl *var = value;
+
+            if (var->init) {
+                TypeRef *init_type = CheckExpr(var->init);
+
+                if (var->type) {
+                    if (!TypesEqual(var->type, init_type)) {
+                        std::cerr <<
+                    }
+                }
+            }
+
+            SymbolFlags flags = SymbolFlags::VAR;
+            if (var->is_mutable) flags = static_cast<SymbolFlags>(static_cast<uint32_t>(flags) | static_cast<uint32_t>(SymbolFlags::MUT));
+
+            Symbol *sym = DeclareSymbol(var->name, flags);
+            sym->type = var->type;
+            var->symbol = sym;
+        }
+        else if constexpr (std::is_same_v<T, Stmt::Return>) {
+            if (value.value) {
+                TypeRef *ret_type = CheckExpr(value.value);
+                // TODO: verify this matches m_CurrentFunction->ret_type
+            }
+        }
+        else if constexpr (std::is_same_v<T, Expr*>) {
+            CheckExpr(value);
+        }
+        // TODO: if, while, for etc
+    }, stmt->data);
+}
+
+void Analyser::CheckFunctionBody(FnDecl *fn) {
+    if (!fn->body) return;
+
+    m_CurrentFunction = fn;
+
+    EnterScope();
+    fn->local_scope = m_CurrentScope;
+
+    for (auto& p : fn->params) {
+        Symbol *sym = DeclareSymbol(p.name, SymbolFlags::VAR);
+        sym->type = p.type;
+        p.symbol = sym;
+    }
+    
+    CheckStmt(fn->body);
+
+    LeaveScope();
+    m_CurrentFunction = nullptr;
+}
+
+void Analyser::CheckBodies(Module *mod) {
+    m_CurrentScope = m_GlobalScope;
+
+    for (auto d : mod->decls) {
+        if (auto **fn = std::get_if<FnDecl*>(&d->data)) {
+            CheckFunctionBody(*fn);
+        }
+    }
+}
+
+TypeRef *Analyser::CheckExpr(Expr *expr) {
+    if (!expr) return nullptr;
+
+    TypeRef *result_type = std::visit([&](auto& value) -> TypeRef* {
+        using T = std::decay_t<decltype(value)>;
+
+        if constexpr (std::is_same_v<T, Literal>) {
+            std::string type_name;
+            switch (value.type) {
+                case Literal::Type::INT: type_name = "int"; break;
+                case Literal::Type::BOOL: type_name = "bool"; break;
+                case Literal::Type::STRING: type_name = "string"; break;
+                case Literal::Type::CHAR: type_name = "char"; break;
+            }
+            Symbol *type_sym = LookupSymbol(type_name);
+            return type_sym ? type_sym->type : nullptr;
+        }
+        else if constexpr (std::is_same_v<T, Expr::Ident>) {
+            Symbol *sym = LookupSymbol(value.name);
+            if (!sym) {
+                std::cerr << "Error: Undefined variable '" << value.name << "'\n";
+                exit(1);
+            }
+            expr->symbol = sym;
+            return sym->type;
+        }
+        else if constexpr (std::is_same_v<T, Expr::Binary>) {
+            TypeRef *left_t = CheckExpr(value.left);
+            TypeRef *right_t = CheckExpr(value.right);
+
+            // TODO: allow implicit widening, but not shortening
+            // for now just be strict
+            if (left_t && right_t && left_t->type_symbol != right_t->type_symbol) {
+                std::cerr << "Type Error: Cannot apply operator to different types\n";
+                exit(1);
+            }
+
+            if (value.op == BinaryOp::EQ || value.op == BinaryOp::LT || value.op == BinaryOp::LE
+             || value.op == BinaryOp::GT || value.op == BinaryOp::GE) {
+                return LookupSymbol("bool")->type;
+             }
+
+            return left_t;
+        }
+
+        return nullptr;
+    }, expr->data);
+
+    expr->resolved_type = result_type;
+    return result_type;
+}
+
+bool Analyser::TypesEqual(TypeRef *a, TypeRef *b) {
+    if (a == b) return true;
+
+    if (!a || !b) return false;
+
+    if (a->is_optional != b->is_optional) return false;
+
+    if (a->data.index() != b->data.index()) return false;
+
+    return std::visit([&](auto& a_val) -> bool {
+        using T = std::decay_t<decltype(a_val)>;
+
+        if constexpr (std::is_same_v<T, TypeRef::Named>) {
+            auto& b_val = std::get<TypeRef::Named>(b->data);
+            return a->type_symbol == b->type_symbol;
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Pointer>) {
+            auto& b_val = std::get<TypeRef::Pointer>(b->data);
+            return TypesEqual(a_val.pointee, b_val.pointee);
+        }
+        else if constexpr (std::is_same_v<T, TypeRef::Array>) {
+            auto& b_val = std::get<TypeRef::Array>(b->data);
+            return (a_val.length == b_val.length) && TypesEqual(a_val.elem, b_val.elem);
+        }
+        return false;
+    }, a->data);
 }

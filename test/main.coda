@@ -1,5 +1,9 @@
 module main;
 
-fn int main() {
+fn int test() {
     return 127;
+}
+
+fn int main() {
+    return "e";
 }
