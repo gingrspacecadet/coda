@@ -36,7 +36,8 @@ void Emit(Module *module) {
                                                 << "    ret\n";
                                         } 
                                         else if constexpr (std::is_same_v<T, Expr::Call>) {
-                                            
+                                            out << "    call " << value.callee->symbol->name << "\n"
+                                                << "    ret\n";
                                         } else {
 
                                         }

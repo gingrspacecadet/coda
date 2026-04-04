@@ -11,7 +11,7 @@ int main(void) {
 
     // module->Print();
 
-    // Emit(module);
     Analyser analyser(module->arena);
     analyser.Analyse(module);
+    // Emit(module);
 }

@@ -540,6 +540,109 @@ TypeRef *Analyser::CheckExpr(Expr *expr) {
 
             return fn->ret_type;
         }
+        else if constexpr (std::is_same_v<T, Expr::Member>) {
+            TypeRef *base_type = CheckExpr(value.base);
+            if (!base_type) return nullptr;
+
+            // TODO: decide if we allow the '.' operator on pointers
+            // if (std::holds_alternative<TypeRef::Pointer>(base_type->data)) {
+            //     base_type = std::get<TypeRef::Pointer>(base_type->data).pointee;
+            // }
+
+            Symbol *type_sym = base_type->type_symbol;
+            if (!type_sym || !(type_sym->flags & static_cast<uint32_t>(SymbolFlags::TYPE))) {
+                std::cerr << "Type Error: Base of member access is not a valid type" << std::endl;
+                exit(1);
+            }
+
+            // TODO: strings also have members
+            StructDecl *str = nullptr;
+            UnionDecl *unn = nullptr;
+
+            if (auto **s = std::get_if<StructDecl*>(&type_sym->decl->data)) str = *s;
+            else if (auto **u = std::get_if<UnionDecl*>(&type_sym->decl->data)) unn = *u;
+
+            if (!str && !unn) {
+                std::cerr << "Type Error: Type '" << type_sym->name << "' does not have members" << std::endl;
+                exit(1);
+            }
+
+            std::vector<VarDecl*>& members = str ? str->members : unn->members;
+            for (size_t i = 0; i < members.size(); i++) {
+                if (members[i]->name == value.member) {
+                    return members[i]->type;
+                }
+            }
+
+            std::cerr << "Type Error: Member '" << value.member 
+                      << "' not found in type '" << type_sym->name << std::endl;
+            exit(1);
+        }
+        else if constexpr (std::is_same_v<T, Expr::Unary>) {
+            TypeRef *operand_type = CheckExpr(value.operand);
+            if (!operand_type) return nullptr;
+
+            switch (value.op) {
+                case UnaryOp::NEG: {
+                    std::string name = operand_type->type_symbol->name;
+                    if (name.find("int") == std::string::npos) {
+                        std::cerr << "Type Error: Cannot negate non-numeric type '" << name << "'" << std::endl;
+                        exit(1);
+                    }
+                    return operand_type;
+                }
+                case UnaryOp::NOT: {
+                    if (operand_type->type_symbol->name != "bool") {
+                        std::cerr << "Type Error: Logical NOT requires a boolean" << std::endl;
+                        exit(1);
+                    }
+                    return operand_type;
+                }
+                case UnaryOp::ADDR: {
+                    return m_Arena.alloc<TypeRef>(TypeRef::Pointer{operand_type}, false);
+                }
+                case UnaryOp::DEREF: {
+                    if (auto *ptr_data = std::get_if<TypeRef::Pointer>(&operand_type->data)) {
+                        return ptr_data->pointee;
+                    }
+                    std::cerr << "Type Error: Cannot dereference non-pointer type" << std::endl;
+                    exit(1);
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, Expr::Index>) {
+            TypeRef *base_type = CheckExpr(value.base);
+            TypeRef *index_type = CheckExpr(value.index);
+
+            if (!index_type || (index_type->type_symbol->name.find("int") == std::string::npos)) {
+                std::cerr << "Type Error: Array index must be an integer" << std::endl;
+                exit(1);
+            }
+
+            return std::visit([&](auto& value) -> TypeRef* {
+                using T = std::decay_t<decltype(value)>;
+
+                // TODO: you may only index a pointer if in an `unsafe` clause
+                if constexpr (std::is_same_v<T, TypeRef::Pointer>) {
+                    return value.pointee;
+                }
+                else if constexpr (std::is_same_v<T, TypeRef::Array>) {
+                    return value.elem;
+                }
+                else {
+                    std::cerr << "Type Error: Cannot index into non-array/non-pointer type" << std::endl;
+                    exit(1);
+                }
+            }, base_type->data);
+        }
+        else if constexpr (std::is_same_v<T, Expr::Cast>) {
+            CheckExpr(value.expr);
+
+            ResolveTypeRef(value.to);
+
+            // TODO: currently allows any cast, should enforce rules
+            return value.to;
+        }
 
         return nullptr;
     }, expr->data);
