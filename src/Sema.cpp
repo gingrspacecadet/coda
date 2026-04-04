@@ -325,12 +325,13 @@ void Analyser::CheckStmt(Stmt *stmt) {
         }
         else if constexpr (std::is_same_v<T, VarDecl*>) {
             VarDecl *var = value;
+            ResolveTypeRef(var->type);
 
             if (var->init) {
                 TypeRef *init_type = CheckExpr(var->init);
 
                 if (!TypesEqual(var->type, init_type)) {
-                    std::cerr << "Cannot assign a variable to a different type" << std::endl;
+                    std::cerr << "Type Error: Cannot assign variable '" << var->name << "' of type '" << var->type->type_symbol->name << "' to a different type '" << init_type->type_symbol->name << "'" << std::endl;
                     exit(1);
                 }
             }

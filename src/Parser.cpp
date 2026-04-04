@@ -488,7 +488,11 @@ Stmt *Parser::ParseWhileStmt() {
 }
 
 Stmt *Parser::ParseVarStmt() {
-    auto type = ParseType();
+    TypeRef *type = nullptr;
+
+    if (auto t = peek(1); !t || t->type != TokenType::EQ) {
+        type = ParseType();
+    }
 
     Token name = consume();
     if (name.type != TokenType::IDENT) {
@@ -504,6 +508,7 @@ Stmt *Parser::ParseVarStmt() {
         consume();
         v->init = ParseExpr();
     }
+    expect(TokenType::SEMICOLON, "Expected semicolon after variable decl");
 
     auto s = make<Stmt>(
         v
@@ -534,9 +539,9 @@ Stmt *Parser::ParseStmt() {
         case TokenType::IF: return ParseIfStmt();
         case TokenType::WHILE: return ParseWhileStmt();
         case TokenType::IDENT: {
-            if (auto t = peek(1); t && t->type == TokenType::DOUBLECOLON) {
+            if (auto t = peek(1); t && (t->type == TokenType::DOUBLECOLON || t->type == TokenType::EQ)) {
                 return ParseExprStmt();
-            } 
+            }
         }
         case TokenType::MUT: return ParseVarStmt();
         default: break;
