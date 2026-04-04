@@ -5,5 +5,5 @@ fn int test() {
 }
 
 fn int main() {
-    return "e";
+    return 1;
 }

@@ -329,10 +329,9 @@ void Analyser::CheckStmt(Stmt *stmt) {
             if (var->init) {
                 TypeRef *init_type = CheckExpr(var->init);
 
-                if (var->type) {
-                    if (!TypesEqual(var->type, init_type)) {
-                        std::cerr <<
-                    }
+                if (!TypesEqual(var->type, init_type)) {
+                    std::cerr << "Cannot assign a variable to a different type" << std::endl;
+                    exit(1);
                 }
             }
 
@@ -346,13 +345,70 @@ void Analyser::CheckStmt(Stmt *stmt) {
         else if constexpr (std::is_same_v<T, Stmt::Return>) {
             if (value.value) {
                 TypeRef *ret_type = CheckExpr(value.value);
-                // TODO: verify this matches m_CurrentFunction->ret_type
+                if (!TypesEqual(ret_type, m_CurrentFunction->ret_type)) {
+                    std::cerr << "Type Error: Returned value does not match function '" << m_CurrentFunction->name << "' return type" << std::endl;
+                    exit(1);
+                }
+            } else {
+                if (m_CurrentFunction->ret_type && m_CurrentFunction->ret_type->type_symbol->name != "none") {
+                    std::cerr << "Type Error: Function '" << m_CurrentFunction->name << "' expects a return value" << std::endl;
+                    exit(1);
+                }
             }
         }
         else if constexpr (std::is_same_v<T, Expr*>) {
             CheckExpr(value);
         }
-        // TODO: if, while, for etc
+        else if constexpr (std::is_same_v<T, Stmt::If>) {
+            if (value.cond) {
+                TypeRef *cond_type = CheckExpr(value.cond);
+                if (!cond_type || cond_type->type_symbol->name != "bool") {
+                    std::cerr << "Type Error: 'if' condition must evaluate to a boolean" << std::endl;
+                    exit(1);
+                }
+            }
+
+            CheckStmt(value.then_branch);
+            if (value.else_branch) {
+                CheckStmt(value.else_branch);
+            }
+        }
+        else if constexpr (std::is_same_v<T, Stmt::While>) {
+            if (value.cond) {
+                TypeRef *cond_type = CheckExpr(value.cond);
+                if (!cond_type || cond_type->type_symbol->name != "bool") {
+                    std::cerr << "Type Error: 'while' condition must evaluate to a boolean" << std::endl;
+                    exit(1);
+                }
+            }
+
+            CheckStmt(value.body);
+        }
+        else if constexpr (std::is_same_v<T, Stmt::For>) {
+            EnterScope();   // traps the initialiser for the entirety of the loops
+
+            if (value.init) {
+                CheckStmt(value.init);
+            }
+
+            if (value.cond) {
+                TypeRef *cond_type = CheckExpr(value.cond);
+                if (!cond_type || cond_type->type_symbol->name != "bool") {
+                    std::cerr << "Type Error: 'for' condition must evaluate to a boolean" << std::endl;
+                    exit(1);
+                }
+            }
+
+            if (value.post) {
+                CheckExpr(value.post);
+            }
+
+            if (value.body) {
+                CheckStmt(value.body);
+            }
+
+            LeaveScope();
+        }
     }, stmt->data);
 }
 
@@ -426,7 +482,21 @@ TypeRef *Analyser::CheckExpr(Expr *expr) {
             if (value.op == BinaryOp::EQ || value.op == BinaryOp::LT || value.op == BinaryOp::LE
              || value.op == BinaryOp::GT || value.op == BinaryOp::GE) {
                 return LookupSymbol("bool")->type;
-             }
+            }
+
+            if (value.op == BinaryOp::ASSIGN) { //TODO: ADD_ASSIGN and others
+                if (!TypesEqual(left_t, right_t)) {
+                    std::cerr << "Type Error: Cannot assign value of different type" << std::endl;
+                    exit(1);
+                }
+
+                if (!left_t->is_mutable) {
+                    std::cerr << "Type Error: Cannot assign to immutable variable" << std::endl;
+                    exit(1);
+                }
+
+                return left_t;
+            }
 
             return left_t;
         }
