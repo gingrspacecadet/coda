@@ -401,11 +401,12 @@ Stmt *Parser::ParseForStmt() {
             init = ParseVarStmt();
         } else {
             init = ParseExprStmt();
+            expect(TokenType::SEMICOLON, "Expected ';' after initialiser");
         }
     } else {
         // empty!
+        expect(TokenType::SEMICOLON, "Expected ';' after initialiser");
     }
-    expect(TokenType::SEMICOLON, "Expected ';' after initialiser");
 
     Expr *cond = nullptr;
     if (auto t = peek(); !t || t->type != TokenType::SEMICOLON) {
@@ -467,6 +468,8 @@ Stmt *Parser::ParseIfStmt() {
 }
 
 Stmt *Parser::ParseWhileStmt() {
+    consume();
+    
     if (auto t = peek(); !t || t->type != TokenType::LPAREN) {
         error("Expected '(' after while");
     }

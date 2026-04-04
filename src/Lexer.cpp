@@ -10,7 +10,7 @@ Lexer::Lexer(const std::string& path): m_Path(path) {
 }
 
 struct Keyword {
-    const std::string& name;
+    std::string_view name;
     TokenType type;
 };
 
@@ -78,8 +78,11 @@ std::vector<Token> Lexer::Lex() {
 
         size_t start = m_Index;
 
+        bool not_pushed = false;    // confusing but idk how better to name it
+
         if (std::isspace(peek().value())) {
             consume();
+            not_pushed = true;
         }
         else if (std::isalpha(peek().value())) {
             buf.push_back(consume());
@@ -128,12 +131,12 @@ std::vector<Token> Lexer::Lex() {
                     break;
                 }
                 case '/': {
-                    size_t start = 
                     consume();
                     if (peek().has_value() && peek().value() == '/') {
                         consume();
                         while (peek().has_value() && peek().value() != '\n') {
                             consume();
+                            not_pushed = true;
                         }
                     } else {
                         if (peek().has_value() && peek().value() == '=') {
@@ -308,7 +311,9 @@ std::vector<Token> Lexer::Lex() {
             }
         }
 
-        tokens.back().span = (Span){ .start = start, .length = m_Index - start, };
+        if (!not_pushed) {
+            tokens.back().span = (Span){ .start = start, .length = m_Index - start, };
+        }
         tokens.back().line = m_LineNum;
         tokens.back().col = m_ColNum;
     }

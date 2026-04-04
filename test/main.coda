@@ -5,6 +5,18 @@ fn int test(int a) {
 }
 
 fn int main() {
+    if (12 > 14) {
+        return 93;
+    }
+
+    for (mut int i = 0; i < 13; i = i + 1) {
+        return i;
+    }
+
+    while (true) {
+        return false;
+    }
+
     int e = 4;
     return test(e);
 }

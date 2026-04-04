@@ -313,7 +313,7 @@ private:
     }
 
     [[noreturn]] void error(const std::string& msg) {
-        auto t = peek();
+        auto t = peek(0);
         constexpr const char* BOLD_WHITE = "\x1b[1;37m";
         constexpr const char* RED = "\x1b[1;31m";
         constexpr const char* RESET = "\x1b[0m";
@@ -328,7 +328,7 @@ private:
         std::string_view file_view(m_Lexer.GetFileContents());
         size_t span_start = t->span.start;
         size_t span_len = t->span.length;
-
+        
         size_t line_start = span_start;
         while (line_start > 0 && file_view[line_start - 1] != '\n') --line_start;
         size_t line_end = span_start;
