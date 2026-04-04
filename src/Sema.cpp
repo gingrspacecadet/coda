@@ -500,6 +500,46 @@ TypeRef *Analyser::CheckExpr(Expr *expr) {
 
             return left_t;
         }
+        else if constexpr (std::is_same_v<T, Expr::Call>) {
+            CheckExpr(value.callee);
+
+            Symbol *callee_sym = value.callee->symbol;
+            if (!callee_sym) {
+                std::cerr << "Type Error: unresolved function call '" << callee_sym->name << "'" << std::endl;
+                exit(1);
+            }
+
+            if (!(callee_sym->flags & static_cast<uint32_t>(SymbolFlags::FN))) {
+                std::cerr << "Type Error: Attempted to call non-function '" << callee_sym->name << "'" << std::endl;
+                exit(1);
+            }
+
+            auto **fn_ptr = std::get_if<FnDecl*>(&callee_sym->decl->data);
+            if (!fn_ptr) {
+                std::cerr << "Internal Error: Function symbol missing declaration" << std::endl;
+                exit(1);
+            }
+            FnDecl *fn = *fn_ptr;
+
+            if (value.args.size() != fn->params.size()) {
+                std::cerr << "Type Error: Function '" << fn->name 
+                          << "' expects " << fn->params.size() << " arguments, but got " << value.args.size() << std::endl;
+                exit(1);
+            }
+
+            for (size_t i = 0; i < value.args.size(); i++) {
+                TypeRef *arg_type = CheckExpr(value.args[i]);
+                TypeRef *param_type = fn->params[i].type;
+
+                if (!TypesEqual(arg_type, param_type)) {
+                    std::cerr << "Type Error: Argument " << (i + 1) << " for function '"
+                              << fn->name << "' has incorrect type" << std::endl;
+                    exit(1);
+                }
+            }
+
+            return fn->ret_type;
+        }
 
         return nullptr;
     }, expr->data);
