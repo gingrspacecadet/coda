@@ -1,10 +1,10 @@
 module main;
 
-fn int test() {
-    return 127;
+fn int test(int a) {
+    return a;
 }
 
 fn int main() {
     int e = 4;
-    return test();
+    return test(e);
 }
