@@ -14,7 +14,7 @@ fn int main() {
     }
 
     while (true) {
-        return false;
+        return 1;
     }
 
     int e = 4;

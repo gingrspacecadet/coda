@@ -38,7 +38,7 @@ static Keyword keywords[] = {
 Token Lexer::DecodeIdent(std::string& buf) {
     for (const auto& k : keywords) {
         if (buf == k.name) {
-            return (Token){.type = k.type};
+            return (Token){.type = k.type, .value = buf};
         }
     }
 
