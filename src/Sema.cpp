@@ -556,7 +556,6 @@ TypeRef *Analyser::CheckExpr(Expr *expr) {
                 exit(1);
             }
 
-            // TODO: strings also have members
             StructDecl *str = nullptr;
             UnionDecl *unn = nullptr;
 
