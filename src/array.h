@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include "instantiate.h"
 
 #define ARRAY_TEMPLATE(T, N) \
