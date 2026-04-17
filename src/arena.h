@@ -14,6 +14,6 @@ void *arena_alloc(Arena *a, size_t size);
 void *arena_calloc(Arena *a, size_t size);
 void arena_clear(Arena *a);
 void arena_destroy(Arena *a);
-char *arena_strdup(Arena *a, const char *s);
+char *arena_strdup(Arena *a, char *s);
 
 #endif

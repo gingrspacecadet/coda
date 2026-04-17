@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdio.h>
 #include "lexer.h"
 #include "optional.h"
 #include "string.h"

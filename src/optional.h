@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "instantiate.h"
 
-#define OPTIONAL_TEMPLATAE(T, N) \
+#define OPTIONAL_TEMPLATE(T, N) \
 typedef struct { \
     bool has_value; \
     T value; \

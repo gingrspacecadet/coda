@@ -1,5 +1,6 @@
 #include "arena.h"
 #include <stdlib.h>
+#include <string.h>
 
 Arena *arena_create() {
     Arena *a = malloc(sizeof(Arena));

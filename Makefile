@@ -1,8 +1,8 @@
-CXX = g++
-CXXFLAGS = -g -Werror -MMD -MD -std=c++23 -include $(PCH)
+CXX = gcc
+CXXFLAGS = -g -Werror -MMD -MD -std=c23
 
-SRCS = $(shell find src/ -type f -name "*.cpp" 2>/dev/null)
-OBJS = $(patsubst %.cpp,%.o,$(SRCS))
+SRCS = $(shell find src/ -type f -name "*.c" 2>/dev/null)
+OBJS = $(patsubst %.c,%.o,$(SRCS))
 
 PCH = src/pch.hpp
 PCH_GCH = $(PCH).gch
@@ -16,10 +16,10 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	@$(CXX) $(CXXFLAGS) -o $@ $^
 
-$(PCH_GCH): $(PCH)
-	$(CXX) $(CXXFLAGS) -x c++-header -o $@ $<
+# $(PCH_GCH): $(PCH)
+# 	$(CXX) $(CXXFLAGS) -x c++-header -o $@ $<
 
-%.o: %.cpp | $(PCH_GCH)
+%.o: %.c
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
