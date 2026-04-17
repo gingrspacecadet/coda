@@ -21,6 +21,7 @@ typedef struct Symbol Symbol;
 typedef struct Scope Scope;
 typedef struct Module Module;
 typedef struct Include Include;
+typedef struct Literal Literal;
 
 INSTANTIATE(Expr *, exprs, ARRAY_TEMPLATE)
 
@@ -113,6 +114,7 @@ struct Literal {
 
 struct Expr {
     enum {
+        EXPR_LIT,
         EXPR_IDENT,
         EXPR_PATH,
         EXPR_UNARY,
@@ -124,6 +126,7 @@ struct Expr {
     } type;
 
     union {
+        Literal literal;
         struct {
             String name;
         } ident;
@@ -227,7 +230,7 @@ INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 
 struct FnDecl {
     String name;
-    TypeRef *ret_type = nullptr;
+    TypeRef *ret_type;
     param_array params;
     Stmt *body;
     attr_array attributes;
