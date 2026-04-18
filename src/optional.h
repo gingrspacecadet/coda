@@ -5,10 +5,9 @@
 #include "instantiate.h"
 
 #define OPTIONAL_TEMPLATE(T, N) \
-typedef struct { \
+typedef struct N##_optional { \
     bool has_value; \
     T value; \
 } N##_optional; \
-static N##_optional N##_optional_empty = {}; \
 
 #endif

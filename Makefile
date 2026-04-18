@@ -1,5 +1,5 @@
-CXX = gcc
-CXXFLAGS = -g -Werror -MMD -MD -std=c23
+CC = gcc
+CFLAGS = -g -Werror -MMD -MD -std=c23 -O0
 
 SRCS = $(shell find src/ -type f -name "*.c" 2>/dev/null)
 OBJS = $(patsubst %.c,%.o,$(SRCS))
@@ -14,13 +14,13 @@ TARGET = coda
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	@$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
 
 # $(PCH_GCH): $(PCH)
-# 	$(CXX) $(CXXFLAGS) -x c++-header -o $@ $<
+# 	$(CC) $(CFLAGS) -x c++-header -o $@ $<
 
 %.o: %.c
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
 	@find -type f -regex '.*\.\(o\|d\|gch\)' -delete

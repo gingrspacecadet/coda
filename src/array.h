@@ -14,12 +14,24 @@ typedef struct { \
 } N##_array; \
 static N##_array N##_array_empty = {}; \
 static inline N##_array N##_array##_init(void) { \
-    N##_array v = {(T*)malloc(8 * sizeof(T)), 0, 8}; return v; \
+    N##_array v = {}; \
+    v.data = (T*)calloc(1, sizeof(T)); \
+    if (!v.data) { \
+        fprintf(stderr, #N "_array_init: malloc failed\n"); \
+        exit(1); \
+    } \
+    v.idx = 0; \
+    v.cap = 1; \
+    return v; \
 } \
 static inline void N##_array##_push(N##_array *v, T item) { \
     if (v->idx == v->cap) { \
         v->cap = v->cap ? v->cap * 2 : 8; \
         v->data = (T*)realloc(v->data, v->cap * sizeof(T)); \
+        if (!v->data) { \
+            fprintf(stderr, #N "_array_push: realloc failed\n"); \
+            exit(1); \
+        } \
     } \
     v->data[v->idx++] = item; \
 } \
@@ -33,10 +45,14 @@ static inline T N##_array##_at(N##_array *v, size_t idx) { \
 static inline void N##_array##_resize(N##_array *v, size_t elems) { \
     if (elems < v->cap) return; \
     v->data = (T*)realloc(v->data, elems * sizeof(T)); \
+    if (!v->data) { \
+        fprintf(stderr, #N "_array_resize: realloc failed\n"); \
+        exit(1); \
+    } \
     v->cap = elems; \
 } \
 static inline void N##_array_clear(N##_array *v) { \
-    memset(v->data, 0, v->idx); \
+    v->idx = 0; \
 } \
 
 #endif

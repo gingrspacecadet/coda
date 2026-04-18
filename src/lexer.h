@@ -77,7 +77,7 @@ typedef struct {
     size_t start, length;
 } Span;
 
-INSTANTIATE(char *, string, OPTIONAL_TEMPLATAE)
+INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 typedef struct {
     TokenType type;
@@ -89,12 +89,13 @@ typedef struct {
 INSTANTIATE(Token, token, ARRAY_TEMPLATE)
 
 typedef struct {
-    struct {
-        String path;
-        String contents;
-        size_t index;
-    } source;
+    String path;
+    String contents;
+    size_t index;
+} Source;
 
+typedef struct {
+    Source source;
     size_t line, col;
 
     Arena *arena;

@@ -545,11 +545,6 @@ TypeRef *Analyser::CheckExpr(Expr *expr) {
             TypeRef *base_type = CheckExpr(value.base);
             if (!base_type) return nullptr;
 
-            // TODO: decide if we allow the '.' operator on pointers
-            // if (std::holds_alternative<TypeRef::Pointer>(base_type->data)) {
-            //     base_type = std::get<TypeRef::Pointer>(base_type->data).pointee;
-            // }
-
             Symbol *type_sym = base_type->type_symbol;
             if (!type_sym || !(type_sym->flags & static_cast<uint32_t>(SymbolFlags::TYPE))) {
                 std::cerr << "Type Error: Base of member access is not a valid type" << std::endl;

@@ -22,6 +22,7 @@ typedef struct Scope Scope;
 typedef struct Module Module;
 typedef struct Include Include;
 typedef struct Literal Literal;
+typedef struct Param Param;
 
 INSTANTIATE(Expr *, exprs, ARRAY_TEMPLATE)
 
@@ -169,6 +170,8 @@ INSTANTIATE(Stmt *, stmts, ARRAY_TEMPLATE)
 
 struct Stmt {
     enum {
+        STMT_VAR,
+        STMT_EXPR,
         STMT_BLOCK,
         STMT_RETURN,
         STMT_IF,
@@ -178,6 +181,8 @@ struct Stmt {
     } type;
 
     union {
+        VarDecl *var;
+        Expr *expr;
         struct {
             stmts_array stmts;
         } block;

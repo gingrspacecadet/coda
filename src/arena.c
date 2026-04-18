@@ -5,9 +5,9 @@
 Arena *arena_create() {
     Arena *a = malloc(sizeof(Arena));
     *a = (Arena){
-        .data = malloc(64),
+        .data = malloc(128),
         .index = 0,
-        .capacity = 64,
+        .capacity = 128,
     };
     return a;
 }
@@ -18,7 +18,7 @@ void *arena_alloc(Arena *a, size_t size) {
         a->data = realloc(a->data, a->capacity);
     }
 
-    void *data = a->data + a->index;
+    void *data = (char*)a->data + a->index;
     a->index += size;
     return data;
 }

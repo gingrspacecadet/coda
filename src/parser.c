@@ -1,24 +1,32 @@
+#include <stdio.h>
 #include "parser.h"
+
+#define FALLTHROUGH
 
 INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
 
 static token_optional peek(Parser *ctx) {
-    if (ctx->index >= ctx->tokens.idx) return token_optional_empty;
+    if (ctx->index >= ctx->tokens.idx) return (token_optional){};
     return (token_optional){true, ctx->tokens.data[ctx->index]};
+}
+
+static token_optional ahead(Parser *ctx, size_t ahead) {
+    if (ctx->index + ahead >= ctx->tokens.idx) return (token_optional){};
+    return (token_optional){true, ctx->tokens.data[ctx->index + ahead]};
 }
 
 static Token consume(Parser *ctx) {
     return ctx->tokens.data[ctx->index++];
 }
 
-static void expect(Parser *ctx, TokenType type, char *msg) {
+static Token expect(Parser *ctx, TokenType type, char *msg) {
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != type) {
         printf(msg);
         exit(1);
     }
 
-    consume(ctx);
+    return consume(ctx);
 }
 
 Include *parse_include(Parser *ctx) {
@@ -262,8 +270,6 @@ Expr *expr_new_ident(Parser *ctx, Token *t) {
     return e;
 }
 
-Expr *parse_expr(Parser *ctx, int min_bp);
-
 Expr *parse_expr_prefix(Parser *ctx) {
     token_optional t = peek(ctx);
 
@@ -403,4 +409,375 @@ Expr *parse_expr(Parser *ctx, int min_bp) {
     }
 
     return left;
+}
+
+Stmt *parse_return_stmt(Parser *ctx) {
+    consume(ctx);
+    Expr *value = NULL;
+    token_optional t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_SEMICOLON) {
+        value = parse_expr(ctx, 0);
+    }
+
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected semicolon\n");
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_RETURN;
+    s->_return.value = value;
+
+    return s;
+}
+
+Stmt *parse_for_stmt(Parser *ctx) {
+    consume(ctx);
+
+    expect(ctx, TOKENTYPE_LPAREN, "Expected '('\n");
+
+    Stmt *init = NULL;
+    token_optional t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_SEMICOLON) {
+        if (t.value.type == TOKENTYPE_IDENT || t.value.type == TOKENTYPE_MUT) {
+            init = parse_var_stmt(ctx);
+        } else {
+            init = parse_expr_stmt(ctx);
+            expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+        }
+    } else {
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+    }
+
+    Expr *cond = NULL;
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_SEMICOLON) {
+        cond = parse_expr(ctx, 0);
+    }
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+    Expr *post = NULL;
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_RPAREN) {
+        post = parse_expr(ctx, 0);
+    }
+    expect(ctx, TOKENTYPE_RPAREN, "Expected ')'\n");
+
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
+        printf("Expected '{'\n");
+        exit(1);
+    }
+    Stmt *body = parse_block_stmt(ctx);
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_FOR;
+    s->_for.init = init;
+    s->_for.cond = cond;
+    s->_for.post = post;
+    s->_for.body = body;
+
+    return s;
+}
+
+Stmt *parse_if_stmt(Parser *ctx) {
+    consume(ctx);
+    token_optional t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) {
+        printf("Expected '('\n");
+        exit(1);
+    }
+    Expr *cond = parse_expr(ctx, 0);
+
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
+        printf("Expected '{'\n");
+        exit(1);
+    }
+
+    Stmt *then = parse_block_stmt(ctx);
+    Stmt *_else = NULL;
+    t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_ELSE) {
+        consume(ctx);
+        t = peek(ctx);
+        if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
+            printf("Expected '{'\n");
+            exit(1);
+        }
+        _else = parse_block_stmt(ctx);
+    }
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_IF;
+    s->_if.cond = cond;
+    s->_if.then = then;
+    s->_if._else = _else;
+
+    return s;
+}
+
+Stmt *parse_while_stmt(Parser *ctx) {
+    consume(ctx);
+
+    token_optional t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) {
+        printf("Expected '('\n");
+        exit(1);
+    }
+    Expr *cond = parse_expr(ctx, 0);
+
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
+        printf("Expected '{'\n");
+        exit(1);
+    }
+    Stmt *body = parse_block_stmt(ctx);
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_WHILE;
+    s->_while.cond = cond;
+    s->_while.body = body;
+
+    return s;
+}
+
+Stmt *parse_var_stmt(Parser *ctx) {
+    TypeRef *type = NULL;
+
+    token_optional t = ahead(ctx, 1);
+    if (!t.has_value || t.value.type != TOKENTYPE_EQ) {
+        type = parse_type(ctx);
+    }
+
+    Token name = expect(ctx, TOKENTYPE_IDENT, "Expected variable name\n");
+
+    VarDecl *v = arena_calloc(ctx->arena, sizeof(VarDecl));
+    v->type = type;
+    v->name = name.value.value;
+
+    t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_EQ) {
+        consume(ctx);
+        v->init = parse_expr(ctx, 0);
+    }
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_VAR;
+    s->var = v;
+
+    return s;
+}
+
+Stmt *parse_expr_stmt(Parser *ctx) {
+    Expr *e = parse_expr(ctx, 0);
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_EXPR;
+    s->expr = e;
+
+    return s;
+}
+
+Stmt *parse_stmt(Parser *ctx) {
+    attr_array attrs;
+    collect_attributes(ctx, &attrs);
+
+    token_optional t = peek(ctx);
+
+    if (!t.has_value) return NULL;  // error?
+
+    switch (t.value.type) {
+        case TOKENTYPE_RETURN: return parse_return_stmt(ctx);
+        case TOKENTYPE_FOR: return parse_for_stmt(ctx);
+        case TOKENTYPE_IF: return parse_if_stmt(ctx);
+        case TOKENTYPE_WHILE: return parse_while_stmt(ctx);
+        case TOKENTYPE_IDENT: {
+            t = ahead(ctx, 1);
+            if (t.has_value && (t.value.type == TOKENTYPE_DOUBLECOLON || t.value.type == TOKENTYPE_EQ)) {
+                return parse_expr_stmt(ctx);
+            } else {
+                FALLTHROUGH
+            }
+        }
+        case TOKENTYPE_MUT: return parse_var_stmt(ctx);
+        default: break;
+    }
+
+    return parse_expr_stmt(ctx);
+}
+
+Stmt *parse_block_stmt(Parser *ctx) {
+    consume(ctx);
+
+    stmts_array stmts;
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        stmts_array_push(&stmts, parse_stmt(ctx));
+        t = peek(ctx);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'\n");
+
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_BLOCK;
+    s->block.stmts = stmts;
+
+    return s;
+}
+
+StructDecl *parse_struct_decl(Parser *ctx) {
+    StructDecl *str = arena_calloc(ctx->arena, sizeof(StructDecl));
+    collect_attributes(ctx, &str->attributes);
+    consume(ctx);
+
+    Token name = expect(ctx, TOKENTYPE_IDENT, "Expected struct name\n");
+    str->name = name.value.value;
+
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'\n");
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        TypeRef *type = parse_type(ctx);
+        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected member name\n");
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->type = type;
+        decl->name = name.value.value;
+        vardecls_array_push(&str->members, decl);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'\n");
+
+    return str;
+}
+
+UnionDecl *parse_union_decl(Parser *ctx) {
+    UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
+    collect_attributes(ctx, &un->attributes);
+    consume(ctx);
+
+    Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name\n");
+    un->name = name.value.value;
+
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'\n");
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        TypeRef *type = parse_type(ctx);
+        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected member name\n");
+        consume(ctx);
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->type = type;
+        decl->name = name.value.value;
+        vardecls_array_push(&un->members, decl);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'\n");
+
+    return un;
+}
+
+FnDecl *parse_fn_decl(Parser *ctx) {
+    FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
+    collect_attributes(ctx, &fn->attributes);
+    consume(ctx);
+
+    TypeRef *ret_type = parse_type(ctx);
+    Token fn_name = expect(ctx, TOKENTYPE_IDENT, "Expected fn name\n");
+    expect(ctx, TOKENTYPE_LPAREN, "Expected '('\n");
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
+        attr_array attrs;
+        collect_attributes(ctx, &attrs);
+
+        TypeRef *param_type = parse_type(ctx);
+        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected param name\n");
+
+        Param p = (Param){
+            .type = param_type,
+            .name = name.value.value,
+            .attributes = attrs,
+        };
+
+        param_array_push(&fn->params, p);
+        t = peek(ctx);
+        if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;
+        consume(ctx);
+        t = peek(ctx);
+    }
+    consume(ctx);
+
+    t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
+        fn->body = parse_block_stmt(ctx);
+    }
+
+    fn->name = fn_name.value.value;
+    fn->ret_type = ret_type;
+
+    return fn;
+}
+
+Decl *parse_decl(Parser *ctx) {
+    Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
+    attr_array attrs;
+    collect_attributes(ctx, &attrs);
+
+    token_optional t = peek(ctx);
+    if (!t.has_value) {
+        printf("Unexpected end of file\n");
+        exit(1);
+    }
+
+    switch (t.value.type) {
+        case TOKENTYPE_FN: {
+            d->type = DECL_FN;
+            d->fn = parse_fn_decl(ctx);
+            break;
+        }
+        case TOKENTYPE_STRUCT: {
+            d->type = DECL_STRUCT;
+            d->_struct = parse_struct_decl(ctx);
+            break;
+        }
+        case TOKENTYPE_UNION: {
+            d->type = DECL_UNION;
+            d->_union =parse_union_decl(ctx);
+            break;
+        }
+        default: {
+            printf("Expected decl got %d\n", t.value.type);
+            exit(1);
+        }
+    }
+
+    return d;
+}
+
+Module *parse_module(Parser *ctx) {
+    expect(ctx, TOKENTYPE_MODULE, "Expected module\n");
+
+    Module *m = arena_calloc(ctx->arena, sizeof(Module));
+
+    Token modname = expect(ctx, TOKENTYPE_IDENT, "Expected module name\n");
+    m->name = modname.value.value;
+
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'\n");
+
+    token_optional t = peek(ctx);
+    while (t.has_value) {
+        if (t.value.type != TOKENTYPE_INCLUDE) break;
+        includes_array_push(&m->includes, parse_include(ctx));
+        t = peek(ctx);
+    }
+
+    while (t.has_value) {
+        decls_array_push(&m->decls, parse_decl(ctx));
+    }
+
+    return m;
 }

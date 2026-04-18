@@ -5,17 +5,17 @@
 #include "string.h"
 
 INSTANTIATE(char, char, ARRAY_TEMPLATE)
-INSTANTIATE(char, char, OPTIONAL_TEMPLATAE)
+INSTANTIATE(char, char, OPTIONAL_TEMPLATE)
 
 static char_optional peek(Lexer *ctx) {
     if (ctx->source.index >= ctx->source.contents.length) {
-        return char_optional_empty;
+        return (char_optional){false};
     }
     return (char_optional){true, ctx->source.contents.data[ctx->source.index]};
 }
 
 static char consume(Lexer *ctx) {
-    char c = string_at(ctx->source.contents, ctx->source.index);
+    char c = string_at(ctx->source.contents, ctx->source.index++);
     if (c == '\n') {
         ctx->line++;
         ctx->col = 1;
@@ -52,7 +52,7 @@ static Keyword keywords[] = {
     {"null", TOKENTYPE_NULL}
 };
 
-Token decode_ident(Lexer *ctx, char_array *buf) {
+static Token decode_ident(Lexer *ctx, char_array *buf) {
     for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
         Keyword *k = keywords + i;
         if (strcmp(buf->data, k->name) == 0) {
@@ -63,7 +63,7 @@ Token decode_ident(Lexer *ctx, char_array *buf) {
     return (Token){ .type = TOKENTYPE_IDENT, .value = arena_strdup(ctx->arena, buf->data) };
 }
 
-char decode_esc(Lexer *ctx) {
+static char decode_esc(Lexer *ctx) {
     if (peek(ctx).has_value && peek(ctx).value == '\\') {
         consume(ctx);
         if (!peek(ctx).has_value) return 0xFF;
@@ -94,36 +94,49 @@ token_array lex(Lexer *ctx) {
     token_array tokens = {};
     char_array buffer = {};
 
-    while (peek(ctx).has_value) {
+    char_optional p = peek(ctx);
+
+    while (p.has_value) {
+        // putc(c.value, stderr);
         char_array_clear(&buffer);
 
         size_t start = ctx->source.index;
 
         bool not_pushed = false;
 
-        if (isspace(peek(ctx).value)) {
+        if (isspace((unsigned char)p.value)) {
             consume(ctx);
+            p = peek(ctx);
+            while (p.has_value && isspace((unsigned char)p.value)) {
+                consume(ctx);
+                p = peek(ctx);
+            }
             not_pushed = true;
         }
-        else if (isalpha(peek(ctx).value)) {
+        
+        if (isalpha((unsigned char)p.value)) {
             char_array_push(&buffer, consume(ctx));
-            while (peek(ctx).has_value && (isalnum(peek(ctx).value || peek(ctx).value == '_'))) {
+            p = peek(ctx);
+            while (p.has_value && (isalpha((unsigned char)p.value) || p.value == '_')) {
                 char_array_push(&buffer, consume(ctx));
+                p = peek(ctx);
             }
 
             token_array_push(&tokens, decode_ident(ctx, &buffer));
         }
-        else if (isdigit(peek(ctx).value)) {
+        else if (isdigit((unsigned char)p.value)) {
             char_array_push(&buffer, consume(ctx));
-            while (peek(ctx).has_value && isdigit(peek(ctx).value)) {
+            p = peek(ctx);
+            while (p.has_value && isdigit((unsigned char)p.value)) {
                 char_array_push(&buffer, consume(ctx));
+                p = peek(ctx);
             }
-
 
             token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = arena_strdup(ctx->arena, buffer.data)});
         }
         else {
-            switch (consume(ctx)) {
+            char c = consume(ctx);
+            switch (c) {
                 case '@': {
                     token_array_push(&tokens, (Token){ .type = TOKENTYPE_AT });
                     break;
@@ -301,19 +314,20 @@ token_array lex(Lexer *ctx) {
                     break;
                 }
                 default: {
-                    printf("Unknown character\n");
+                    printf("Unknown character 0x%02X\n", c);
                     exit(1);
                 }
             }
         }
 
-        Token *last = tokens.data + tokens.idx;
-
         if (!not_pushed) {
+            Token *last = tokens.data + tokens.idx - 1;
             last->span = (Span){ .start = start, .length = ctx->source.index - start };
+            last->line = ctx->line;
+            last->col = ctx->col;
         }
-        last->line = ctx->line;
-        last->col = ctx->col;
+
+        p = peek(ctx);
     }
 
     ctx->source.index = 0;
