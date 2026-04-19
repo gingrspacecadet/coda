@@ -750,6 +750,8 @@ Module *parse_module(Parser *ctx) {
     expect(ctx, TOKENTYPE_MODULE, "Expected module");
 
     Module *m = arena_calloc(ctx->arena, sizeof(Module));
+    m->includes = includes_array_init();
+    m->decls = decls_array_init();
 
     Token modname = expect(ctx, TOKENTYPE_IDENT, "Expected module name");
     m->name = modname.value.value;
