@@ -44,5 +44,5 @@ int main(void) {
 
     Module *module = parse_module(&parser);
     
-    printf("Module name %s\n", module->name);
+    printf("Module name %.*s\n", module->name.length, module->name.data);
 }

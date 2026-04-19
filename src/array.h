@@ -35,6 +35,11 @@ static inline void N##_array##_push(N##_array *v, T item) { \
     } \
     v->data[v->idx++] = item; \
 } \
+static inline void N##_array_append(N##_array *v, size_t num, T item) { \
+    for (size_t i = 0; i < num; i++) { \
+        N##_array_push(v, item); \
+    } \
+} \
 static inline void N##_array##_free(N##_array *v) { \
     free(v->data); \
     v->idx = v->cap = 0; \

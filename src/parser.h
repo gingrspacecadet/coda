@@ -25,9 +25,9 @@ Stmt *parse_var_stmt(Parser *ctx);
 Stmt *parse_expr_stmt(Parser *ctx);
 Stmt *parse_stmt(Parser *ctx);
 Stmt *parse_block_stmt(Parser *ctx);
-StructDecl *parse_struct_decl(Parser *ctx);
-UnionDecl *parse_union_decl(Parser *ctx);
-FnDecl *parse_fn_decl(Parser *ctx);
+StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs);
+UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs);
+FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs);
 Decl *parse_decl(Parser *ctx);
 Module *parse_module(Parser *ctx);
 

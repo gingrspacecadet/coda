@@ -56,11 +56,11 @@ static Token decode_ident(Lexer *ctx, char_array *buf) {
     for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
         Keyword *k = keywords + i;
         if (strcmp(buf->data, k->name) == 0) {
-            return (Token){ .type = k->type, .value = arena_strdup(ctx->arena, buf->data) };
+            return (Token){ .type = k->type };
         }
     }
 
-    return (Token){ .type = TOKENTYPE_IDENT, .value = arena_strdup(ctx->arena, buf->data) };
+    return (Token){ .type = TOKENTYPE_IDENT, .value = (string_optional){true, arena_strdup(ctx->arena, buf->data)} };
 }
 
 static char decode_esc(Lexer *ctx) {
@@ -97,12 +97,11 @@ token_array lex(Lexer *ctx) {
     char_optional p = peek(ctx);
 
     while (p.has_value) {
-        // putc(c.value, stderr);
         char_array_clear(&buffer);
 
         size_t start = ctx->source.index;
 
-        bool not_pushed = false;
+        bool comment = false;
 
         if (isspace((unsigned char)p.value)) {
             consume(ctx);
@@ -111,7 +110,8 @@ token_array lex(Lexer *ctx) {
                 consume(ctx);
                 p = peek(ctx);
             }
-            not_pushed = true;
+            
+            continue;
         }
         
         if (isalpha((unsigned char)p.value)) {
@@ -122,6 +122,8 @@ token_array lex(Lexer *ctx) {
                 p = peek(ctx);
             }
 
+            char_array_push(&buffer, '\0');
+
             token_array_push(&tokens, decode_ident(ctx, &buffer));
         }
         else if (isdigit((unsigned char)p.value)) {
@@ -131,8 +133,10 @@ token_array lex(Lexer *ctx) {
                 char_array_push(&buffer, consume(ctx));
                 p = peek(ctx);
             }
+            
+            char_array_push(&buffer, '\0');
 
-            token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = arena_strdup(ctx->arena, buffer.data)});
+            token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, buffer.data)}});
         }
         else {
             char c = consume(ctx);
@@ -143,20 +147,21 @@ token_array lex(Lexer *ctx) {
                 }
                 case '\'': {
                     char c = decode_esc(ctx);
-                    if (!peek(ctx).value || peek(ctx).value != '\'') {
+                    if (!peek(ctx).has_value || peek(ctx).value != '\'') {
                         printf("Unterminated character literal\n"); //TODO: nice errors
                         exit(1);
                     }
                     consume(ctx);
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_CHAR_LIT, .value = arena_strdup(ctx->arena, (char[]){c, '\0'})});
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_CHAR_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, (char[]){c, '\0'})}});
                     break;
                 }
                 case '"': {
                     while (peek(ctx).has_value && peek(ctx).value != '"') {
                         char_array_push(&buffer, decode_esc(ctx));
                     }
+                    char_array_push(&buffer, '\0');
                     consume(ctx);
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_STR_LIT, .value = arena_strdup(ctx->arena, buffer.data)});
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_STR_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, buffer.data)}});
                     char_array_clear(&buffer);
                     break;
                 }
@@ -165,7 +170,7 @@ token_array lex(Lexer *ctx) {
                         consume(ctx);
                         while (peek(ctx).has_value && peek(ctx).value != '\n') {
                             consume(ctx);
-                            not_pushed = true;
+                            comment = true;
                         }
                     } else {
                         if (peek(ctx).has_value && peek(ctx).value == '=') {
@@ -320,7 +325,7 @@ token_array lex(Lexer *ctx) {
             }
         }
 
-        if (!not_pushed) {
+        if (!comment) {
             Token *last = tokens.data + tokens.idx - 1;
             last->span = (Span){ .start = start, .length = ctx->source.index - start };
             last->line = ctx->line;
