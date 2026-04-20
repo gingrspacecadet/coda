@@ -1,0 +1,6 @@
+{
+  "name": "Arch Linux Codespace",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "codespace",
+  "postCreateCommand": "echo 'Arch devcontainer ready!'"
+}

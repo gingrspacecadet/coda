@@ -1,9 +1,8 @@
 {
-    "C_Cpp.errorSquiggles": "enabled",
     "makefile.launchConfigurations": [
         {
-            "cwd": "/home/gingrspacecadet/dev/c/coda",
-            "binaryPath": "/home/gingrspacecadet/dev/c/coda/coda",
+            "cwd": "/workspaces/coda",
+            "binaryPath": "/workspaces/coda/coda",
             "binaryArgs": []
         }
     ]
