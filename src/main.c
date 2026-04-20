@@ -7,11 +7,19 @@
 // this is completely unsafe lmao
 char *read_file(char *path) {
     FILE *f = fopen(path, "r");
+    if (!f) {
+        perror("Failed to open file");
+        exit(1);
+    }
     fseek(f, 0, SEEK_END);
     size_t fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
     char *data = malloc(fsize + 1);
+    if (!data) {
+        perror("Failed to allocate memory for file");
+        exit(1);
+    }
     fread(data, fsize, 1, f);
     fclose(f);
     data[fsize] = 0;

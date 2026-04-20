@@ -20,9 +20,9 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     token_optional t = peek(ctx);
 
     if (!t.has_value) {
-        printf(BOLD_WHITE "%s:0:0: " RED "error: " RESET "%s\n" 
+        printf(BOLD_WHITE "%.*s:0:0: " RED "error: " RESET "%s\n" 
                RED "error: " RESET "at end of file\n", 
-               ctx->lexer.source.path, msg);
+               ctx->lexer.source.path.length, ctx->lexer.source.path.data, msg);
         exit(1);
     }
 
@@ -51,6 +51,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
         if (c == '\t') char_array_append(&printable_line, 4, ' ');
         else char_array_push(&printable_line, c);
     }
+    char_array_push(&printable_line, '\0');
 
     size_t caret_pos = 0;
     for (size_t i = 0; i < (span_start - line_start); i++) {
@@ -71,7 +72,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
         caret_len = cols > 1 ? cols : 1;
     }
 
-    printf(BOLD_WHITE "%s:%ld:%ld: " RED "error: " RESET "%s\n", ctx->lexer.source.path.data, t.value.line, col, msg);
+    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", ctx->lexer.source.path.length, ctx->lexer.source.path.data, t.value.line, col, msg);
 
     printf("%ld | %s\n", t.value.line, printable_line.data);
 
@@ -92,6 +93,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     char_array_append(&underline, caret_pos, ' ');
     char_array_push(&underline, '^');
     char_array_append(&underline, caret_len - 1, '~');
+    char_array_push(&underline, '\0');
 
     printf("%s" RESET "\n", underline.data);
 

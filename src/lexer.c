@@ -60,18 +60,17 @@ static Token decode_ident(Lexer *ctx, char_array *buf) {
         }
     }
 
-    return (Token){ .type = TOKENTYPE_IDENT, .value = (string_optional){true, arena_strdup(ctx->arena, buf->data)} };
+    char *type_name = arena_strdup(ctx->arena, buf->data);
+    String name_str = { .data = type_name, .length = strlen(type_name) };
+    return (Token){ .type = TOKENTYPE_IDENT, .value = (string_optional){true, name_str} };
 }
 
 static char decode_esc(Lexer *ctx) {
     if (peek(ctx).has_value && peek(ctx).value == '\\') {
         consume(ctx);
         if (!peek(ctx).has_value) return 0xFF;
-        char c = peek(ctx).value;
-        consume(ctx);
-
-        if (!peek(ctx).has_value) return 0xFF;
-        switch (peek(ctx).value) {
+        char c = consume(ctx);
+        switch (c) {
             case 'n': return '\n';
             case 't': return '\t';
             case 'r': return '\r';
@@ -136,7 +135,9 @@ token_array lex(Lexer *ctx) {
             
             char_array_push(&buffer, '\0');
 
-            token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, buffer.data)}});
+            char *num_str = arena_strdup(ctx->arena, buffer.data);
+            String num_string = { .data = num_str, .length = strlen(num_str) };
+            token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = (string_optional){true, num_string} });
         }
         else {
             char c = consume(ctx);
@@ -152,7 +153,9 @@ token_array lex(Lexer *ctx) {
                         exit(1);
                     }
                     consume(ctx);
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_CHAR_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, (char[]){c, '\0'})}});
+                    char *char_str = arena_strdup(ctx->arena, (char[]){c, '\0'});
+                    String char_string = { .data = char_str, .length = 1 };
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_CHAR_LIT, .value = (string_optional){true, char_string}});
                     break;
                 }
                 case '"': {
@@ -161,7 +164,9 @@ token_array lex(Lexer *ctx) {
                     }
                     char_array_push(&buffer, '\0');
                     consume(ctx);
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_STR_LIT, .value = (string_optional){true, arena_strdup(ctx->arena, buffer.data)}});
+                    char *str = arena_strdup(ctx->arena, buffer.data);
+                    String str_string = { .data = str, .length = strlen(str) };
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_STR_LIT, .value = (string_optional){true, str_string}});
                     char_array_clear(&buffer);
                     break;
                 }
