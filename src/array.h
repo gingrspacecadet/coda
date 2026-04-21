@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include "instantiate.h"
 
 #define ARRAY_TEMPLATE(T, N) \
@@ -11,6 +13,7 @@ typedef struct { \
     T *data; \
     size_t idx; \
     size_t cap; \
+    bool alive; \
 } N##_array; \
 static N##_array N##_array_empty = {}; \
 static inline N##_array N##_array##_init(void) { \
@@ -22,9 +25,14 @@ static inline N##_array N##_array##_init(void) { \
     } \
     v.idx = 0; \
     v.cap = 1; \
+    v.alive = true; \
     return v; \
 } \
 static inline void N##_array##_push(N##_array *v, T item) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_push: uninitialised array\n"); \
+        exit(1); \
+    } \
     if (v->idx == v->cap) { \
         v->cap = v->cap ? v->cap * 2 : 8; \
         v->data = (T*)realloc(v->data, v->cap * sizeof(T)); \
@@ -36,18 +44,34 @@ static inline void N##_array##_push(N##_array *v, T item) { \
     v->data[v->idx++] = item; \
 } \
 static inline void N##_array_append(N##_array *v, size_t num, T item) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_append: uninitialised array\n"); \
+        exit(1); \
+    } \
     for (size_t i = 0; i < num; i++) { \
         N##_array_push(v, item); \
     } \
 } \
 static inline void N##_array##_free(N##_array *v) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_free: uninitialised array\n"); \
+        exit(1); \
+    } \
     free(v->data); \
     v->idx = v->cap = 0; \
 } \
 static inline T N##_array##_at(N##_array *v, size_t idx) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_at: uninitialised array\n"); \
+        exit(1); \
+    } \
     return v->data[idx >= v->idx ? (v->cap - 1) : idx]; \
 } \
 static inline void N##_array##_resize(N##_array *v, size_t elems) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_resize: uninitialised array\n"); \
+        exit(1); \
+    } \
     if (elems < v->cap) return; \
     v->data = (T*)realloc(v->data, elems * sizeof(T)); \
     if (!v->data) { \
@@ -57,6 +81,10 @@ static inline void N##_array##_resize(N##_array *v, size_t elems) { \
     v->cap = elems; \
 } \
 static inline void N##_array_clear(N##_array *v) { \
+    if (!v->alive) { \
+        fprintf(stderr, #N "_array_clear: uninitialised array\n"); \
+        exit(1); \
+    } \
     v->idx = 0; \
 } \
 

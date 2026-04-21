@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "lexer.h"
 #include "parser.h"
+#include "sema.h"
 #include "arena.h"
 
 // this is completely unsafe lmao
@@ -51,6 +52,6 @@ int main(void) {
     };
 
     Module *module = parse_module(&parser);
-    
-    printf("Module name %.*s\n", module->name.length, module->name.data);
+
+    Analyser analyser = analyser_init(module, lexer.arena);
 }

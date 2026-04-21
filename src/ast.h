@@ -161,7 +161,7 @@ struct Expr {
         } cast;
     };
 
-    TypeRef *resolved_Type;
+    TypeRef *resolved_type;
     Symbol *symbol;
     bool is_constant;
 };

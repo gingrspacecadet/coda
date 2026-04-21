@@ -4,6 +4,11 @@
             "cwd": "/workspaces/coda",
             "binaryPath": "/workspaces/coda/coda",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/gingrspacecadet/dev/c/coda",
+            "binaryPath": "/home/gingrspacecadet/dev/c/coda/coda",
+            "binaryArgs": []
         }
     ]
 }

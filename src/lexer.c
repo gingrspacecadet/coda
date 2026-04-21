@@ -90,8 +90,8 @@ token_array lex(Lexer *ctx) {
     if (!ctx->source.contents.data) return token_array_empty;
     if (!ctx->arena) return token_array_empty;
 
-    token_array tokens = {};
-    char_array buffer = {};
+    token_array tokens = token_array_init();
+    char_array buffer = char_array_init();
 
     char_optional p = peek(ctx);
 

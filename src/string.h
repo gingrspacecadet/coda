@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <stdbool.h>
 
 typedef struct {
     char *data;
@@ -22,6 +23,15 @@ static String string_make(char *cstr) {
         .data = cstr,
         .length = strlen(cstr)
     };
+}
+
+static size_t string_cmp(String a, String b) {
+    return strncmp(a.data, b.data, a.length);
+}
+
+static bool string_find(String str, String needle) {
+    char *found = memmem(str.data, str.length, needle.data, needle.length);
+    return found ? true : false;
 }
 
 #endif

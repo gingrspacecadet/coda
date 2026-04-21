@@ -643,6 +643,7 @@ StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
 UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
     UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
     un->attributes = attrs;
+    un->members = vardecls_array_init();
     consume(ctx);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name");
@@ -672,6 +673,7 @@ UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
 FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
     FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
     fn->attributes = attrs;
+    fn->params = param_array_init();
     consume(ctx);
 
     TypeRef *ret_type = parse_type(ctx);

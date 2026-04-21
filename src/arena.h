@@ -4,9 +4,10 @@
 #include <stddef.h>
 
 typedef struct {
-    void *data;
-    size_t index;
-    size_t capacity;
+    void **blocks;
+    size_t block_count;
+    size_t block_size;
+    size_t current_index;
 } Arena;
 
 Arena *arena_create();
