@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "sema.h"
 #include "arena.h"
+#include "error.h"
 
 // this is completely unsafe lmao
 char *read_file(char *path) {
@@ -41,13 +42,13 @@ int main(void) {
         .arena = arena_create(),
         .source = setup_source("test/main.coda")
     };
+    error_set_source(lexer.source);
 
     token_array tokens = lex(&lexer);
 
     Parser parser = {
         .arena = lexer.arena,
         .index = 0,
-        .lexer = lexer,
         .tokens = tokens,
     };
 

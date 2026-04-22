@@ -6,6 +6,7 @@
 #include "array.h"
 #include "optional.h"
 #include "arena.h"
+#include "lexer.h"
 
 INSTANTIATE(String, string, ARRAY_TEMPLATE)
 
@@ -69,6 +70,7 @@ typedef enum {
 typedef struct {
     String name;
     string_array args;
+    Token token;
 } Attribute;
 
 struct TypeRef {
@@ -93,6 +95,7 @@ struct TypeRef {
     bool is_mutable;
     bool is_optional;
     Symbol *type_symbol;
+    Token token;
 };
 
 struct Literal {
@@ -111,6 +114,7 @@ struct Literal {
         bool _bool;
         char _char;
     };
+    Token token;
 };
 
 struct Expr {
@@ -164,6 +168,7 @@ struct Expr {
     TypeRef *resolved_type;
     Symbol *symbol;
     bool is_constant;
+    Token token;
 };
 
 INSTANTIATE(Stmt *, stmts, ARRAY_TEMPLATE)
@@ -210,6 +215,7 @@ struct Stmt {
     };
 
     Scope *scope;
+    Token token;
 };
 
 INSTANTIATE(Attribute, attr, ARRAY_TEMPLATE)
@@ -219,6 +225,7 @@ struct Param {
     String name;
     attr_array attributes;
     Symbol *symbol;
+    Token token;
 };
 
 struct VarDecl {
@@ -229,6 +236,7 @@ struct VarDecl {
     Symbol *symbol;
     bool is_mutable;
     bool is_def_init;
+    Token token;
 };
 
 INSTANTIATE(Param, param, ARRAY_TEMPLATE)
@@ -242,6 +250,7 @@ struct FnDecl {
     Symbol *symbol;
     Scope *local_scope;
     bool is_export;
+    Token token;
 };
 
 struct Decl {
@@ -258,6 +267,7 @@ struct Decl {
         UnionDecl *_union;
     };
     Symbol *symbol;
+    Token token;
 };
 
 INSTANTIATE(VarDecl *, vardecls, ARRAY_TEMPLATE)
@@ -272,6 +282,7 @@ struct StructDecl {
     size_t align;
     size_array field_offsets;
     bool is_export;
+    Token token;
 };
 
 struct UnionDecl {
@@ -282,6 +293,7 @@ struct UnionDecl {
     size_t size;
     size_t align;
     bool is_export;
+    Token token;
 };
 
 INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
@@ -290,6 +302,7 @@ struct Include {
     string_array path;
     string_optional alias;
     Module *resolved;
+    Token token;
 };
 
 struct Symbol {
@@ -298,6 +311,7 @@ struct Symbol {
     TypeRef *type;
     uint32_t flags;
     Scope *defined_in;
+    Token token;
 };
 
 INSTANTIATE(Symbol*, syms, ARRAY_TEMPLATE)
@@ -315,6 +329,7 @@ struct Module {
     includes_array includes;
     decls_array decls;
     Scope *scope;
+    Token token;
 
     Arena *arena;
 };

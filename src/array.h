@@ -11,7 +11,7 @@
 #define ARRAY_TEMPLATE(T, N) \
 typedef struct { \
     T *data; \
-    size_t idx; \
+    size_t len; \
     size_t cap; \
     bool alive; \
 } N##_array; \
@@ -23,7 +23,7 @@ static inline N##_array N##_array##_init(void) { \
         fprintf(stderr, #N "_array_init: malloc failed\n"); \
         exit(1); \
     } \
-    v.idx = 0; \
+    v.len = 0; \
     v.cap = 1; \
     v.alive = true; \
     return v; \
@@ -33,7 +33,7 @@ static inline void N##_array##_push(N##_array *v, T item) { \
         fprintf(stderr, #N "_array_push: uninitialised array\n"); \
         exit(1); \
     } \
-    if (v->idx == v->cap) { \
+    if (v->len == v->cap) { \
         v->cap = v->cap ? v->cap * 2 : 8; \
         v->data = (T*)realloc(v->data, v->cap * sizeof(T)); \
         if (!v->data) { \
@@ -41,7 +41,7 @@ static inline void N##_array##_push(N##_array *v, T item) { \
             exit(1); \
         } \
     } \
-    v->data[v->idx++] = item; \
+    v->data[v->len++] = item; \
 } \
 static inline void N##_array_append(N##_array *v, size_t num, T item) { \
     if (!v->alive) { \
@@ -58,14 +58,14 @@ static inline void N##_array##_free(N##_array *v) { \
         exit(1); \
     } \
     free(v->data); \
-    v->idx = v->cap = 0; \
+    v->len = v->cap = 0; \
 } \
-static inline T N##_array##_at(N##_array *v, size_t idx) { \
+static inline T N##_array##_at(N##_array *v, size_t len) { \
     if (!v->alive) { \
         fprintf(stderr, #N "_array_at: uninitialised array\n"); \
         exit(1); \
     } \
-    return v->data[idx >= v->idx ? (v->cap - 1) : idx]; \
+    return v->data[len >= v->len ? (v->cap - 1) : len]; \
 } \
 static inline void N##_array##_resize(N##_array *v, size_t elems) { \
     if (!v->alive) { \
@@ -85,7 +85,7 @@ static inline void N##_array_clear(N##_array *v) { \
         fprintf(stderr, #N "_array_clear: uninitialised array\n"); \
         exit(1); \
     } \
-    v->idx = 0; \
+    v->len = 0; \
 } \
 
 #endif

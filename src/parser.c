@@ -7,12 +7,12 @@
 INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
 
 static token_optional peek(Parser *ctx) {
-    if (ctx->index >= ctx->tokens.idx) return (token_optional){};
+    if (ctx->index >= ctx->tokens.len) return (token_optional){};
     return (token_optional){true, ctx->tokens.data[ctx->index]};
 }
 
 static token_optional ahead(Parser *ctx, size_t ahead) {
-    if (ctx->index + ahead >= ctx->tokens.idx) return (token_optional){};
+    if (ctx->index + ahead >= ctx->tokens.len) return (token_optional){};
     return (token_optional){true, ctx->tokens.data[ctx->index + ahead]};
 }
 
@@ -31,8 +31,7 @@ static Token expect(Parser *ctx, TokenType type, char *msg) {
 
 Include *parse_include(Parser *ctx) {
     Include *inc = arena_calloc(ctx->arena, sizeof(Include));
-
-    consume(ctx);
+    inc->token = consume(ctx);
 
     while (true) {
         token_optional t = peek(ctx);
@@ -63,6 +62,7 @@ void collect_attributes(Parser *ctx, attr_array *out) {
         Token name = consume(ctx);
         Attribute attr;
         attr.name = name.value.value;
+        attr.token = name;
 
         // handle args here
 
@@ -92,6 +92,9 @@ TypeRef *parse_type(Parser *ctx) {
     base->type = TYPEREF_NAMED;
     base->named.name = type_name;
     base->is_mutable = is_mut;
+    if (t.has_value) {
+        base->token = first.value;
+    }
 
     while (true) {
         token_optional t = peek(ctx);
@@ -112,6 +115,7 @@ TypeRef *parse_type(Parser *ctx) {
             ptr->type = TYPEREF_POINTER;
             ptr->pointer.pointee = base;
             ptr->is_mutable = is_mut;
+            ptr->token = star_tok;
 
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
@@ -143,6 +147,7 @@ TypeRef *parse_type(Parser *ctx) {
             array->array.elem = base;
             array->array.length = length;
             array->is_mutable = is_mut;
+            array->token = lb;
 
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
@@ -208,6 +213,7 @@ static int token_to_unary(TokenType type, UnaryOp *out) {
 Expr *expr_new_lit(Parser *ctx, Token *t) {
     Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
     e->type = EXPR_LIT;
+    e->token = *t;
     
     if (t->type == TOKENTYPE_INT_LIT) {
         e->literal = (Literal){
@@ -254,8 +260,9 @@ Expr *expr_new_ident(Parser *ctx, Token *t) {
     }
 
     Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
+    e->token = *t;
 
-    if (comps.idx == 1) {
+    if (comps.len == 1) {
         e->type = EXPR_IDENT;
         e->ident.name = comps.data[0];
     } else {
@@ -297,12 +304,13 @@ Expr *parse_expr_prefix(Parser *ctx) {
 
     UnaryOp uop;
     if (token_to_unary(t.value.type, &uop)) {
-        consume(ctx);
+        Token start = consume(ctx);
         Expr *operand = parse_expr(ctx, 80);
         Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
         e->type = EXPR_UNARY;
         e->unary.op = uop;
         e->unary.operand = operand;
+        e->token = start;
         return e;
     }
 
@@ -326,25 +334,27 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
                 }
             }
 
-            consume(ctx);
+            Token start = consume(ctx);
             Expr *call = arena_calloc(ctx->arena, sizeof(Expr));
             call->type = EXPR_CALL;
             call->call.callee = left;
             call->call.args = args;
+            call->token = start;
             left = call;
             continue;
         } else if (next.has_value && next.value.type == TOKENTYPE_LBRACK) {
             Token lb = consume(ctx);
-            Expr *idx = parse_expr(ctx, 0);
+            Expr *len = parse_expr(ctx, 0);
             Token rb = consume(ctx);
             if (rb.type != TOKENTYPE_RBRACK) {
                 error(ctx, "Expected ']'");
             }
 
             Expr *index = arena_calloc(ctx->arena, sizeof(Expr));
+            index->token = lb;
             index->type = EXPR_INDEX;
             index->index.base = left;
-            index->index.index = idx;
+            index->index.index = len;
 
             left = index;
             continue;
@@ -356,6 +366,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
                 error(ctx, "Expected member name after '.'");
             }
             Expr *m = arena_calloc(ctx->arena, sizeof(Expr));
+            m->token = mem;
             m->type = EXPR_MEMBER;
             m->member.base = left;
             m->member.member = mem.value.value;
@@ -404,7 +415,7 @@ Expr *parse_expr(Parser *ctx, int min_bp) {
 }
 
 Stmt *parse_return_stmt(Parser *ctx) {
-    consume(ctx);
+    Token start = consume(ctx);
     Expr *value = NULL;
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != TOKENTYPE_SEMICOLON) {
@@ -414,6 +425,7 @@ Stmt *parse_return_stmt(Parser *ctx) {
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected semicolon");
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = start;
     s->type = STMT_RETURN;
     s->_return.value = value;
 
@@ -421,7 +433,7 @@ Stmt *parse_return_stmt(Parser *ctx) {
 }
 
 Stmt *parse_for_stmt(Parser *ctx) {
-    consume(ctx);
+    Token start = consume(ctx);
 
     expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
 
@@ -459,6 +471,7 @@ Stmt *parse_for_stmt(Parser *ctx) {
     Stmt *body = parse_block_stmt(ctx);
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = start;
     s->type = STMT_FOR;
     s->_for.init = init;
     s->_for.cond = cond;
@@ -469,7 +482,7 @@ Stmt *parse_for_stmt(Parser *ctx) {
 }
 
 Stmt *parse_if_stmt(Parser *ctx) {
-    consume(ctx);
+    Token start = consume(ctx);
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) {
         error(ctx, "Expected '('");
@@ -494,6 +507,7 @@ Stmt *parse_if_stmt(Parser *ctx) {
     }
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = start;
     s->type = STMT_IF;
     s->_if.cond = cond;
     s->_if.then = then;
@@ -503,7 +517,7 @@ Stmt *parse_if_stmt(Parser *ctx) {
 }
 
 Stmt *parse_while_stmt(Parser *ctx) {
-    consume(ctx);
+    Token start = consume(ctx);
 
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) {
@@ -518,6 +532,7 @@ Stmt *parse_while_stmt(Parser *ctx) {
     Stmt *body = parse_block_stmt(ctx);
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = start;
     s->type = STMT_WHILE;
     s->_while.cond = cond;
     s->_while.body = body;
@@ -536,6 +551,7 @@ Stmt *parse_var_stmt(Parser *ctx) {
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected variable name");
 
     VarDecl *v = arena_calloc(ctx->arena, sizeof(VarDecl));
+    v->token = name;
     v->type = type;
     v->name = name.value.value;
 
@@ -547,6 +563,7 @@ Stmt *parse_var_stmt(Parser *ctx) {
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = name;
     s->type = STMT_VAR;
     s->var = v;
 
@@ -558,6 +575,7 @@ Stmt *parse_expr_stmt(Parser *ctx) {
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = e->token;
     s->type = STMT_EXPR;
     s->expr = e;
 
@@ -593,7 +611,7 @@ Stmt *parse_stmt(Parser *ctx) {
 }
 
 Stmt *parse_block_stmt(Parser *ctx) {
-    consume(ctx);
+    Token start = consume(ctx);
 
     stmts_array stmts = stmts_array_init();
     token_optional t = peek(ctx);
@@ -605,6 +623,7 @@ Stmt *parse_block_stmt(Parser *ctx) {
     expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->token = start;
     s->type = STMT_BLOCK;
     s->block.stmts = stmts;
 
@@ -628,6 +647,7 @@ StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
         expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
 
         VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->token = name;
         decl->type = type;
         decl->name = name.value.value;
         vardecls_array_push(&str->members, decl);
@@ -641,10 +661,11 @@ StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
 }
 
 UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
+    Token start = consume(ctx);
     UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
+    un->token = start;
     un->attributes = attrs;
     un->members = vardecls_array_init();
-    consume(ctx);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name");
     un->name = name.value.value;
@@ -658,6 +679,7 @@ UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
         expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
 
         VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->token = name;
         decl->type = type;
         decl->name = name.value.value;
         vardecls_array_push(&un->members, decl);
@@ -671,10 +693,11 @@ UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
 }
 
 FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
+    Token start = consume(ctx);
     FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
+    fn->token = start;
     fn->attributes = attrs;
     fn->params = param_array_init();
-    consume(ctx);
 
     TypeRef *ret_type = parse_type(ctx);
     Token fn_name = expect(ctx, TOKENTYPE_IDENT, "Expected fn name");
@@ -727,20 +750,22 @@ Decl *parse_decl(Parser *ctx) {
         case TOKENTYPE_FN: {
             d->type = DECL_FN;
             d->fn = parse_fn_decl(ctx, attrs);
+            d->token = d->fn->token;
             break;
         }
         case TOKENTYPE_STRUCT: {
             d->type = DECL_STRUCT;
             d->_struct = parse_struct_decl(ctx, attrs);
+            d->token = d->_struct->token;
             break;
         }
         case TOKENTYPE_UNION: {
             d->type = DECL_UNION;
-            d->_union =parse_union_decl(ctx, attrs);
+            d->_union = parse_union_decl(ctx, attrs);
+            d->token = d->_union->token;
             break;
         }
         default: {
-            printf("%d\n", t.value.type);
             error(ctx, "Expected declaration");
         }
     }
@@ -749,9 +774,10 @@ Decl *parse_decl(Parser *ctx) {
 }
 
 Module *parse_module(Parser *ctx) {
-    expect(ctx, TOKENTYPE_MODULE, "Expected module");
+    Token start = expect(ctx, TOKENTYPE_MODULE, "Expected module");
 
     Module *m = arena_calloc(ctx->arena, sizeof(Module));
+    m->token = start;
     m->includes = includes_array_init();
     m->decls = decls_array_init();
 

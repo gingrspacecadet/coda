@@ -1,4 +1,5 @@
 #include "sema.h"
+#include "error.h"
 
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags);
 void register_globals(Analyser *ctx, Module *mod);
@@ -37,13 +38,12 @@ Scope *scope_init(Arena *a) {
 }
 
 Analyser analyser_init(Module *m, Arena *a) {
-    Analyser an = {
-        .arena = a,
-        .current_function = NULL,
-        .global_scope = scope_init(a),
-        .current_scope = an.global_scope,
-        .module = m,
-    };
+    Analyser an;
+    an.arena = a;
+    an.current_function = NULL;
+    an.global_scope = scope_init(a);
+    an.current_scope = an.global_scope;
+    an.module = m;
 
     inject_builtin_types(&an);
 
@@ -70,16 +70,16 @@ void enter_scope(Analyser *ctx, Scope *existing) {
 }
 
 void leave_scope(Analyser *ctx) {
-    if (ctx->current_scope == ctx->current_scope->parent) {
+    if (ctx->current_scope && ctx->current_scope->parent) {
         ctx->current_scope = ctx->current_scope->parent;
     }
 }
 
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
-    for (size_t i = 0; i < ctx->current_scope->symbols.idx; i++) {
+    for (size_t i = 0; i < ctx->current_scope->symbols.len; i++) {
         Symbol *sym = ctx->current_scope->symbols.data[i];
-        if (string_cmp(sym->name, name) == 0) {
-            exit(1);    // error
+        if (string_eq(sym->name, name)) {
+            error(sym->token, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
         }
     }
 
@@ -96,9 +96,9 @@ Symbol *lookup_symbol(Analyser *ctx, String name) {
     Scope *scope = ctx->current_scope;
 
     while (scope != NULL) {
-        for (size_t i = 0; i < scope->symbols.idx; i++) {
+        for (size_t i = 0; i < scope->symbols.len; i++) {
             Symbol *sym = scope->symbols.data[i];
-            if (string_cmp(sym->name, name) == 0) {
+            if (string_eq(sym->name, name)) {
                 return sym;
             }
         }
@@ -111,7 +111,7 @@ Symbol *lookup_symbol(Analyser *ctx, String name) {
 void register_globals(Analyser *ctx, Module *mod) {
     ctx->current_scope = ctx->global_scope;
 
-    for (size_t i = 0; i < mod->decls.idx; i++) {
+    for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
 
         switch (d->type) {
@@ -140,8 +140,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_VAR: {
-                // error
-                exit(1);
+                error(d->token, "Global variables are not allowed");
             }
         }
     }
@@ -153,9 +152,8 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
     switch (type->type) {
         case TYPEREF_NAMED: {
             Symbol *sym = lookup_symbol(ctx, type->named.name);
-            if (!sym || !(sym->flags * SYMFLAG_TYPE)) {
-                // error
-                exit(1);
+            if (!sym || !(sym->flags & SYMFLAG_TYPE)) {
+                error(type->token, "Unknown type");
             }
             type->type_symbol = sym;
             break;
@@ -185,21 +183,21 @@ static size_t get_type_size(TypeRef *type) {
             Symbol *sym = type->type_symbol;
             if (!sym) return 0;
 
-            if (string_cmp(sym->name, string_make("int8")) == 0 || string_cmp(sym->name, string_make("uint8")) == 0
-             || string_cmp(sym->name, string_make("bool")) == 0 || string_cmp(sym->name, string_make("char")) == 0) {
+            if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
+             || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
                 return 1;
             }
-            if (string_cmp(sym->name, string_make("int16")) == 0 || string_cmp(sym->name, string_make("uint16")) == 0) {
+            if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16")) ) {
                 return 2;
             }
-            if (string_cmp(sym->name, string_make("int32")) == 0 || string_cmp(sym->name, string_make("uint32")) == 0) {
+            if (string_eq(sym->name, string_make("int32")) || string_eq(sym->name, string_make("uint32")) ) {
                 return 4;
             }
-            if (string_cmp(sym->name, string_make("int64")) == 0 || string_cmp(sym->name, string_make("uint64")) == 0
-             || string_cmp(sym->name, string_make("int")) == 0 || string_cmp(sym->name, string_make("uint")) == 0) {
+            if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
+             || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
                 return 8;
             }
-            if (string_cmp(sym->name, string_make("string")) == 0) {
+            if (string_eq(sym->name, string_make("string")) ) {
                 return 16;  // ptr + len
             }
 
@@ -231,21 +229,21 @@ static size_t get_type_align(TypeRef *type) {
             Symbol *sym = type->type_symbol;
             if (!sym) return 1;
 
-            if (string_cmp(sym->name, string_make("int8")) == 0 || string_cmp(sym->name, string_make("uint8")) == 0
-             || string_cmp(sym->name, string_make("bool")) == 0 || string_cmp(sym->name, string_make("char")) == 0) {
+            if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
+             || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
                 return 1;
             }
-            if (string_cmp(sym->name, string_make("int16")) == 0 || string_cmp(sym->name, string_make("uint16")) == 0) {
+            if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16")) ) {
                 return 2;
             }
-            if (string_cmp(sym->name, string_make("int32")) == 0 || string_cmp(sym->name, string_make("uint32")) == 0) {
+            if (string_eq(sym->name, string_make("int32")) || string_eq(sym->name, string_make("uint32")) ) {
                 return 4;
             }
-            if (string_cmp(sym->name, string_make("int64")) == 0 || string_cmp(sym->name, string_make("uint64")) == 0
-             || string_cmp(sym->name, string_make("int")) == 0 || string_cmp(sym->name, string_make("uint")) == 0) {
+            if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
+             || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
                 return 8;
             }
-            if (string_cmp(sym->name, string_make("string")) == 0) {
+            if (string_eq(sym->name, string_make("string")) ) {
                 return 8;   // ptr + len
             }
             if (sym->decl->type == DECL_STRUCT) {
@@ -266,7 +264,7 @@ static void calculate_struct_layout(StructDecl *str) {
     size_t offset = 0;
     size_t max_align = 1;
 
-    for (size_t i = 0; i < str->members.idx; i++) {
+    for (size_t i = 0; i < str->members.len; i++) {
         VarDecl *member = str->members.data[i];
         size_t member_size = get_type_size(member->type);
         size_t member_align = get_type_align(member->type);
@@ -297,7 +295,7 @@ static void calculate_union_layout(UnionDecl *unn) {
     size_t max_size = 0;
     size_t max_align = 1;
 
-    for (size_t i = 0; i < unn->members.idx; i++) {
+    for (size_t i = 0; i < unn->members.len; i++) {
         VarDecl *member = unn->members.data[i];
         size_t member_size = get_type_size(member->type);
         size_t member_align = get_type_align(member->type);
@@ -322,21 +320,21 @@ static void calculate_union_layout(UnionDecl *unn) {
 void resolve_types(Analyser *ctx, Module *mod) {
     ctx->current_scope = ctx->global_scope;
 
-    for (size_t i = 0; i < mod->decls.idx; i++) {
+    for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
 
         switch (d->type) {
             case DECL_FN: {
                 resolve_typeref(ctx, d->fn->ret_type);
 
-                for (size_t j = 0; j < d->fn->params.idx; j++) {
+                for (size_t j = 0; j < d->fn->params.len; j++) {
                     Param p = d->fn->params.data[j];
                     resolve_typeref(ctx, p.type);
                 }
                 break;
             }
             case DECL_STRUCT: {
-                for (size_t j = 0; j < d->_struct->members.idx; j++) {
+                for (size_t j = 0; j < d->_struct->members.len; j++) {
                     VarDecl *m = d->_struct->members.data[j];
                     resolve_typeref(ctx, m->type);
                 }
@@ -345,7 +343,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_UNION: {
-                for (size_t j = 0; j < d->_union->members.idx; j++) {
+                for (size_t j = 0; j < d->_union->members.len; j++) {
                     VarDecl *m = d->_union->members.data[j];
                     resolve_typeref(ctx, m->type);
                 }
@@ -353,8 +351,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 calculate_union_layout(d->_union);
             }
             case DECL_VAR: {
-                // error
-                exit(1);
+                error(d->token, "Global variables are not allowed");
             }
         }
     }
@@ -368,7 +365,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
     switch (stmt->type) {
         case STMT_BLOCK: {
             enter_scope(ctx, NULL);
-            for (size_t i = 0; i < stmt->block.stmts.idx; i++) {
+            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
                 Stmt *s = stmt->block.stmts.data[i];
                 check_stmt(ctx, s);
             }
@@ -383,8 +380,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
                 TypeRef *init_type = check_expr(ctx, var->init);
 
                 if (!types_equal(var->type, init_type)) {
-                    // error
-                    exit(1);
+                    error(var->token, "Cannot assign differing types");
                 }
             }
 
@@ -400,14 +396,12 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
                 if (!types_equal(ret_type, ctx->current_function->ret_type)) {
-                    // errpr
-                    exit(1);
+                    error(stmt->token, "Return types do not match");
                 }
             } else {
                 if (ctx->current_function->ret_type
-                 && string_cmp(ctx->current_function->ret_type->type_symbol->name, string_make("none")) != 0) {
-                    // error
-                    exit(1);
+                 && !string_eq(ctx->current_function->ret_type->type_symbol->name, string_make("none"))) {
+                    error(stmt->token, "Function expects a return value");
                  }
             }
             break;
@@ -419,9 +413,8 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
         case STMT_IF: {
             if (stmt->_if.cond) {
                 TypeRef *cond_type = check_expr(ctx, stmt->_if.cond);
-                if (!cond_type || string_cmp(cond_type->type_symbol->name, string_make("bool")) != 0) {
-                    // error
-                    exit(1);
+                if (!cond_type || !string_eq(cond_type->type_symbol->name, string_make("bool"))) {
+                    error(stmt->token, "Condition must be of boolean type");
                 }
             }
 
@@ -434,9 +427,8 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
         case STMT_WHILE: {
             if (stmt->_while.cond) {
                 TypeRef *cond_type = check_expr(ctx, stmt->_while.cond);
-                if (!cond_type || string_cmp(cond_type->type_symbol->name, string_make("bool")) != 0) {
-                    // error
-                    exit(1);
+                if (!cond_type || !string_eq(cond_type->type_symbol->name, string_make("bool"))) {
+                    error(stmt->token, "Condition must be of boolean type");
                 }
             }
 
@@ -452,9 +444,8 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
             if (stmt->_for.cond) {
                 TypeRef *cond_type = check_expr(ctx, stmt->_for.cond);
-                if (!cond_type || string_cmp(cond_type->type_symbol->name, string_make("bool")) != 0) {
-                    // error
-                    exit(1);
+                if (!cond_type || !string_eq(cond_type->type_symbol->name, string_make("bool"))) {
+                    error(stmt->token, "Condition must be of boolean type");
                 }
             }
 
@@ -481,7 +472,7 @@ void check_fn_body(Analyser *ctx, FnDecl *fn) {
     enter_scope(ctx, NULL);
     fn->local_scope = ctx->current_scope;
 
-    for (size_t i = 0; i < fn->params.idx; i++) {
+    for (size_t i = 0; i < fn->params.len; i++) {
         Param p = fn->params.data[i];
         Symbol *sym = declare_symbol(ctx, p.name, SYMFLAG_VAR);
         sym->type = p.type;
@@ -497,7 +488,7 @@ void check_fn_body(Analyser *ctx, FnDecl *fn) {
 void check_bodies(Analyser *ctx, Module *mod) {
     ctx->current_scope = ctx->global_scope;
 
-    for (size_t i = 0; i < mod->decls.idx; i++) {
+    for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
         if (d->type == DECL_FN) {
             check_fn_body(ctx, d->fn);
@@ -525,8 +516,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
         case EXPR_IDENT: {
             Symbol *sym = lookup_symbol(ctx, expr->ident.name);
             if (!sym) {
-                // err
-                exit(1);
+                error(expr->token, "Unknown variable");
             }
             expr->symbol = sym;
             result_type = sym->type;
@@ -538,8 +528,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             // TODO: allow implicit widening
             if (left_t && right_t && left_t->type_symbol != right_t->type_symbol) {
-                // err
-                exit(1);
+                error(expr->token, "Can only operate on equal types");
             }
 
             if (expr->binary.op == BINOP_EQ || 
@@ -554,13 +543,11 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             if (expr->binary.op == BINOP_ASSIGN) {
                 if (!types_equal(left_t, right_t)) {
-                    // err
-                    exit(1);
+                    error(expr->token, "Can only assign equal types");
                 }
 
                 if (!left_t->is_mutable) {
-                    // err
-                    exit(1);
+                    error(expr->token, "Can only modify mutable types");
                 }
 
                 result_type = left_t;
@@ -575,34 +562,28 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             Symbol *callee_sym = expr->call.callee->symbol;
             if (!callee_sym) {
-                // err
-                exit(1);
+                error(expr->token, "Unknown function");
             }
 
             if (!(callee_sym->flags & SYMFLAG_FN)) {
-                // err
-                exit(1);
+                error(callee_sym->token, "Cannot call non-function");
             }
 
             FnDecl *fn = callee_sym->decl->fn;
             if (!fn) {
-                // err
-                exit(1);
-            
+                error(callee_sym->token, "Unknown function");
             }
 
-            if (expr->call.args.idx != fn->params.idx) {
-                // err
-                exit(1);
+            if (expr->call.args.len != fn->params.len) {
+                error(callee_sym->token, "Function expects X arguments"); // TODO: this needs formatting :sob:
             }
 
-            for (size_t i = 0; i < expr->call.args.idx; i++) {
+            for (size_t i = 0; i < expr->call.args.len; i++) {
                 TypeRef *arg_type = check_expr(ctx, expr->call.args.data[i]);
                 TypeRef *param_type = fn->params.data[i].type;
 
                 if (!types_equal(arg_type, param_type)) {
-                    // err
-                    exit(1);
+                    error(arg_type->token, "Parameter expected different type");
                 }
             }
 
@@ -618,8 +599,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             Symbol *type_sym = base_type->type_symbol;
             if (!type_sym || !(type_sym->flags & SYMFLAG_TYPE)) {
-                // error
-                exit(1);
+                error(expr->token, "Unknown type");
             }
 
             StructDecl *str = NULL;
@@ -629,20 +609,18 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             else if (type_sym->decl->type == DECL_UNION) unn = type_sym->decl->_union;
 
             if (!str && !unn) {
-                // error
-                exit(1);
+                error(expr->token, "Cannot get member of type without members");
             }
 
             vardecls_array members = str ? str->members : unn->members;
-            for (size_t i = 0; i < members.idx; i++) {
-                if (string_cmp(members.data[i]->name, expr->member.member)) {
+            for (size_t i = 0; i < members.len; i++) {
+                if (string_eq(members.data[i]->name, expr->member.member)) {
                     result_type = members.data[i]->type;
                     goto check_expr_finished;
                 }
             }
 
-            // error
-            exit(1);
+            error(expr->token, "Unknown member");
         }
         case EXPR_UNARY: {
             TypeRef *operand_type = check_expr(ctx, expr->unary.operand);
@@ -652,22 +630,20 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 case UOP_NEG: {
                     String name = operand_type->type_symbol->name;
                     if (!string_find(name, string_make("int"))) {
-                        //er r
-                        exit(1);
+                        error(operand_type->token, "Can only negate integers");
                     }
                     result_type = operand_type;
                     goto check_expr_finished;
                 }
                 case UOP_NOT: {
-                    if (string_cmp(operand_type->type_symbol->name, string_make("bool")) != 0) {
-                        // error
-                        exit(1);
+                    if (!string_eq(operand_type->type_symbol->name, string_make("bool"))) {
+                        error(operand_type->token, "Can only '!' booleans");
                     }
                     result_type = operand_type;
                     goto check_expr_finished;
                 }
                 case UOP_ADDR: {
-                    TypeRef *p = arena_alloc(ctx->arena, sizeof(TypeRef));
+                    TypeRef *p = arena_calloc(ctx->arena, sizeof(TypeRef));
                     p->type = TYPEREF_POINTER;
                     p->pointer.pointee = operand_type;
                     p->is_mutable = false;
@@ -680,8 +656,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                         goto check_expr_finished;
                     }
 
-                    // error
-                    exit(1);
+                    error(operand_type->token, "Cannot dereference non-pointer");
                 }
             }
         }
@@ -690,8 +665,11 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *index_type = check_expr(ctx, expr->index.index);
 
             if (!index_type || !string_find(index_type->type_symbol->name, string_make("int"))) {
-                // error
-                exit(1);
+                if (index_type) {
+                    error(index_type->token, "Array index must be an integer");
+                } else {
+                    error(expr->token, "Array index must be an integer");
+                }
             }
 
             switch (base_type->type) {
@@ -705,8 +683,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     goto check_expr_finished;
                 }
                 default: {
-                    //err
-                    exit(1);
+                    error(base_type->token, "Cannot index into non-array type");
                 }
             }
         }

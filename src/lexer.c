@@ -331,7 +331,7 @@ token_array lex(Lexer *ctx) {
         }
 
         if (!comment) {
-            Token *last = tokens.data + tokens.idx - 1;
+            Token *last = tokens.data + tokens.len - 1;
             last->span = (Span){ .start = start, .length = ctx->source.index - start };
             last->line = ctx->line;
             last->col = ctx->col;
