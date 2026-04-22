@@ -31,13 +31,28 @@
 			]
 		},
 		"strings": {
-			"name": "string.quoted.double.coda",
-			"begin": "\"",
-			"end": "\"",
 			"patterns": [
 				{
-					"name": "constant.character.escape.coda",
-					"match": "\\\\."
+					"name": "string.quoted.double.coda",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.coda",
+							"match": "\\\\."
+						}
+					]
+				},
+				{
+					"name": "string.quoted.single.coda",
+					"begin": "'",
+					"end": "'",
+					"patterns": [
+						{
+							"name": "constant.character.escape.coda",
+							"match": "\\\\."
+						}
+					]
 				}
 			]
 		},
