@@ -15,5 +15,6 @@ typedef struct {
 } Analyser;
 
 Analyser analyser_init(Module *m, Arena *a);
+void analyse(Analyser *ctx);
 
 #endif

@@ -55,4 +55,5 @@ int main(void) {
     Module *module = parse_module(&parser);
 
     Analyser analyser = analyser_init(module, lexer.arena);
+    analyse(&analyser);
 }

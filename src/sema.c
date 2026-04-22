@@ -496,6 +496,23 @@ void check_bodies(Analyser *ctx, Module *mod) {
     }
 }
 
+static bool is_integer_type(TypeRef *type) {
+    if (!type || type->type != TYPEREF_NAMED) return false;
+    Symbol *sym = type->type_symbol;
+    if (!sym) return false;
+
+    return string_eq(sym->name, string_make("int"))   ||
+           string_eq(sym->name, string_make("int8"))  ||
+           string_eq(sym->name, string_make("int16")) ||
+           string_eq(sym->name, string_make("int32")) ||
+           string_eq(sym->name, string_make("int64")) ||
+           string_eq(sym->name, string_make("uint"))  ||
+           string_eq(sym->name, string_make("uint8")) ||
+           string_eq(sym->name, string_make("uint16"))||
+           string_eq(sym->name, string_make("uint32"))||
+           string_eq(sym->name, string_make("uint64"));
+}
+
 TypeRef *check_expr(Analyser *ctx, Expr *expr) {
     if (!expr) return NULL;
 
@@ -629,7 +646,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             switch (expr->unary.op) {
                 case UOP_NEG: {
                     String name = operand_type->type_symbol->name;
-                    if (!string_find(name, string_make("int"))) {
+                    if (!is_integer_type(operand_type)) {
                         error(operand_type->token, "Can only negate integers");
                     }
                     result_type = operand_type;
@@ -664,7 +681,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *base_type = check_expr(ctx, expr->index.base);
             TypeRef *index_type = check_expr(ctx, expr->index.index);
 
-            if (!index_type || !string_find(index_type->type_symbol->name, string_make("int"))) {
+            if (!index_type || !is_integer_type(index_type)) {
                 if (index_type) {
                     error(index_type->token, "Array index must be an integer");
                 } else {
