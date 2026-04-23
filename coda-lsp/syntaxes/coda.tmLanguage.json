@@ -26,7 +26,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.coda",
-					"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|u?int(8|16|32|64)?|char|string|none|type|null|mut)\\b"
+					"match": "\\b(if|while|for|return|enum|variant|struct|fn|module|include|u?int(8|16|32|64)?|char|string|none|type|null|mut)\\b"
 				}
 			]
 		},

@@ -236,6 +236,13 @@ Expr *expr_new_lit(Parser *ctx, Token *t) {
             ._bool = (t->type == TOKENTYPE_TRUE)
         };
     }
+    else if (t->type == TOKENTYPE_CHAR_LIT) {
+        e->literal = (Literal){
+            .type = LITERAL_CHAR,
+            .raw = t->value.value,
+            ._char = t->value.value.data[0],
+        };
+    }
     else {
         error(ctx, "Unknown expression literal");
     }

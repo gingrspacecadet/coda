@@ -63,7 +63,7 @@ void enter_scope(Analyser *ctx, Scope *existing) {
         existing->parent = ctx->current_scope;
         ctx->current_scope = existing;
     } else {
-        Scope *new_scope = arena_calloc(ctx->arena, sizeof(Scope));
+        Scope *new_scope = scope_init(ctx->arena);
         new_scope->parent = ctx->current_scope;
         ctx->current_scope = new_scope;
     }
