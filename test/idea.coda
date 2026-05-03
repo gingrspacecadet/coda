@@ -11,13 +11,13 @@ include std::system::handle;
 include custom::thingy : yay;
 
 @packed
-record Vec3 {
+struct Vec3 {
     int x;
     int y;
     int z;
 }
 
-variant Onion {
+union Onion {
     uint32 long;
     uint8[4] short;
 }
