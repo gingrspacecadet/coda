@@ -98,10 +98,8 @@ token_array lex(Lexer *ctx) {
     while (p.has_value) {
         char_array_clear(&buffer);
 
-        size_t start = ctx->source.index;
-
         bool comment = false;
-
+        
         if (isspace((unsigned char)p.value)) {
             consume(ctx);
             p = peek(ctx);
@@ -113,6 +111,8 @@ token_array lex(Lexer *ctx) {
             continue;
         }
         
+        size_t start = ctx->source.index;
+
         if (isalpha((unsigned char)p.value)) {
             char_array_push(&buffer, consume(ctx));
             p = peek(ctx);
@@ -173,9 +173,9 @@ token_array lex(Lexer *ctx) {
                 case '/': {
                     if (peek(ctx).has_value && peek(ctx).value == '/') {
                         consume(ctx);
+                        comment = true;
                         while (peek(ctx).has_value && peek(ctx).value != '\n') {
                             consume(ctx);
-                            comment = true;
                         }
                     } else {
                         if (peek(ctx).has_value && peek(ctx).value == '=') {

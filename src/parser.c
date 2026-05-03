@@ -288,13 +288,15 @@ Expr *parse_expr_prefix(Parser *ctx) {
     }
 
     if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE) {
+        Expr *e = expr_new_lit(ctx, &t.value);
         consume(ctx);
-        return expr_new_lit(ctx, &t.value);
+        return e;
     }
 
     if (t.value.type == TOKENTYPE_IDENT) {
+        Expr *e = expr_new_ident(ctx, &t.value);
         consume(ctx);
-        return expr_new_ident(ctx, &t.value);
+        return e;
     }
 
     if (t.value.type == TOKENTYPE_LPAREN) {

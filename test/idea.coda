@@ -23,12 +23,12 @@ union Onion {
 }
 
 // `@extern` disables name mangling
-@extern fn void foo();
+@extern fn none foo();
 
 fn int bar(string mut* baz) {
     int x = 0;
     
-    for (int i = 0; i < baz.len; i++) {
+    for (int i = 0; i < baz->len; i++) {
         x += baz[i]; 
     }
 
