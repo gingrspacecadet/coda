@@ -9,6 +9,11 @@
             "cwd": "/home/gingrspacecadet/dev/c/coda",
             "binaryPath": "/home/gingrspacecadet/dev/c/coda/coda",
             "binaryArgs": []
+        },
+        {
+            "cwd": "/home/gingrspacecadet/dev/coda",
+            "binaryPath": "/home/gingrspacecadet/dev/coda/coda",
+            "binaryArgs": []
         }
     ],
     "figura.librariesFolderPath": "/home/gingrspacecadet/.local/share/.minecraft/figura/avatars/libraries/"

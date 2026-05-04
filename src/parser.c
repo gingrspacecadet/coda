@@ -402,6 +402,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
 Expr *parse_expr(Parser *ctx, int min_bp) {
     Expr *left = parse_expr_prefix(ctx);
     left = expr_handle_postfix(ctx, left);
+    token_optional start = peek(ctx);
 
     while (true) {
         token_optional next = peek(ctx);
@@ -424,6 +425,9 @@ Expr *parse_expr(Parser *ctx, int min_bp) {
         b->binary.op = binop;
         b->binary.left = left;
         b->binary.right = right;
+        if (start.has_value) {
+            b->token = start.value;
+        }
 
         left = b;
 

@@ -27,10 +27,10 @@ union Onion {
 // `@extern` disables name mangling
 // @extern fn none foo();
 
-fn int bar(string mut* baz) {
-    int x = 0;
+fn char bar(string mut baz) {
+    mut char x;
     
-    for (int i = 0; i < baz.len; i = i + 1) {
+    for (mut uint64 i = 0; i < baz.len; i = i + 1) {
         x = x + baz[i]; 
     }
 
@@ -56,12 +56,12 @@ fn int main(string[] args) {
     if (args.len != 2) {
         // string literals like "foo" are stored as `string` types,
         // not char*, but they can explicitly decay
-        io::println("Missing requires arguments!");
+        // io::println("Missing requires arguments!");
     }
 
     // Coda supports c-like for loops
-    for (int i = 0; i < args.len; i = i + 1) {
-        io::println(args[i]);
+    for (mut uint i = 0; i < args.len; i = i + 1) {
+        // io::println(args[i]);
     }
 
 
