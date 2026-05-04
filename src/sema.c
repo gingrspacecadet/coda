@@ -652,7 +652,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             Symbol *type_sym = base_type->type_symbol;
             if (!type_sym || !(type_sym->flags & SYMFLAG_TYPE)) {
-                error(expr->token, "Unknown type");
+                error(expr->member.base->token, format("Unknown base type name %.*s", type_sym ? type_sym->name.length : 6, type_sym ? type_sym->name.data : NULL));
             }
 
             StructDecl *str = NULL;
