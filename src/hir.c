@@ -167,3 +167,75 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
 
     return hir;
 }
+
+static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt) {
+    if (!stmt) return;
+
+    switch (stmt->type) {
+        case HIR_STMT_ASSIGN: {
+            if (stmt->assign.target->type == HIR_EXPR_VAR) {
+                Symbol *sym = stmt->assign.target->var.symbol;
+
+                bool is_param = false;
+                for (size_t i = 0; i < params->len; i++) {
+                    if (params->data[i] == sym) { is_param = true; break; }
+                }
+
+                bool already_added = false;
+                for (size_t i = 0; i < locals->len; i++) {
+                    if (locals->data[i] == sym) {
+                        already_added = true;
+                        break;
+                    }
+                }
+
+                if (!is_param && !already_added) {
+                    syms_array_push(locals, sym);
+                }
+            }
+            break;
+        }
+        case HIR_STMT_BLOCK: {
+            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
+                collect_locals(locals, params, stmt->block.stmts.data[i]);
+            }
+            break;
+        }
+        case HIR_STMT_IF: {
+            collect_locals(locals, params, stmt->_if.then_block);
+            collect_locals(locals, params, stmt->_if.else_block);
+            break;
+        }
+        case HIR_STMT_WHILE: {
+            collect_locals(locals, params, stmt->_while.body);
+            break;
+        }
+    }
+}
+
+HirModule *lower_module(Analyser *ctx, Module *ast_mod) {
+    HirModule *hir = arena_calloc(ctx->arena, sizeof(HirModule));
+    hir->functions = hirfndecls_array_init();
+    for (size_t i = 0; i < ast_mod->decls.len; i++) {
+        Decl *d = ast_mod->decls.data[i];
+        if (d->type != DECL_FN) continue;
+
+        HirFnDecl *fndecl = arena_calloc(ctx->arena, sizeof(HirFnDecl));
+        fndecl->symbol = d->symbol;
+
+        fndecl->params = syms_array_init();
+        for (size_t j = 0; j < d->fn->params.len; j++) {
+            syms_array_push(&fndecl->params, d->fn->params.data[j].symbol);
+        }
+
+        fndecl->body = lower_stmt(ctx, d->fn->body);
+        fndecl->ret_type = d->fn->ret_type;
+
+        fndecl->locals = syms_array_init();
+        collect_locals(&fndecl->locals, &fndecl->params, fndecl->body);
+
+        hirfndecls_array_push(&hir->functions, fndecl);
+    }
+
+    return hir;
+}
