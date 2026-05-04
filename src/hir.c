@@ -1,5 +1,4 @@
 #include "hir.h"
-#include "sema.h"
 
 HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
     HirExpr *hir = arena_calloc(ctx->arena, sizeof(HirExpr));

@@ -32,6 +32,7 @@ static Token expect(Parser *ctx, TokenType type, char *msg) {
 Include *parse_include(Parser *ctx) {
     Include *inc = arena_calloc(ctx->arena, sizeof(Include));
     inc->token = consume(ctx);
+    inc->path = string_array_init();
 
     while (true) {
         token_optional t = peek(ctx);
@@ -47,6 +48,15 @@ Include *parse_include(Parser *ctx) {
             continue;
         }
         break;
+    }
+
+    if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_COLON) {
+        consume(ctx);
+        
+        inc->alias = (string_optional){
+            .has_value = true,
+            .value = expect(ctx, TOKENTYPE_IDENT, "Expected module alias name").value.value
+        };
     }
 
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected semicolon after include");
@@ -294,8 +304,8 @@ Expr *parse_expr_prefix(Parser *ctx) {
     }
 
     if (t.value.type == TOKENTYPE_IDENT) {
-        Expr *e = expr_new_ident(ctx, &t.value);
         consume(ctx);
+        Expr *e = expr_new_ident(ctx, &t.value);
         return e;
     }
 
@@ -606,7 +616,7 @@ Stmt *parse_stmt(Parser *ctx) {
         case TOKENTYPE_WHILE: return parse_while_stmt(ctx);
         case TOKENTYPE_IDENT: {
             t = ahead(ctx, 1);
-            if (t.has_value && (t.value.type == TOKENTYPE_DOUBLECOLON || t.value.type == TOKENTYPE_EQ)) {
+            if (t.has_value && (t.value.type == TOKENTYPE_DOUBLECOLON || t.value.type == TOKENTYPE_EQ || t.value.type == TOKENTYPE_LPAREN)) {
                 return parse_expr_stmt(ctx);
             } else {
                 FALLTHROUGH
@@ -642,6 +652,8 @@ Stmt *parse_block_stmt(Parser *ctx) {
 StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
     StructDecl *str = arena_calloc(ctx->arena, sizeof(StructDecl));
     str->attributes = attrs;
+    str->members = vardecls_array_init();
+    str->field_offsets = size_array_init();
     consume(ctx);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected struct name");

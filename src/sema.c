@@ -2,6 +2,7 @@
 #include "error.h"
 
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags);
+Symbol *lookup_symbol(Analyser *ctx, String name);
 void register_globals(Analyser *ctx, Module *mod);
 void resolve_types(Analyser *ctx, Module *mod);
 void check_bodies(Analyser *ctx, Module *mod);
@@ -12,7 +13,7 @@ static void inject_builtin_types(Analyser *ctx) {
     char* builtins[] = {
         "int", "int8", "int16", "int32", "int64",
         "uint", "uint8", "uint16", "uint32", "uint64",
-        "char", "string",
+        "char",
         "bool",
         "none"
     };
@@ -28,6 +29,40 @@ static void inject_builtin_types(Analyser *ctx) {
         type_ref->type_symbol = sym;
         sym->type = type_ref;
     }
+
+    // `string` is special, it is a ptr+len pair :D
+    Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
+    d->type = DECL_STRUCT;
+    StructDecl *s = arena_calloc(ctx->arena, sizeof(StructDecl));
+    s->members = vardecls_array_init();
+
+    // the `ptr` part
+    VarDecl *ptr = arena_calloc(ctx->arena, sizeof(VarDecl));
+    ptr->name = string_make(arena_strdup(ctx->arena, "ptr"));
+    TypeRef *ptrtype = arena_calloc(ctx->arena, sizeof(TypeRef));
+    ptrtype->type = TYPEREF_POINTER;
+    ptrtype->type_symbol = lookup_symbol(ctx, string_make("char"));
+    ptrtype->pointer.pointee = ptrtype->type_symbol->type;
+    ptr->type = ptrtype;
+    vardecls_array_push(&s->members, ptr);
+
+    // the `len` part
+    VarDecl *len = arena_calloc(ctx->arena, sizeof(VarDecl));
+    len->name = string_make(arena_strdup(ctx->arena, "len"));
+    TypeRef *lentype = arena_calloc(ctx->arena, sizeof(TypeRef));
+    lentype->type = TYPEREF_NAMED;
+    lentype->named.name = string_make("uint64");
+    lentype->type_symbol = lookup_symbol(ctx, lentype->named.name);   // TODO: different sizes on different archs
+    len->type = lentype;
+    vardecls_array_push(&s->members, len);
+
+    // now push into global scope
+    Symbol *sym = declare_symbol(ctx, string_make("string"), SYMFLAG_TYPE);
+    sym->decl = d;
+    TypeRef *type_ref = arena_calloc(ctx->arena, sizeof(TypeRef));
+    type_ref->type = TYPEREF_NAMED;
+    type_ref->type_symbol = sym;
+    sym->type = type_ref;
 }
 
 Scope *scope_init(Arena *a) {
@@ -349,9 +384,10 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 }
 
                 calculate_union_layout(d->_union);
+                break;
             }
             case DECL_VAR: {
-                error(d->token, "Global variables are not allowed");
+                error(d->token, "Global variables are not allowed %d");
             }
         }
     }

@@ -116,7 +116,7 @@ token_array lex(Lexer *ctx) {
         if (isalpha((unsigned char)p.value)) {
             char_array_push(&buffer, consume(ctx));
             p = peek(ctx);
-            while (p.has_value && (isalpha((unsigned char)p.value) || p.value == '_')) {
+            while (p.has_value && (isalnum((unsigned char)p.value) || p.value == '_')) {
                 char_array_push(&buffer, consume(ctx));
                 p = peek(ctx);
             }

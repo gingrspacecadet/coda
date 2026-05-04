@@ -2,6 +2,7 @@
 #define HIR_H
 
 #include "ast.h"
+#include "sema.h"
 
 typedef struct HirExpr HirExpr;
 typedef struct HirStmt HirStmt;
@@ -116,5 +117,7 @@ INSTANTIATE(HirFnDecl *, hirfndecls, ARRAY_TEMPLATE)
 typedef struct {
     hirfndecls_array functions;
 } HirModule;
+
+HirModule *lower_module(Analyser *ctx, Module *ast_mod);
 
 #endif
