@@ -169,7 +169,7 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
     }
 }
 
-static size_t get_type_size(TypeRef *type) {
+size_t get_type_size(TypeRef *type) {
     if (!type) return 0;
 
     switch (type->type) {
