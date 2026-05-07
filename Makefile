@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Werror -MMD -MD -std=gnu23 -O0
+CFLAGS = -g -Werror -MMD -MD -std=gnu23
 
 SRCS = $(shell find src/ -type f -name "*.c" 2>/dev/null)
 OBJS = $(patsubst %.c,%.o,$(SRCS))
@@ -15,9 +15,6 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
-
-# $(PCH_GCH): $(PCH)
-# 	$(CC) $(CFLAGS) -x c++-header -o $@ $<
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<

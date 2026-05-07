@@ -29,6 +29,11 @@ static Token expect(Parser *ctx, TokenType type, char *msg) {
     return consume(ctx);
 }
 
+static void backtrack(Parser *ctx, size_t num) {
+    if (ctx->index < num) ctx->index = 0;
+    else ctx->index -= num;
+}
+
 Include *parse_include(Parser *ctx) {
     Include *inc = arena_calloc(ctx->arena, sizeof(Include));
     inc->token = consume(ctx);
@@ -79,6 +84,74 @@ void collect_attributes(Parser *ctx, attr_array *out) {
         attr_array_push(out, attr);
         t = peek(ctx);
     }
+}
+
+bool is_valid_type(Parser *ctx) {
+    token_optional first = peek(ctx);
+    bool is_mut = false;
+    size_t stepped = 0;
+
+    token_optional t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_MUT) {
+        consume(ctx); stepped++;
+        is_mut = true;
+    }
+
+    t = peek(ctx);
+    if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
+        goto failed;
+    }
+
+    String type_name = consume(ctx).value.value; stepped++;
+
+    while (true) {
+        token_optional t = peek(ctx);
+        if (t.has_value && t.value.type != TOKENTYPE_MUT && t.value.type != TOKENTYPE_STAR && t.value.type != TOKENTYPE_LBRACK) break;
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_MUT) {
+            consume(ctx); stepped++;
+        }
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_STAR) {
+            Token star_tok = consume(ctx); stepped++;
+
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
+                Token q = consume(ctx); stepped++;
+            }
+            continue;
+        }
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_LBRACK) {
+            Token lb = consume(ctx); stepped++;
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_INT_LIT) {
+                consume(ctx); stepped++;
+            }
+            t = peek(ctx);
+            if (t.has_value && t.value.type != TOKENTYPE_RBRACK) {
+                goto failed;
+            }
+            Token rb = consume(ctx); stepped++;
+
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
+                consume(ctx); stepped++;
+            }
+            continue;
+        }
+
+        break;
+    }
+
+passed:
+    return true;
+failed:
+    backtrack(ctx, stepped);
+    return false;
 }
 
 TypeRef *parse_type(Parser *ctx) {
@@ -312,8 +385,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
     if (t.value.type == TOKENTYPE_LPAREN) {
         consume(ctx);
 
-        t = peek(ctx);
-        if (t.has_value && (t.value.type == TOKENTYPE_IDENT || t.value.type == TOKENTYPE_MUT)) {
+        if (is_valid_type(ctx)) {
             // TODO: type casting
         }
         Expr *inner = parse_expr(ctx, 0);
@@ -658,7 +730,7 @@ StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
     str->attributes = attrs;
     str->members = vardecls_array_init();
     str->field_offsets = size_array_init();
-    consume(ctx);
+    str->token = consume(ctx);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected struct name");
     str->name = name.value.value;
@@ -730,6 +802,7 @@ FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
 
     token_optional t = peek(ctx);
     while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
+        Token start = t.value;
         attr_array attrs = attr_array_init();
         collect_attributes(ctx, &attrs);
 
@@ -740,6 +813,7 @@ FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
             .type = param_type,
             .name = name.value.value,
             .attributes = attrs,
+            .token = start,
         };
 
         param_array_push(&fn->params, p);

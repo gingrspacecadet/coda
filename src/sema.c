@@ -58,41 +58,6 @@ static void inject_builtin_types(Analyser *ctx) {
         sym->type = type_ref;
     }
 
-    // // `string` is special, it is a ptr+len pair :D
-    // Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
-    // d->type = DECL_STRUCT;
-    // StructDecl *s = arena_calloc(ctx->arena, sizeof(StructDecl));
-    // s->members = vardecls_array_init();
-    
-    // // the `ptr` part
-    // VarDecl *ptr = arena_calloc(ctx->arena, sizeof(VarDecl));
-    // ptr->name = string_make(arena_strdup(ctx->arena, "ptr"));
-    // TypeRef *ptrtype = arena_calloc(ctx->arena, sizeof(TypeRef));
-    // ptrtype->type = TYPEREF_POINTER;
-    // ptrtype->type_symbol = lookup_symbol(ctx, string_make("char"));
-    // ptrtype->pointer.pointee = ptrtype->type_symbol->type;
-    // ptr->type = ptrtype;
-    // vardecls_array_push(&s->members, ptr);
-    
-    // // the `len` part
-    // VarDecl *len = arena_calloc(ctx->arena, sizeof(VarDecl));
-    // len->name = string_make(arena_strdup(ctx->arena, "len"));
-    // TypeRef *lentype = arena_calloc(ctx->arena, sizeof(TypeRef));
-    // lentype->type = TYPEREF_NAMED;
-    // lentype->named.name = string_make("uint64");
-    // lentype->type_symbol = lookup_symbol(ctx, lentype->named.name);   // TODO: different sizes on different archs
-    // len->type = lentype;
-    // vardecls_array_push(&s->members, len);
-    
-    // // now push into global scope
-    // Symbol *sym = declare_symbol(ctx, string_make("string"), SYMFLAG_TYPE);
-    // sym->decl = d;
-    // TypeRef *type_ref = arena_calloc(ctx->arena, sizeof(TypeRef));
-    // type_ref->type = TYPEREF_NAMED;
-    // type_ref->type_symbol = sym;
-    // sym->type = type_ref;
-    // d->_struct = s;
-
     TypeRef *type_ref = arena_calloc(ctx->arena, sizeof(TypeRef));
     type_ref->type = TYPEREF_ARRAY;
     type_ref->array.elem = arena_calloc(ctx->arena, sizeof(TypeRef));
@@ -675,15 +640,16 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
 
             if (expr->call.args.len != fn->params.len) {
-                error(callee_sym->token, "Function expects X arguments"); // TODO: this needs formatting :sob:
+                error(callee_sym->token, format("Function expects %ld arguments", fn->params.len)); // TODO: this needs formatting :sob:
             }
 
             for (size_t i = 0; i < expr->call.args.len; i++) {
-                TypeRef *arg_type = check_expr(ctx, expr->call.args.data[i]);
+                Expr *arg = expr->call.args.data[i];
+                TypeRef *arg_type = check_expr(ctx, arg);
                 TypeRef *param_type = fn->params.data[i].type;
 
                 if (!types_compatible(ctx, arg_type, param_type)) {
-                    error(arg_type->token, "Parameter expected different type");
+                    error(arg->token, "Parameter expected different type");
                 }
             }
 

@@ -102,6 +102,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             hir->expr = lower_expr(ctx, ast_stmt->expr);
             break;
         }
+        case STMT_UNSAFE:
         case STMT_BLOCK: {
             hir->type = HIR_STMT_BLOCK;
             hir->block.stmts = hirstmts_array_init();
@@ -156,10 +157,6 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             hir->type = HIR_STMT_WHILE;
             hir->_while.cond = lower_expr(ctx, ast_stmt->_while.cond);
             hir->_while.body = lower_stmt(ctx, ast_stmt->_while.body);
-            break;
-        }
-        case STMT_UNSAFE: {
-            // TODO: none of `unsafe` is implemented upstream, it's WIP so ignore for now
             break;
         }
     }

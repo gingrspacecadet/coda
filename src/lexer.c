@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include "lexer.h"
+#include "error.h"
 #include "optional.h"
 #include "string.h"
 
@@ -149,7 +150,12 @@ token_array lex(Lexer *ctx) {
                 case '\'': {
                     char c = decode_esc(ctx);
                     if (!peek(ctx).has_value || peek(ctx).value != '\'') {
-                        printf("Unterminated character literal\n"); //TODO: nice errors
+                        Token t = {
+                            .line = ctx->line,
+                            .col = ctx->col,
+                            .span = (Span){.start = start, .length = ctx->source.index - start},
+                        };
+                        error(t, "Unterminated character literal");
                         exit(1);
                     }
                     consume(ctx);
