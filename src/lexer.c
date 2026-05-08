@@ -330,7 +330,7 @@ token_array lex(Lexer *ctx) {
                     break;
                 }
                 default: {
-                    printf("Unknown character 0x%02X\n", c);
+                    printf("Unknown character %c\n", c);
                     exit(1);
                 }
             }

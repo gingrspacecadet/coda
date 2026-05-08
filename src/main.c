@@ -6,26 +6,26 @@
 #include "arena.h"
 #include "error.h"
 
-// this is completely unsafe lmao
 char *read_file(char *path) {
     FILE *f = fopen(path, "r");
-    if (!f) {
-        perror("Failed to open file");
-        exit(1);
-    }
-    fseek(f, 0, SEEK_END);
+    if (!f) goto err;
+
+    if (fseek(f, 0, SEEK_END) != 0) goto err;
+
     size_t fsize = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (fsize < 0) goto err;
+    if (fseek(f, 0, SEEK_SET) != 0) goto err;
 
     char *data = malloc(fsize + 1);
-    if (!data) {
-        perror("Failed to allocate memory for file");
-        exit(1);
-    }
-    fread(data, fsize, 1, f);
-    fclose(f);
+    if (!data) goto err;
+    if (fread(data, fsize, 1, f) != 1) goto err;
+    if (fclose(f) != 0) goto err;
     data[fsize] = 0;
     return data;
+
+err:
+    fprintf(stderr, "read_file failed\n");
+    exit(1);
 }
 
 Source setup_source(char *path) {
