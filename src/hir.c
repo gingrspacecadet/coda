@@ -209,7 +209,7 @@ static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt
     }
 }
 
-HirModule *lower_module(Analyser *ctx, Module *ast_mod) {
+HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     HirModule *hir = arena_calloc(ctx->arena, sizeof(HirModule));
     hir->functions = hirfndecls_array_init();
     for (size_t i = 0; i < ast_mod->decls.len; i++) {

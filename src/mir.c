@@ -1,32 +1,58 @@
-#include "sema.h"
 #include "hir.h"
 #include "mir.h"
 
-MirOperand make_temp(Analyser *ctx, TypeRef *type) {
-    return (MirOperand){
-        .type = MIR_VAL_TEMP,
-        .temp = ctx->temp_counter++,
-        .resolved_type = type
-    };
+static Symbol *lookup_symbol(MirBuilder *ctx, String name) {
+    Scope *scope = ctx->global_scope;
+
+    while (scope != NULL) {
+        for (size_t i = 0; i < scope->symbols.len; i++) {
+            Symbol *sym = scope->symbols.data[i];
+            if (string_eq(sym->name, name)) {
+                return sym;
+            }
+        }
+        scope = scope->parent;
+    }
+
+    return NULL;
 }
 
-MirOperand make_symbol(Symbol *sym) {
-    return (MirOperand){
-        .type = MIR_VAL_SYMBOL,
-        .symbol = sym,
-        .resolved_type = sym->type
-    };
+MirBlock *new_block(MirBuilder *ctx) {
+    MirBlock *b = arena_calloc(ctx->arena, sizeof(MirBlock));
+    b->id = ctx->block_counter++;
+    return b;
 }
 
-MirOperand make_literal(Literal lit, TypeRef *type) {
-    return (MirOperand){
-        .type = MIR_VAL_LIT,
-        .lit = lit,
-        .resolved_type = type
-    };
+void terminate_and_link(MirBuilder *ctx, MirBlock *next) {
+    if (!ctx->current_block) return;
+
+    if (!ctx->current_block->succ_true) {
+        ctx->current_block->succ_true = next;
+    }
+    ctx->current_block = next;
 }
 
-MirInstr *emit(Analyser *ctx, MirOp type, MirOperand result, MirOperand lhs, MirOperand rhs) {
+uint32_t make_label(MirBuilder *ctx) {
+    return ctx->label_counter++;
+}
+
+void emit_label(MirBuilder *ctx, uint32_t label_id) {
+    MirInstr *instr = arena_calloc(ctx->arena, sizeof(MirInstr));
+    instr->op = MIR_OP_LABEL;
+    instr->label_id = label_id;
+
+
+    if (!ctx->current_block->first) {
+        ctx->current_block->first = instr;
+        ctx->current_block->last = instr;
+    } else {
+        instr->prev = ctx->current_block->last;
+        ctx->current_block->last->next = instr;
+        ctx->current_block->last = instr;
+    }
+}
+
+MirInstr *emit(MirBuilder *ctx, MirOp type, MirOperand result, MirOperand lhs, MirOperand rhs) {
     MirInstr *instr = arena_calloc(ctx->arena, sizeof(MirInstr));
     instr->op = type;
     instr->result = result;
@@ -45,16 +71,50 @@ MirInstr *emit(Analyser *ctx, MirOp type, MirOperand result, MirOperand lhs, Mir
     return instr;
 }
 
-MirOperand null_op() {
-    return (MirOperand){0};
+MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir);
+
+MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
+    switch (hir->type) {
+        case HIR_EXPR_VAR:
+            return make_symbol(hir->var.symbol);
+        case HIR_EXPR_FIELD_OFFSET: {
+            MirOperand base_addr = mir_lower_lvalue(ctx, hir->field_offset.base);
+
+            Literal offset_lit = {
+                .type = LITERAL_INT,
+                ._int = hir->field_offset.byte_offset
+            };
+            MirOperand offset = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
+            MirOperand field_addr = make_temp(ctx, hir->resolved_type->pointer.pointee);
+            emit(ctx, MIR_OP_ADD, field_addr, base_addr, offset);
+
+            return field_addr;
+        }
+        case HIR_EXPR_ARRAY_INDEX: {
+            MirOperand base_addr = mir_lower_lvalue(ctx, hir->array_index.base);
+            MirOperand index = mir_lower_expr(ctx, hir->array_index.index);
+
+            Literal size_lit = {
+                .type = LITERAL_INT,
+                ._int = hir->array_index.elem_size
+            };
+            MirOperand elem_size = make_literal(size_lit, lookup_symbol(ctx, string_make("int"))->type);
+
+            MirOperand offset = make_temp(ctx, lookup_symbol(ctx, string_make("int"))->type);
+            emit(ctx, MIR_OP_MUL, offset, index, elem_size);
+
+            MirOperand element_addr = make_temp(ctx, hir->resolved_type);
+            emit(ctx, MIR_OP_ADD, element_addr, base_addr, offset);
+
+            return element_addr;
+        }
+    }
 }
 
-MirOperand mir_lower_expr(Analyser *ctx, HirExpr *hir) {
+MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
     switch (hir->type) {
         case HIR_EXPR_LIT:
             return make_literal(hir->literal, hir->resolved_type);
-        case HIR_EXPR_VAR:
-            return make_symbol(hir->var.symbol);
         case HIR_EXPR_BINARY: {
             MirOperand lhs = mir_lower_expr(ctx, hir->binary.left);
             MirOperand rhs = mir_lower_expr(ctx, hir->binary.right);
@@ -72,20 +132,148 @@ MirOperand mir_lower_expr(Analyser *ctx, HirExpr *hir) {
             emit(ctx, op, result, lhs, rhs);
             return result;
         }
-        case HIR_EXPR_FIELD_OFFSET: {
-            MirOperand base = mir_lower_expr(ctx, hir->field_offset.base);
+        case HIR_EXPR_VAR:
+        case HIR_EXPR_FIELD_OFFSET:
+        case HIR_EXPR_ARRAY_INDEX: {
+            MirOperand address = mir_lower_lvalue(ctx, hir);
 
-            Literal offset_lit = {
-                .type = LITERAL_INT,
-                ._int = hir->field_offset.byte_offset,
-            };
-            MirOperand offset = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
-            MirOperand addr_temp = make_temp(ctx, hir->resolved_type->pointer.pointee);
-            emit(ctx, MIR_OP_ADD, addr_temp, base, offset);
+            if (address.type == MIR_VAL_SYMBOL) {
+                return address;
+            }
 
-            return addr_temp;
+
+            MirOperand value_tmp = make_temp(ctx, hir->resolved_type);
+            emit(ctx, MIR_OP_LOAD, value_tmp, address, null_op());
+
+            return value_tmp;
         }
 
-        // TODO: call, array, etc
+        case HIR_EXPR_CALL: {
+            MirOperand *args = arena_alloc(ctx->arena, sizeof(MirOperand) * hir->call.args.len);
+            for (size_t i = 0; i < hir->call.args.len; i++) {
+                args[i] = mir_lower_expr(ctx, hir->call.args.data[i]);
+            }
+
+            MirOperand result = make_temp(ctx, hir->resolved_type);
+
+            MirInstr *instr = emit(ctx, MIR_OP_CALL, result, make_symbol(hir->call.callee), null_op());
+            instr->call_args = args;
+            instr->arg_count = hir->call.args.len;
+
+            return result;
+        }
     }
+}
+
+void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
+    switch(hir->type) {
+        case HIR_STMT_ASSIGN: {
+            MirOperand target = mir_lower_lvalue(ctx, hir->assign.target);
+            MirOperand value = mir_lower_expr(ctx, hir->assign.value);
+
+            if (target.type == MIR_VAL_SYMBOL) {
+                emit(ctx, MIR_OP_COPY, target, value, null_op());
+            } else {
+                emit(ctx, MIR_OP_STORE, target, value, null_op());
+            }
+            break;
+        }
+
+        case HIR_STMT_IF: {
+            MirBlock *then_block = new_block(ctx);
+            MirBlock *else_block = new_block(ctx);
+            MirBlock *merge_block = new_block(ctx);
+
+            MirOperand cond = mir_lower_expr(ctx, hir->_if.cond);
+            ctx->current_block->succ_true = then_block;
+            ctx->current_block->succ_false = else_block;
+
+            ctx->current_block = then_block;
+            mir_lower_stmt(ctx, hir->_if.then_block);
+            terminate_and_link(ctx, merge_block);
+
+            if (hir->_if.else_block) {
+                ctx->current_block = else_block;
+                mir_lower_stmt(ctx, hir->_if.else_block);
+                terminate_and_link(ctx, merge_block);
+            }
+
+            ctx->current_block = merge_block;
+            break;
+        }
+
+        case HIR_STMT_WHILE: {
+            MirBlock *cond_block = new_block(ctx);
+            MirBlock *body_block = new_block(ctx);
+            MirBlock *exit_block = new_block(ctx);
+
+            terminate_and_link(ctx, cond_block);
+
+            ctx->current_block = cond_block;
+            MirOperand cond = mir_lower_expr(ctx, hir->_while.cond);
+            cond_block->succ_true = body_block;
+            cond_block->succ_false = exit_block;
+
+            ctx->current_block = body_block;
+            mir_lower_stmt(ctx, hir->_while.body);
+
+            terminate_and_link(ctx, cond_block);
+
+            ctx->current_block = exit_block;
+            break;
+        }
+
+        case HIR_STMT_RETURN: {
+            MirOperand val = null_op();
+            if (hir->_return.value) {
+                val = mir_lower_expr(ctx, hir->_return.value);
+            }
+            emit(ctx, MIR_OP_RET, null_op(), val, null_op());
+
+            ctx->current_block = NULL;
+            break;
+        }
+
+        case HIR_STMT_EXPR: {
+            mir_lower_expr(ctx, hir->expr);
+            break;
+        }
+
+        // TODO: the rest of these
+
+        case HIR_STMT_BLOCK: {
+            for (size_t i = 0; i < hir->block.stmts.len; i++) {
+                mir_lower_stmt(ctx, hir->block.stmts.data[i]);
+            }
+            break;
+        }
+    }
+}
+
+MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
+    MirFunction *mir_fn = arena_calloc(ctx->arena, sizeof(MirFunction));
+    mir_fn->symbol = hir_fn->symbol;
+    ctx->temp_counter = 0;
+
+    MirBlock *entry = new_block(ctx);
+    ctx->current_block = entry;
+    mir_fn->entry_block = entry;
+
+    mir_lower_stmt(ctx, hir_fn->body);
+
+    if (ctx->current_block) {
+        emit(ctx, MIR_OP_RET, null_op(), null_op(), null_op());
+    }
+
+    return mir_fn;
+}
+
+MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
+    MirModule *mod = arena_calloc(ctx->arena, sizeof(MirModule));
+    mod->functions = mirfns_array_init();
+    for (size_t i = 0; i < hir->functions.len; i++) {
+        mirfns_array_push(&mod->functions, mir_lower_fn(ctx, hir->functions.data[i]));
+    }
+
+    return mod;
 }

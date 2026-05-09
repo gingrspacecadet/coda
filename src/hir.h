@@ -118,6 +118,6 @@ typedef struct {
     hirfndecls_array functions;
 } HirModule;
 
-HirModule *lower_module(Analyser *ctx, Module *ast_mod);
+HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod);
 
 #endif

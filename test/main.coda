@@ -1,10 +1,5 @@
 module main;
 
-fn int test(uint a) {
-    return a;
-}
-
 fn int main() {
-    char c = (char)3;
-    return test((uint)48);
+    return 0;
 }

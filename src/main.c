@@ -5,6 +5,9 @@
 #include "sema.h"
 #include "arena.h"
 #include "error.h"
+#include "hir.h"
+#include "mir.h"
+#include "opt.h"
 
 char *read_file(char *path) {
     FILE *f = fopen(path, "r");
@@ -56,4 +59,15 @@ int main(void) {
 
     Analyser analyser = analyser_init(module, lexer.arena);
     analyse(&analyser);
+
+    HirModule *hir = hir_lower_module(&analyser, module);
+
+    MirBuilder mirbuilder = {
+        .arena = lexer.arena,
+        .global_scope = analyser.global_scope,
+    };
+    MirModule *mir = mir_lower_module(&mirbuilder, hir);
+    for (size_t i = 0; i < mir->functions.len; i++) {
+        opt_constant_folding(mir->functions.data[i]);
+    }
 }
