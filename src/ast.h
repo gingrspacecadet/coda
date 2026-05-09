@@ -17,6 +17,7 @@ typedef struct VarDecl VarDecl;
 typedef struct FnDecl FnDecl;
 typedef struct StructDecl StructDecl;
 typedef struct UnionDecl UnionDecl;
+typedef struct TypeDecl TypeDecl;
 typedef struct TypeRef TypeRef;
 typedef struct Symbol Symbol;
 typedef struct Scope Scope;
@@ -72,31 +73,6 @@ typedef struct {
     string_array args;
     Token token;
 } Attribute;
-
-struct TypeRef {
-    enum {
-        TYPEREF_NAMED,
-        TYPEREF_POINTER,
-        TYPEREF_ARRAY
-    } type;
-    union {
-        struct {
-            String name;
-        } named;
-        struct {
-            TypeRef *pointee;
-        } pointer;
-        struct {
-            TypeRef *elem;
-            size_t length;
-        } array;
-    };
-
-    bool is_mutable;
-    bool is_optional;
-    Symbol *type_symbol;
-    Token token;
-};
 
 struct Literal {
     enum {
@@ -228,6 +204,38 @@ struct Param {
     Token token;
 };
 
+INSTANTIATE(Param, param, ARRAY_TEMPLATE)
+
+struct TypeRef {
+    enum {
+        TYPEREF_NAMED,
+        TYPEREF_POINTER,
+        TYPEREF_ARRAY,
+        TYPEREF_FN,
+    } type;
+    union {
+        struct {
+            String name;
+        } named;
+        struct {
+            TypeRef *pointee;
+        } pointer;
+        struct {
+            TypeRef *elem;
+            size_t length;
+        } array;
+        struct {
+            TypeRef *ret_type;
+            param_array params;
+        } fn;
+    };
+
+    bool is_mutable;
+    bool is_optional;
+    Symbol *type_symbol;
+    Token token;
+};
+
 struct VarDecl {
     TypeRef *type;
     String name;
@@ -238,8 +246,6 @@ struct VarDecl {
     bool is_def_init;
     Token token;
 };
-
-INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 
 struct FnDecl {
     String name;
@@ -258,13 +264,15 @@ struct Decl {
         DECL_FN,
         DECL_VAR,
         DECL_STRUCT,
-        DECL_UNION
+        DECL_UNION,
+        DECL_TYPE,
     } type;
     union {
         FnDecl *fn;
         VarDecl *var;
         StructDecl *_struct;
         UnionDecl *_union;
+        TypeDecl *_type;
     };
     Symbol *symbol;
     Token token;
@@ -296,6 +304,15 @@ struct UnionDecl {
     Token token;
 };
 
+struct TypeDecl {
+    String name;
+    TypeRef *alias;
+    attr_array attributes;
+    Symbol *symbol;
+    bool is_export;
+    Token token;
+};
+
 INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 struct Include {
@@ -311,7 +328,6 @@ struct Symbol {
     TypeRef *type;
     uint32_t flags;
     Scope *defined_in;
-    Token token;
 };
 
 INSTANTIATE(Symbol*, syms, ARRAY_TEMPLATE)

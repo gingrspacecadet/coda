@@ -166,19 +166,59 @@ TypeRef *parse_type(Parser *ctx) {
     }
 
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
-        error(ctx, "Expected type name");
-    }
-
-    String type_name = consume(ctx).value.value;
-
     TypeRef *base = arena_calloc(ctx->arena, sizeof(TypeRef));
-    base->type = TYPEREF_NAMED;
-    base->named.name = type_name;
-    base->is_mutable = is_mut;
-    if (t.has_value) {
-        base->token = first.value;
+    if (t.has_value && t.value.type == TOKENTYPE_FN) {
+        // function pointer yippee!
+        Token start = consume(ctx);
+        TypeRef *ret_type = parse_type(ctx);
+        expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
+
+        base->type = TYPEREF_FN;
+        base->token = start;
+        base->fn.params = param_array_init();
+        base->fn.ret_type = ret_type;
+
+        t = peek(ctx);
+        while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
+            start = t.value;
+            attr_array attrs = attr_array_init();
+            collect_attributes(ctx, &attrs);
+
+            TypeRef *param_type = parse_type(ctx);
+            t = peek(ctx);
+            Token name;
+            if (t.has_value) {
+                name = t.value;
+            }
+
+            Param p = (Param){
+                .type = param_type,
+                .name = name.value.has_value ? name.value.value : (String){},
+                .attributes = attrs,
+                .token = start
+            };
+
+            param_array_push(&base->fn.params, p);
+            t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;
+            consume(ctx);
+            t = peek(ctx);
+        }
+        expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
     }
+    else if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
+        error(ctx, "Expected type name");
+    } else {
+        String type_name = consume(ctx).value.value;
+    
+        base->type = TYPEREF_NAMED;
+        base->named.name = type_name;
+        base->is_mutable = is_mut;
+        if (t.has_value) {
+            base->token = first.value;
+        }
+    }
+
 
     while (true) {
         token_optional t = peek(ctx);
@@ -707,6 +747,7 @@ Stmt *parse_stmt(Parser *ctx) {
                 FALLTHROUGH
             }
         }
+        case TOKENTYPE_FN:
         case TOKENTYPE_MUT: return parse_var_stmt(ctx);
         default: break;
     }
@@ -844,6 +885,19 @@ FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
     return fn;
 }
 
+TypeDecl *parse_type_decl(Parser *ctx, attr_array attrs) {
+    Token start = consume(ctx);
+    TypeDecl *ty = arena_calloc(ctx->arena, sizeof(TypeDecl));
+    ty->token = start;
+    ty->attributes = attrs;
+    ty->name = expect(ctx, TOKENTYPE_IDENT, "Expected type alias name").value.value;
+    expect(ctx, TOKENTYPE_EQ, "Expected '='");
+    ty->alias = parse_type(ctx);
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+
+    return ty;
+}
+
 Decl *parse_decl(Parser *ctx) {
     Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
     attr_array attrs = attr_array_init();
@@ -871,6 +925,12 @@ Decl *parse_decl(Parser *ctx) {
             d->type = DECL_UNION;
             d->_union = parse_union_decl(ctx, attrs);
             d->token = d->_union->token;
+            break;
+        }
+        case TOKENTYPE_TYPE: {
+            d->type = DECL_TYPE;
+            d->_type = parse_type_decl(ctx, attrs);
+            d->token = d->_type->token;
             break;
         }
         default: {

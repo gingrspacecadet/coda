@@ -112,6 +112,7 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
 }
 
 MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
+    if (!hir) return (MirOperand){};
     switch (hir->type) {
         case HIR_EXPR_LIT:
             return make_literal(hir->literal, hir->resolved_type);
