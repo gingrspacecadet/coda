@@ -148,6 +148,7 @@ bool is_valid_type(Parser *ctx) {
     }
 
 passed:
+    backtrack(ctx, stepped);
     return true;
 failed:
     backtrack(ctx, stepped);
@@ -383,10 +384,18 @@ Expr *parse_expr_prefix(Parser *ctx) {
     }
 
     if (t.value.type == TOKENTYPE_LPAREN) {
-        consume(ctx);
+        Token start = consume(ctx);
 
         if (is_valid_type(ctx)) {
-            // TODO: type casting
+            TypeRef *to = parse_type(ctx);
+            expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after type cast");
+            Expr *target = parse_expr(ctx, 80);
+            Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
+            e->type = EXPR_CAST;
+            e->cast.to = to;
+            e->cast.expr = target;
+            e->token = start;
+            return e;
         }
         Expr *inner = parse_expr(ctx, 0);
         expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");

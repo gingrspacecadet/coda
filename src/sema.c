@@ -591,7 +591,6 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *left_t = check_expr(ctx, expr->binary.left);
             TypeRef *right_t = check_expr(ctx, expr->binary.right);
 
-            // TODO: allow implicit widening
             if (!types_compatible(ctx, left_t, right_t)) {
                 error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", left_t->type_symbol->name.length, left_t->type_symbol->name.data, right_t->type_symbol->name.length, right_t->type_symbol->name.data));
             }
@@ -640,7 +639,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
 
             if (expr->call.args.len != fn->params.len) {
-                error(callee_sym->token, format("Function expects %ld arguments", fn->params.len)); // TODO: this needs formatting :sob:
+                error(callee_sym->decl->token, format("Function expects %ld arguments", fn->params.len));
             }
 
             for (size_t i = 0; i < expr->call.args.len; i++) {
