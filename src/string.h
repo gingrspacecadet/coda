@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define string_fmt(S) S.length, S.data
+#define string_fmt(S) (int)S.length, S.data
 
 typedef struct {
     char *data;

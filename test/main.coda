@@ -1,13 +1,5 @@
 module main;
 
-fn int test(int a) {
-    return a;
-}
-
 fn int main() {
-    while (true) {
-        int x = 3;
-    }
-    int a = test(1);
-    return a * test(2) + 3;
+    return 2 + 3;
 }

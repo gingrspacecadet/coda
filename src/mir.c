@@ -295,6 +295,41 @@ MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     return mod;
 }
 
+static void print_type(TypeRef *type) {
+    if (!type) {
+        printf("<unknown>");
+        return;
+    }
+
+    switch (type->type) {
+        case TYPEREF_NAMED:
+            printf("%.*s", string_fmt(type->named.name));
+            break;
+        case TYPEREF_POINTER:
+            print_type(type->pointer.pointee);
+            printf("*");
+            break;
+        case TYPEREF_ARRAY:
+            print_type(type->array.elem);
+            printf("[%zu]", type->array.length);
+            break;
+        case TYPEREF_FN:
+            printf("fn ");
+            print_type(type->fn.ret_type);
+            printf(" (");
+            for (size_t i = 0; i < type->fn.params.len; i++) {
+                if (i > 0) printf(", ");
+                Param p = type->fn.params.data[i];
+                print_type(p.type);
+            }
+            printf(")");
+            break;
+        default:
+            printf("<type>");
+            break;
+    }
+}
+
 static void print_operand(MirOperand op) {
     switch (op.type) {
         case MIR_VAL_LIT:
@@ -302,6 +337,12 @@ static void print_operand(MirOperand op) {
                 printf("%lld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
                 printf("\"%.*s\"", (int)op.lit.string.length, op.lit.string.data);
+            } else if (op.lit.type == LITERAL_NULL) {
+                printf("null");
+            } else if (op.lit.type == LITERAL_BOOL) {
+                printf("%s", op.lit._bool ? "true" : "false");
+            } else if (op.lit.type == LITERAL_CHAR) {
+                printf("%c", op.lit._char);
             } else {
                 printf("<lit>");
             }
@@ -320,6 +361,8 @@ static void print_operand(MirOperand op) {
 
 static void print_instr(MirInstr *instr) {
     if (instr->result.type != MIR_VAL_LIT || instr->result.lit.type != LITERAL_INT || instr->result.lit._int != 0) {
+        print_type(instr->result.resolved_type);
+        putc(' ', stdout);
         print_operand(instr->result);
         printf(" = ");
     }
@@ -358,17 +401,26 @@ static void print_block(MirBlock *block) {
         printf("  ");
         print_instr(instr);
     }
-    if (block->succ_true) printf("  succ_true: %d\n", block->succ_true->id);
-    if (block->succ_false) printf("  succ_false: %d\n", block->succ_false->id);
+    if (block->succ_true) printf("  succ_true: L%d\n", block->succ_true->id);
+    if (block->succ_false) printf("  succ_false: L%d\n", block->succ_false->id);
     printf("\n");
 }
 
 void mir_pretty_print(MirModule *mod) {
     for (size_t i = 0; i < mod->functions.len; i++) {
         MirFunction *fn = mod->functions.data[i];
-        printf("function %.*s:\n", (int)fn->symbol->name.length, fn->symbol->name.data);
+        printf("function %.*s(", (int)fn->symbol->name.length, fn->symbol->name.data);
         
-        // Collect all blocks
+        if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
+            for (size_t j = 0; j < fn->symbol->type->fn.params.len; j++) {
+                if (j > 0) printf(", ");
+                Param p = fn->symbol->type->fn.params.data[j];
+                print_type(p.type);
+                putc(' ', stdout);
+                printf("%.*s", (int)p.name.length, p.name.data);
+            }
+        }
+        printf("):\n");
         MirBlock *blocks[1024];
         int block_count = 0;
         MirBlock *stack[1024];
