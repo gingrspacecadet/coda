@@ -1,6 +1,7 @@
 #include "hir.h"
 
 HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
+    if (!ast_expr) return NULL;
     HirExpr *hir = arena_calloc(ctx->arena, sizeof(HirExpr));
     hir->resolved_type = ast_expr->resolved_type;
 

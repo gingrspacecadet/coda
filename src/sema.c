@@ -120,7 +120,11 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
     for (size_t i = 0; i < ctx->current_scope->symbols.len; i++) {
         Symbol *sym = ctx->current_scope->symbols.data[i];
         if (string_eq(sym->name, name)) {
-            error(sym->token, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
+            if (sym->decl) {
+                error(sym->decl->token, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
+            } else {
+                error((Token){}, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
+            }
         }
     }
 
@@ -180,6 +184,14 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->_union->symbol = sym;
                 break;
             }
+            case DECL_TYPE: {
+                Symbol *sym = declare_symbol(ctx, d->_type->name, SYMFLAG_TYPE);
+                sym->decl = d;
+                sym->type = d->_type->alias;
+                d->symbol = sym;
+                d->_type->symbol = sym;
+                break;
+            }
             case DECL_VAR: {
                 error(d->token, "Global variables are not allowed");
             }
@@ -197,12 +209,26 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
                 error(type->token, "Unknown type");
             }
 
-            if (sym->type && sym->type->type != TYPEREF_NAMED) {
-                type->type = sym->type->type;
-                if (type->type == TYPEREF_ARRAY) type->array = sym->type->array;
-                if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
-            }
             type->type_symbol = sym;
+            
+            // type aliases are annoying
+            // gotta do weird recursive stuffs
+            // anyway it works now
+            if (sym->type) {
+                if (sym->type->type == TYPEREF_NAMED && 
+                    sym->type->type_symbol == sym) {
+                    return;
+                }
+                
+                resolve_typeref(ctx, sym->type);
+                
+                type->type = sym->type->type;
+                if (type->type == TYPEREF_ARRAY) type->array =sym->type->array;
+                if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
+                if (type->type == TYPEREF_FN) type->fn = sym->type->fn;
+                if (type->type == TYPEREF_NAMED) type->named = sym->type->named;
+                type->type_symbol = sym->type->type_symbol;
+            }
             break;
         }
         case TYPEREF_POINTER: {
@@ -398,6 +424,11 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 calculate_union_layout(d->_union);
                 break;
             }
+            case DECL_TYPE: {
+                resolve_typeref(ctx, d->_type->alias);
+                d->symbol->type = d->_type->alias;
+                break;
+            }
             case DECL_VAR: {
                 error(d->token, "Global variables are not allowed %d");
             }
@@ -434,6 +465,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
             uint32_t flags = SYMFLAG_VAR;
             if (var->is_mutable) flags |= SYMFLAG_MUT;
+            if (var->type->type == TYPEREF_FN) flags |= SYMFLAG_FN;
 
             Symbol *sym = declare_symbol(ctx, var->name, flags);
             sym->type = var->type;
@@ -625,34 +657,42 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             check_expr(ctx, expr->call.callee);
 
             Symbol *callee_sym = expr->call.callee->symbol;
-            if (!callee_sym) {
+            TypeRef *callee_type = expr->call.callee->resolved_type;
+            if (!callee_type) {
+                if (callee_sym && callee_sym->decl) {
+                    error(callee_sym->decl->token, "Unknown function");
+                }
                 error(expr->call.callee->token, "Unknown function");
             }
 
-            if (!(callee_sym->flags & SYMFLAG_FN)) {
-                error(callee_sym->token, "Cannot call non-function");
+            if (callee_type->type != TYPEREF_FN) {
+                if (callee_sym && callee_sym->decl) {
+                    error(callee_sym->decl->token, "Cannot call non-function");
+                } else {
+                    error(expr->call.callee->token, "Cannot call non-function");
+                }
             }
 
-            FnDecl *fn = callee_sym->decl->fn;
-            if (!fn) {
-                error(callee_sym->token, "Unknown function");
-            }
-
-            if (expr->call.args.len != fn->params.len) {
-                error(callee_sym->decl->token, format("Function expects %ld arguments", fn->params.len));
+            if (expr->call.args.len != callee_type->fn.params.len) {
+                if (callee_sym && callee_sym->decl) {
+                    error(callee_sym->decl->token, format("Function expects %ld arguments", callee_type->fn.params.len));
+                } else {
+                    error(expr->call.callee->token, format("Function expects %ld arguments", callee_type->fn.params.len));
+                }
             }
 
             for (size_t i = 0; i < expr->call.args.len; i++) {
                 Expr *arg = expr->call.args.data[i];
                 TypeRef *arg_type = check_expr(ctx, arg);
-                TypeRef *param_type = fn->params.data[i].type;
+                TypeRef *param_type = callee_type->fn.params.data[i].type;
+                resolve_typeref(ctx, param_type);
 
                 if (!types_compatible(ctx, arg_type, param_type)) {
-                    error(arg->token, "Parameter expected different type");
+                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", arg_type->type_symbol->name.length, arg_type->type_symbol->name.data, param_type->type_symbol->name.length, param_type->type_symbol->name.data));
                 }
             }
 
-            result_type = fn->ret_type;
+            result_type = callee_type->fn.ret_type;
             break;
         }
         case EXPR_MEMBER: {
@@ -851,6 +891,8 @@ bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
     if (src->type == TYPEREF_ARRAY) {
         return (src->array.length == dst->array.length) && types_compatible(ctx, src->array.elem, dst->array.elem);
     }
+
+    // TODO: TYPEREF_FN
 
     return false;
 }
