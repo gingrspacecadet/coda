@@ -409,7 +409,9 @@ static void print_block(MirBlock *block) {
 void mir_pretty_print(MirModule *mod) {
     for (size_t i = 0; i < mod->functions.len; i++) {
         MirFunction *fn = mod->functions.data[i];
-        printf("function %.*s(", (int)fn->symbol->name.length, fn->symbol->name.data);
+        printf("function ");
+        print_type(fn->symbol->decl->fn->ret_type);
+        printf(" %.*s(", (int)fn->symbol->name.length, fn->symbol->name.data);
         
         if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
             for (size_t j = 0; j < fn->symbol->type->fn.params.len; j++) {

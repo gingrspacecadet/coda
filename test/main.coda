@@ -2,5 +2,5 @@ module main;
 
 fn int *? main() {
     int *?e = null;
-    return null;
+    return e;
 }

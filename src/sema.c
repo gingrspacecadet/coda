@@ -486,7 +486,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
                 if (!types_compatible(ctx, ret_type, ctx->current_function->ret_type)) {
-                    error(stmt->token, "Return types do not match");
+                    error(stmt->_return.value->token, "Return types do not match");
                 }
             } else {
                 if (ctx->current_function->ret_type
