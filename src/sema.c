@@ -464,8 +464,12 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (var->init) {
                 TypeRef *init_type = check_expr(ctx, var->init);
 
-                if (!types_compatible(ctx, var->type, init_type)) {
-                    error(var->token, format("Cannot assign value of type %.*s to variable of type %.*s", init_type->type_symbol->name.length, init_type->type_symbol->name.data, var->type->type_symbol->name.length, var->type->type_symbol->name.data));
+                if (!types_compatible(ctx, init_type, var->type)) {
+                    if (init_type->type_symbol && var->type->type_symbol) {
+                        error(var->token, format("Cannot assign value of type %.*s to variable of type %.*s", string_fmt(init_type->type_symbol->name), string_fmt(var->type->type_symbol->name)));
+                    } else {
+                        error(var->token, "Cannot assign variables of differing types");
+                    }
                 }
             }
 
@@ -869,7 +873,8 @@ bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
     if (types_equal(src, dst)) return true;
 
     if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
-        return dst->type == TYPEREF_POINTER || dst->is_optional;
+        // `null` may only be assigned to optional types.
+        return dst->is_optional;
     }
 
     if (src->is_optional != dst->is_optional) return false;

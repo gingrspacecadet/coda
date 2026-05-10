@@ -732,7 +732,9 @@ Stmt *parse_stmt(Parser *ctx) {
 
     token_optional t = peek(ctx);
 
-    if (!t.has_value) return NULL;  // error?
+    if (!t.has_value) {
+        error(ctx, "Expected a statement");
+    }
 
     switch (t.value.type) {
         case TOKENTYPE_RETURN: return parse_return_stmt(ctx);

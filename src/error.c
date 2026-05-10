@@ -2,8 +2,6 @@
 #include "lexer.h"
 #include "parser.h"
 
-// fprintf(stderr, "%.*s", len, str); to print String structures!
-
 INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
 INSTANTIATE(char, ARRAY_TEMPLATE)
 

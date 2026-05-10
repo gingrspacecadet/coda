@@ -1,5 +1,6 @@
 module main;
 
-fn int main() {
-    return 2 + 3;
+fn int *? main() {
+    int *?e = null;
+    return null;
 }
