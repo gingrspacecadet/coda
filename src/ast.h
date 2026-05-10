@@ -80,7 +80,8 @@ struct Literal {
         LITERAL_FLOAT,
         LITERAL_STRING,
         LITERAL_BOOL,
-        LITERAL_CHAR
+        LITERAL_CHAR,
+        LITERAL_NULL,
     } type;
     String raw;
     union {

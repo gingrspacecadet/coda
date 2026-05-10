@@ -43,7 +43,8 @@ static void inject_builtin_types(Analyser *ctx) {
         "uint", "uint8", "uint16", "uint32", "uint64",
         "char",
         "bool",
-        "none"
+        "none",
+        "$null",    // compiler internal type for `null` literal
     };
 
     for (size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); i++) {
@@ -605,6 +606,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 case LITERAL_BOOL: type_name = string_make("bool"); break;
                 case LITERAL_STRING: type_name = string_make("string"); break;
                 case LITERAL_CHAR: type_name = string_make("char"); break;
+                case LITERAL_NULL: type_name = string_make("$null"); break;
             }
             Symbol *type_sym = lookup_symbol(ctx, type_name);
             result_type = type_sym ? type_sym->type : NULL;
@@ -860,6 +862,10 @@ bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
     if (!src || !dst) return false;
 
     if (types_equal(src, dst)) return true;
+
+    if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
+        return dst->type == TYPEREF_POINTER || dst->is_optional;
+    }
 
     if (src->is_optional != dst->is_optional) return false;
 

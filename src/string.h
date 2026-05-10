@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdbool.h>
 
+#define string_fmt(S) S.length, S.data
+
 typedef struct {
     char *data;
     size_t length;

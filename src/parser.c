@@ -367,6 +367,12 @@ Expr *expr_new_lit(Parser *ctx, Token *t) {
             ._char = t->value.value.data[0],
         };
     }
+    else if (t->type == TOKENTYPE_NULL) {
+        e->literal = (Literal){
+            .type = LITERAL_NULL,
+            .raw = t->value.value
+        };
+    }
     else {
         error(ctx, "Unknown expression literal");
     }
@@ -411,7 +417,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
         error(ctx, "Expected a token for expression");
     }
 
-    if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE) {
+    if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE || t.value.type == TOKENTYPE_NULL) {
         Expr *e = expr_new_lit(ctx, &t.value);
         consume(ctx);
         return e;
@@ -627,20 +633,14 @@ Stmt *parse_for_stmt(Parser *ctx) {
 
 Stmt *parse_if_stmt(Parser *ctx) {
     Token start = consume(ctx);
-    token_optional t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) {
-        error(ctx, "Expected '('");
-    }
-    Expr *cond = parse_expr(ctx, 0);
 
-    t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
-        error(ctx, "Expected '{'");
-    }
+    expect(ctx, TOKENTYPE_LPAREN, "Expected ')'");
+    Expr *cond = parse_expr(ctx, 0);
+    expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
 
     Stmt *then = parse_block_stmt(ctx);
     Stmt *_else = NULL;
-    t = peek(ctx);
+    token_optional t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_ELSE) {
         consume(ctx);
         t = peek(ctx);
