@@ -837,6 +837,12 @@ FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
     if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
         fn->body = parse_block_stmt(ctx);
     }
+    else if (t.has_value && t.value.type == TOKENTYPE_SEMICOLON) {
+        consume(ctx);
+        fn->body = NULL;
+    } else {
+        error(ctx, "Expeced ';' or functio body");
+    }
 
     fn->name = fn_name.value.value;
     fn->ret_type = ret_type;
