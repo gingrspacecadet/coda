@@ -1,5 +1,6 @@
 #include "hir.h"
 #include "mir.h"
+#include <stdio.h>
 
 static Symbol *lookup_symbol(MirBuilder *ctx, String name) {
     Scope *scope = ctx->global_scope;
@@ -20,6 +21,7 @@ static Symbol *lookup_symbol(MirBuilder *ctx, String name) {
 MirBlock *new_block(MirBuilder *ctx) {
     MirBlock *b = arena_calloc(ctx->arena, sizeof(MirBlock));
     b->id = ctx->block_counter++;
+    b->visited = false;
     return b;
 }
 
@@ -186,17 +188,26 @@ void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
             MirBlock *merge_block = new_block(ctx);
 
             MirOperand cond = mir_lower_expr(ctx, hir->_if.cond);
+            emit(ctx, MIR_OP_BRANCH_FALSE, null_op(), cond, null_op())->label_id = else_block->id;
             ctx->current_block->succ_true = then_block;
             ctx->current_block->succ_false = else_block;
 
             ctx->current_block = then_block;
             mir_lower_stmt(ctx, hir->_if.then_block);
-            terminate_and_link(ctx, merge_block);
+            if (ctx->current_block) {
+                emit(ctx, MIR_OP_JMP, null_op(), null_op(), null_op())->label_id = merge_block->id;
+                ctx->current_block->succ_true = merge_block;
+            }
 
+            ctx->current_block = else_block;
             if (hir->_if.else_block) {
-                ctx->current_block = else_block;
                 mir_lower_stmt(ctx, hir->_if.else_block);
-                terminate_and_link(ctx, merge_block);
+                if (ctx->current_block) {
+                    emit(ctx, MIR_OP_JMP, null_op(), null_op(), null_op())->label_id = merge_block->id;
+                    ctx->current_block->succ_true = merge_block;
+                }
+            } else {
+                ctx->current_block->succ_true = merge_block;
             }
 
             ctx->current_block = merge_block;
@@ -212,13 +223,16 @@ void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
 
             ctx->current_block = cond_block;
             MirOperand cond = mir_lower_expr(ctx, hir->_while.cond);
+            emit(ctx, MIR_OP_BRANCH_FALSE, null_op(), cond, null_op())->label_id = exit_block->id;
             cond_block->succ_true = body_block;
             cond_block->succ_false = exit_block;
 
             ctx->current_block = body_block;
             mir_lower_stmt(ctx, hir->_while.body);
-
-            terminate_and_link(ctx, cond_block);
+            if (ctx->current_block) {
+                emit(ctx, MIR_OP_JMP, null_op(), null_op(), null_op())->label_id = cond_block->id;
+                ctx->current_block->succ_true = cond_block;
+            }
 
             ctx->current_block = exit_block;
             break;
@@ -260,7 +274,9 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     ctx->current_block = entry;
     mir_fn->entry_block = entry;
 
-    mir_lower_stmt(ctx, hir_fn->body);
+    if (hir_fn->body) {
+        mir_lower_stmt(ctx, hir_fn->body);
+    }
 
     if (ctx->current_block) {
         emit(ctx, MIR_OP_RET, null_op(), null_op(), null_op());
@@ -277,4 +293,110 @@ MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     }
 
     return mod;
+}
+
+static void print_operand(MirOperand op) {
+    switch (op.type) {
+        case MIR_VAL_LIT:
+            if (op.lit.type == LITERAL_INT) {
+                printf("%lld", op.lit._int);
+            } else if (op.lit.type == LITERAL_STRING) {
+                printf("\"%.*s\"", (int)op.lit.string.length, op.lit.string.data);
+            } else {
+                printf("<lit>");
+            }
+            break;
+        case MIR_VAL_SYMBOL:
+            printf("%.*s", (int)op.symbol->name.length, op.symbol->name.data);
+            break;
+        case MIR_VAL_TEMP:
+            printf("t%d", op.temp);
+            break;
+        case MIR_VAL_LABEL:
+            printf("L%d", op.label_id);
+            break;
+    }
+}
+
+static void print_instr(MirInstr *instr) {
+    if (instr->result.type != MIR_VAL_LIT || instr->result.lit.type != LITERAL_INT || instr->result.lit._int != 0) {
+        print_operand(instr->result);
+        printf(" = ");
+    }
+
+    switch (instr->op) {
+        case MIR_OP_ADD: printf("add "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_SUB: printf("sub "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_MUL: printf("mul "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_DIV: printf("div "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_NEG: printf("neg "); print_operand(instr->lhs); break;
+        case MIR_OP_NOT: printf("not "); print_operand(instr->lhs); break;
+        case MIR_OP_COPY: printf("copy "); print_operand(instr->lhs); break;
+        case MIR_OP_LOAD: printf("load "); print_operand(instr->lhs); break;
+        case MIR_OP_STORE: printf("store "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_JMP: printf("jmp L%d", instr->label_id); break;
+        case MIR_OP_BRANCH: printf("br "); print_operand(instr->lhs); printf(", L%d", instr->label_id); break;
+        case MIR_OP_BRANCH_FALSE: printf("brf "); print_operand(instr->lhs); printf(", L%d", instr->label_id); break;
+        case MIR_OP_CALL: 
+            printf("call "); print_operand(instr->lhs); printf("(");
+            for (size_t i = 0; i < instr->arg_count; i++) {
+                if (i > 0) printf(", ");
+                print_operand(instr->call_args[i]);
+            }
+            printf(")");
+            break;
+        case MIR_OP_RET: printf("ret"); if (instr->lhs.type != MIR_VAL_LIT || instr->lhs.lit._int != 0) { printf(" "); print_operand(instr->lhs); } break;
+        case MIR_OP_LABEL: printf("L%d:", instr->label_id); break;
+        default: printf("<unknown op>");
+    }
+    printf("\n");
+}
+
+static void print_block(MirBlock *block) {
+    printf("block %d:\n", block->id);
+    for (MirInstr *instr = block->first; instr != NULL; instr = instr->next) {
+        printf("  ");
+        print_instr(instr);
+    }
+    if (block->succ_true) printf("  succ_true: %d\n", block->succ_true->id);
+    if (block->succ_false) printf("  succ_false: %d\n", block->succ_false->id);
+    printf("\n");
+}
+
+void mir_pretty_print(MirModule *mod) {
+    for (size_t i = 0; i < mod->functions.len; i++) {
+        MirFunction *fn = mod->functions.data[i];
+        printf("function %.*s:\n", (int)fn->symbol->name.length, fn->symbol->name.data);
+        
+        // Collect all blocks
+        MirBlock *blocks[1024];
+        int block_count = 0;
+        MirBlock *stack[1024];
+        int stack_top = 0;
+        stack[stack_top++] = fn->entry_block;
+        fn->entry_block->visited = true;
+        blocks[block_count++] = fn->entry_block;
+
+        while (stack_top > 0) {
+            MirBlock *block = stack[--stack_top];
+            if (block->succ_true && !block->succ_true->visited) {
+                block->succ_true->visited = true;
+                stack[stack_top++] = block->succ_true;
+                blocks[block_count++] = block->succ_true;
+            }
+            if (block->succ_false && !block->succ_false->visited) {
+                block->succ_false->visited = true;
+                stack[stack_top++] = block->succ_false;
+                blocks[block_count++] = block->succ_false;
+            }
+        }
+
+        for (int j = 0; j < block_count; j++) {
+            print_block(blocks[j]);
+        }
+
+        for (int j = 0; j < block_count; j++) {
+            blocks[j]->visited = false;
+        }
+    }
 }

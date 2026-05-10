@@ -166,6 +166,11 @@ void register_globals(Analyser *ctx, Module *mod) {
                 if (d->fn->is_export) flags |= SYMFLAG_EXPORT;
 
                 Symbol *sym = declare_symbol(ctx, d->fn->name, flags);
+                TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                fn_type->type = TYPEREF_FN;
+                fn_type->fn.ret_type = d->fn->ret_type;
+                fn_type->fn.params = d->fn->params;
+                sym->type = fn_type;
                 sym->decl = d;
                 d->symbol = sym;
                 d->fn->symbol = sym;

@@ -57,10 +57,9 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->field_offset.base = lower_expr(ctx, ast_expr->member.base);
 
             Symbol *type_sym = ast_expr->member.base->resolved_type->type_symbol;
-            StructDecl *str = type_sym->decl->_struct;
-
             size_t offset = 0;
-            if (type_sym->decl->type == DECL_STRUCT) {
+            if (type_sym && type_sym->decl && type_sym->decl->type == DECL_STRUCT) {
+                StructDecl *str = type_sym->decl->_struct;
                 for (size_t i = 0; i < str->members.len; i++) {
                     if (string_eq(str->members.data[i]->name, ast_expr->member.member)) {
                         offset = str->field_offsets.data[i];
@@ -120,8 +119,8 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
         case STMT_IF: {
             hir->type = HIR_STMT_IF;
             hir->_if.cond = lower_expr(ctx, ast_stmt->_if.cond);
-            hir->_if.then_block = lower_stmt(ctx, ast_stmt->_if.then);
-            hir->_if.else_block = lower_stmt(ctx, ast_stmt->_if._else);
+            hir->_if.then_block = ast_stmt->_if.then ? lower_stmt(ctx, ast_stmt->_if.then) : NULL;
+            hir->_if.else_block = ast_stmt->_if._else ? lower_stmt(ctx, ast_stmt->_if._else) : NULL;
             break;
         }
         case STMT_FOR: {
@@ -140,7 +139,9 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             while_body->type = HIR_STMT_BLOCK;
             while_body->block.stmts = hirstmts_array_init();
 
-            hirstmts_array_push(&while_body->block.stmts, lower_stmt(ctx, ast_stmt->_for.body));
+            if (ast_stmt->_for.body) {
+                hirstmts_array_push(&while_body->block.stmts, lower_stmt(ctx, ast_stmt->_for.body));
+            }
 
             if (ast_stmt->_for.post) {
                 HirStmt *post_stmt = arena_calloc(ctx->arena, sizeof(HirStmt));
@@ -157,7 +158,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
         case STMT_WHILE: {
             hir->type = HIR_STMT_WHILE;
             hir->_while.cond = lower_expr(ctx, ast_stmt->_while.cond);
-            hir->_while.body = lower_stmt(ctx, ast_stmt->_while.body);
+            hir->_while.body = ast_stmt->_while.body ? lower_stmt(ctx, ast_stmt->_while.body) : NULL;
             break;
         }
     }
@@ -225,7 +226,11 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
             syms_array_push(&fndecl->params, d->fn->params.data[j].symbol);
         }
 
-        fndecl->body = lower_stmt(ctx, d->fn->body);
+        if (d->fn->body) {
+            fndecl->body = lower_stmt(ctx, d->fn->body);
+        } else {
+            fndecl->body = NULL;
+        }
         fndecl->ret_type = d->fn->ret_type;
 
         fndecl->locals = syms_array_init();

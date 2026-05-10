@@ -59,6 +59,8 @@ struct MirBlock {
 
     MirBlock *succ_true;
     MirBlock *succ_false;
+
+    bool visited;
 };
 
 typedef struct {
@@ -85,6 +87,7 @@ typedef struct {
 } MirBuilder;
 
 MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir);
+void mir_pretty_print(MirModule *mod);
 
 static inline MirOperand make_temp(MirBuilder *ctx, TypeRef *type) {
     return (MirOperand){

@@ -43,7 +43,9 @@ Source setup_source(char *path) {
 int main(void) {
     Lexer lexer = {
         .arena = arena_create(),
-        .source = setup_source("test/main.coda")
+        .source = setup_source("test/main.coda"),
+        .line = 1,
+        .col = 1,
     };
     error_set_source(lexer.source);
 
@@ -70,4 +72,6 @@ int main(void) {
     for (size_t i = 0; i < mir->functions.len; i++) {
         opt_constant_folding(mir->functions.data[i]);
     }
+
+    mir_pretty_print(mir);
 }
