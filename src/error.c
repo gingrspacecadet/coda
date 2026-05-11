@@ -26,7 +26,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     if (!t.has_value) {
         printf(BOLD_WHITE "%.*s:0:0: " RED "error: " RESET "%s\n" 
                RED "error: " RESET "at end of file\n", 
-               err_source.path.length, err_source.path.data, msg);
+               string_fmt(err_source.path), msg);
         exit(1);
     }
 
@@ -74,7 +74,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
         caret_len = cols > 1 ? cols : 1;
     }
 
-    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", err_source.path.length, err_source.path.data, t.value.line, col, msg);
+    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", string_fmt(err_source.path), t.value.line, col, msg);
 
     printf("%ld | %s\n", t.value.line, printable_line.data);
 
@@ -147,7 +147,7 @@ __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
         caret_len = cols > 1 ? cols : 1;
     }
 
-    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", err_source.path.length, err_source.path.data, t.line, col, msg);
+    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", string_fmt(err_source.path), t.line, col, msg);
 
     printf("%ld | %s\n", t.line, printable_line.data);
 

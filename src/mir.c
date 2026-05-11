@@ -336,7 +336,7 @@ static void print_operand(MirOperand op) {
             if (op.lit.type == LITERAL_INT) {
                 printf("%lld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
-                printf("\"%.*s\"", (int)op.lit.string.length, op.lit.string.data);
+                printf("\"%.*s\"", string_fmt(op.lit.string));
             } else if (op.lit.type == LITERAL_NULL) {
                 printf("null");
             } else if (op.lit.type == LITERAL_BOOL) {
@@ -348,7 +348,7 @@ static void print_operand(MirOperand op) {
             }
             break;
         case MIR_VAL_SYMBOL:
-            printf("%.*s", (int)op.symbol->name.length, op.symbol->name.data);
+            printf("%.*s", string_fmt(op.symbol->name));
             break;
         case MIR_VAL_TEMP:
             printf("t%d", op.temp);
@@ -411,7 +411,7 @@ void mir_pretty_print(MirModule *mod) {
         MirFunction *fn = mod->functions.data[i];
         printf("function ");
         print_type(fn->symbol->decl->fn->ret_type);
-        printf(" %.*s(", (int)fn->symbol->name.length, fn->symbol->name.data);
+        printf(" %.*s(", string_fmt(fn->symbol->name));
         
         if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
             for (size_t j = 0; j < fn->symbol->type->fn.params.len; j++) {
@@ -419,7 +419,7 @@ void mir_pretty_print(MirModule *mod) {
                 Param p = fn->symbol->type->fn.params.data[j];
                 print_type(p.type);
                 putc(' ', stdout);
-                printf("%.*s", (int)p.name.length, p.name.data);
+                printf("%.*s", string_fmt(p.name));
             }
         }
         printf("):\n");

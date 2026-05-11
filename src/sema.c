@@ -122,9 +122,9 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
         Symbol *sym = ctx->current_scope->symbols.data[i];
         if (string_eq(sym->name, name)) {
             if (sym->decl) {
-                error(sym->decl->token, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
+                error(sym->decl->token, format("Redeclaration of symbol %.*s", string_fmt(sym->name)));
             } else {
-                error((Token){}, format("Redeclaration of symbol %.*s", sym->name.length, sym->name.data));
+                error((Token){}, format("Redeclaration of symbol %.*s", string_fmt(sym->name)));
             }
         }
     }
@@ -635,7 +635,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *right_t = check_expr(ctx, expr->binary.right);
 
             if (!types_compatible(ctx, left_t, right_t)) {
-                error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", left_t->type_symbol->name.length, left_t->type_symbol->name.data, right_t->type_symbol->name.length, right_t->type_symbol->name.data));
+                error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", string_fmt(left_t->type_symbol->name), string_fmt(right_t->type_symbol->name)));
             }
 
             if (expr->binary.op == BINOP_EQ || 
@@ -699,7 +699,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 resolve_typeref(ctx, param_type);
 
                 if (!types_compatible(ctx, arg_type, param_type)) {
-                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", arg_type->type_symbol->name.length, arg_type->type_symbol->name.data, param_type->type_symbol->name.length, param_type->type_symbol->name.data));
+                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", string_fmt(arg_type->type_symbol->name), string_fmt(param_type->type_symbol->name)));
                 }
             }
 
@@ -728,12 +728,16 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     result_type = uint64_sym->type;
                     goto check_expr_finished;
                 } else {
-                    error(expr->member.base->token, format("Unknown array member %.*s", expr->member.member.length, expr->member.member.data));
+                    error(expr->member.base->token, format("Unknown array member %.*s", string_fmt(expr->member.member)));
                 }
             } else {
                 Symbol *type_sym = base_type->type_symbol;
                 if (!type_sym || !(type_sym->flags & SYMFLAG_TYPE)) {
-                    error(expr->member.base->token, format("Unknown base type name %.*s", type_sym ? type_sym->name.length : 6, type_sym ? type_sym->name.data : NULL));
+                    if (type_sym) {
+                        error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(base_type->type_symbol->name)));
+                    } else {
+                        error(expr->member.base->token, "Unknown base type");
+                    }
                 }
     
                 StructDecl *str = NULL;
