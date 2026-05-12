@@ -19,12 +19,12 @@ static char string_at(String string, size_t index) {
     return string.data[index];
 }
 
-static String string_make(char *cstr) {
-    return (String){
-        .data = cstr,
-        .length = strlen(cstr)
-    };
-}
+#define string_make(cstr) (String){ \
+        .data = (cstr), \
+        .length = (__builtin_constant_p(__builtin_strlen(cstr)) \
+                   ? (sizeof(cstr) - 1) \
+                   : strlen(cstr)) \
+    }
 
 static bool string_eq(String a, String b) {
     if (a.length != b.length) return false;

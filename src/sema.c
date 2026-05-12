@@ -154,6 +154,44 @@ Symbol *lookup_symbol(Analyser *ctx, String name) {
     return NULL;
 }
 
+void validate_decl_attrs(Analyser *ctx, Decl *d) {
+    // first, general attributes
+    for (size_t i = 0; i < d->attributes.len; i++) {
+        Attribute *a = &d->attributes.data[i];
+        if (a->consumed) continue;
+
+        if (string_eq(a->name, string_make("export"))) {
+            d->is_export = true;
+            a->consumed = true;
+        }
+    }
+
+    // now specific
+    for (size_t i = 0; i < d->attributes.len; i++) {
+        Attribute *a = &d->attributes.data[i];
+        if (a->consumed) continue;
+        
+        bool found = false;
+        switch (d->type) {
+            case DECL_FN: {
+                break;
+            }
+            case DECL_STRUCT: {
+                break;
+            }
+            case DECL_TYPE: {
+                break;
+            }
+            case DECL_UNION: {
+                break;
+            }
+        }
+        if (found) continue;
+        
+        error(d->token, format("Unknown attribute %.*s", string_fmt(a->name)));
+    }
+}
+
 void register_globals(Analyser *ctx, Module *mod) {
     ctx->current_scope = ctx->global_scope;
 
@@ -163,7 +201,7 @@ void register_globals(Analyser *ctx, Module *mod) {
         switch (d->type) {
             case DECL_FN: {
                 uint32_t flags = SYMFLAG_FN;
-                if (d->fn->is_export) flags |= SYMFLAG_EXPORT;
+                if (d->is_export) flags |= SYMFLAG_EXPORT;
 
                 Symbol *sym = declare_symbol(ctx, d->fn->name, flags);
                 TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
@@ -177,6 +215,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_STRUCT: {
+                validate_decl_attrs(ctx, d);
                 Symbol *sym = declare_symbol(ctx, d->_struct->name, SYMFLAG_TYPE);
                 sym->decl = d;
                 d->symbol = sym;

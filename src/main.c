@@ -73,5 +73,5 @@ int main(void) {
         opt_constant_folding(mir->functions.data[i]);
     }
 
-    mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
+    // mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
 }

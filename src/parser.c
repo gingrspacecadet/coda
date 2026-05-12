@@ -777,9 +777,8 @@ Stmt *parse_block_stmt(Parser *ctx) {
     return s;
 }
 
-StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
+StructDecl *parse_struct_decl(Parser *ctx) {
     StructDecl *str = arena_calloc(ctx->arena, sizeof(StructDecl));
-    str->attributes = attrs;
     str->members = vardecls_array_init();
     str->field_offsets = size_array_init();
     str->token = consume(ctx);
@@ -809,11 +808,10 @@ StructDecl *parse_struct_decl(Parser *ctx, attr_array attrs) {
     return str;
 }
 
-UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
+UnionDecl *parse_union_decl(Parser *ctx) {
     Token start = consume(ctx);
     UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
     un->token = start;
-    un->attributes = attrs;
     un->members = vardecls_array_init();
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name");
@@ -841,11 +839,10 @@ UnionDecl *parse_union_decl(Parser *ctx, attr_array attrs) {
     return un;
 }
 
-FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
+FnDecl *parse_fn_decl(Parser *ctx) {
     Token start = consume(ctx);
     FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
     fn->token = start;
-    fn->attributes = attrs;
     fn->params = param_array_init();
 
     TypeRef *ret_type = parse_type(ctx);
@@ -893,11 +890,10 @@ FnDecl *parse_fn_decl(Parser *ctx, attr_array attrs) {
     return fn;
 }
 
-TypeDecl *parse_type_decl(Parser *ctx, attr_array attrs) {
+TypeDecl *parse_type_decl(Parser *ctx) {
     Token start = consume(ctx);
     TypeDecl *ty = arena_calloc(ctx->arena, sizeof(TypeDecl));
     ty->token = start;
-    ty->attributes = attrs;
     ty->name = expect(ctx, TOKENTYPE_IDENT, "Expected type alias name").value.value;
     expect(ctx, TOKENTYPE_EQ, "Expected '='");
     ty->alias = parse_type(ctx);
@@ -908,8 +904,8 @@ TypeDecl *parse_type_decl(Parser *ctx, attr_array attrs) {
 
 Decl *parse_decl(Parser *ctx) {
     Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
-    attr_array attrs = attr_array_init();
-    collect_attributes(ctx, &attrs);
+    d->attributes = attr_array_init();
+    collect_attributes(ctx, &d->attributes);
 
     token_optional t = peek(ctx);
     if (!t.has_value) {
@@ -919,25 +915,25 @@ Decl *parse_decl(Parser *ctx) {
     switch (t.value.type) {
         case TOKENTYPE_FN: {
             d->type = DECL_FN;
-            d->fn = parse_fn_decl(ctx, attrs);
+            d->fn = parse_fn_decl(ctx);
             d->token = d->fn->token;
             break;
         }
         case TOKENTYPE_STRUCT: {
             d->type = DECL_STRUCT;
-            d->_struct = parse_struct_decl(ctx, attrs);
+            d->_struct = parse_struct_decl(ctx);
             d->token = d->_struct->token;
             break;
         }
         case TOKENTYPE_UNION: {
             d->type = DECL_UNION;
-            d->_union = parse_union_decl(ctx, attrs);
+            d->_union = parse_union_decl(ctx);
             d->token = d->_union->token;
             break;
         }
         case TOKENTYPE_TYPE: {
             d->type = DECL_TYPE;
-            d->_type = parse_type_decl(ctx, attrs);
+            d->_type = parse_type_decl(ctx);
             d->token = d->_type->token;
             break;
         }

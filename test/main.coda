@@ -1,6 +1,12 @@
 module main;
 
-fn int *? main() {
-    int *?e = null;
-    return e;
+@export
+@thisshoulderror
+struct foo {
+    int a;
+}
+
+@export
+fn int main() {
+    return 0;
 }

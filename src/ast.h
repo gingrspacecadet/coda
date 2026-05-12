@@ -71,6 +71,7 @@ typedef enum {
 typedef struct {
     String name;
     string_array args;
+    bool consumed;
     Token token;
 } Attribute;
 
@@ -253,7 +254,6 @@ struct FnDecl {
     TypeRef *ret_type;
     param_array params;
     Stmt *body;
-    attr_array attributes;
     Symbol *symbol;
     Scope *local_scope;
     bool is_export;
@@ -275,7 +275,9 @@ struct Decl {
         UnionDecl *_union;
         TypeDecl *_type;
     };
+    attr_array attributes;
     Symbol *symbol;
+    bool is_export;
     Token token;
 };
 
@@ -285,32 +287,26 @@ INSTANTIATE(size_t, size, ARRAY_TEMPLATE)
 struct StructDecl {
     String name;
     vardecls_array members;
-    attr_array attributes;
     Symbol *symbol;
     size_t size;
     size_t align;
     size_array field_offsets;
-    bool is_export;
     Token token;
 };
 
 struct UnionDecl {
     String name;
     vardecls_array members;
-    attr_array attributes;
     Symbol *symbol;
     size_t size;
     size_t align;
-    bool is_export;
     Token token;
 };
 
 struct TypeDecl {
     String name;
     TypeRef *alias;
-    attr_array attributes;
     Symbol *symbol;
-    bool is_export;
     Token token;
 };
 
