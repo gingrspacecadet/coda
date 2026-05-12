@@ -1,12 +1,16 @@
 module main;
 
 @export
-@thisshoulderror
+@packed
+@align(12)
 struct foo {
     int a;
 }
 
 @export
 fn int main() {
+    while (true) {
+        int x = 0;
+    }
     return 0;
 }

@@ -68,6 +68,8 @@ Include *parse_include(Parser *ctx) {
     return inc;
 }
 
+Literal new_lit(Parser *ctx, Token t);
+
 void collect_attributes(Parser *ctx, attr_array *out) {
     token_optional t = peek(ctx);
     while (t.has_value) {
@@ -75,11 +77,31 @@ void collect_attributes(Parser *ctx, attr_array *out) {
 
         consume(ctx);
         Token name = consume(ctx);
-        Attribute attr;
-        attr.name = name.value.value;
-        attr.token = name;
+        Attribute attr = {
+            .name = name.value.value,
+            .token = name
+        };
 
-        // handle args here
+        attr.args = lit_array_init();
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_LPAREN) {
+            consume(ctx);
+            t = peek(ctx);
+            while (t.has_value) {
+                lit_array_push(&attr.args, new_lit(ctx, consume(ctx)));
+
+                t = peek(ctx);
+                if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
+                    consume(ctx);
+                    t = peek(ctx);
+                    continue;
+                }
+                
+                expect(ctx, TOKENTYPE_RPAREN, "Expected ')' to close attribute list");
+                break;
+            }
+        }
 
         attr_array_push(out, attr);
         t = peek(ctx);
@@ -334,57 +356,69 @@ static int token_to_unary(TokenType type, UnaryOp *out) {
     }
 }
 
-Expr *expr_new_lit(Parser *ctx, Token *t) {
-    Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
-    e->type = EXPR_LIT;
-    e->token = *t;
-    
-    if (t->type == TOKENTYPE_INT_LIT) {
-        e->literal = (Literal){
+Literal new_lit(Parser *ctx, Token t) {
+    Literal lit;
+    if (t.type == TOKENTYPE_INT_LIT) {
+        lit = (Literal){
             .type = LITERAL_INT,
-            .raw = t->value.value,
-            ._int = strtoll(t->value.value.data, NULL, 0),
+            .raw = t.value.value,
+            ._int = strtoll(t.value.value.data, NULL, 0),
+            .token = t
         };
     }
-    else if (t->type == TOKENTYPE_STR_LIT) {
-        e->literal = (Literal){
+    else if (t.type == TOKENTYPE_STR_LIT) {
+        lit = (Literal){
             .type = LITERAL_STRING,
-            .raw = t->value.value,
-            .string = t->value.value
+            .raw = t.value.value,
+            .string = t.value.value,
+            .token = t
         };
     }
-    else if (t->type == TOKENTYPE_TRUE || t->type == TOKENTYPE_FALSE) {
-        e->literal = (Literal){
+    else if (t.type == TOKENTYPE_TRUE || t.type == TOKENTYPE_FALSE) {
+        lit = (Literal){
             .type = LITERAL_BOOL,
-            .raw = t->value.value,
-            ._bool = (t->type == TOKENTYPE_TRUE)
+            .raw = t.value.value,
+            ._bool = (t.type == TOKENTYPE_TRUE),
+            .token = t
         };
     }
-    else if (t->type == TOKENTYPE_CHAR_LIT) {
-        e->literal = (Literal){
+    else if (t.type == TOKENTYPE_CHAR_LIT) {
+        lit = (Literal){
             .type = LITERAL_CHAR,
-            .raw = t->value.value,
-            ._char = t->value.value.data[0],
+            .raw = t.value.value,
+            ._char = t.value.value.data[0],
+            .token = t
         };
     }
-    else if (t->type == TOKENTYPE_NULL) {
-        e->literal = (Literal){
+    else if (t.type == TOKENTYPE_NULL) {
+        lit = (Literal){
             .type = LITERAL_NULL,
-            .raw = t->value.value
+            .raw = t.value.value,
+            .token = t
         };
     }
     else {
-        error(ctx, "Unknown expression literal");
+        error(t, format("Unknown literal %.*s", string_fmt(t.value.value)));
     }
+
+    return lit;
+}
+
+Expr *expr_new_lit(Parser *ctx, Token t) {
+    Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
+    e->type = EXPR_LIT;
+    e->token = t;
+    
+    e->literal = new_lit(ctx, t);
 
     return e;
 }
 
-Expr *expr_new_ident(Parser *ctx, Token *t) {
+Expr *expr_new_ident(Parser *ctx, Token t) {
     string_array comps = string_array_init();
-    string_array_push(&comps, t->value.value);
+    string_array_push(&comps, t.value.value);
 
-    Token last = *t;
+    Token last = t;
     while (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_DOUBLECOLON) {
         consume(ctx);
         Token comp = consume(ctx);
@@ -397,7 +431,7 @@ Expr *expr_new_ident(Parser *ctx, Token *t) {
     }
 
     Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
-    e->token = *t;
+    e->token = t;
 
     if (comps.len == 1) {
         e->type = EXPR_IDENT;
@@ -418,14 +452,14 @@ Expr *parse_expr_prefix(Parser *ctx) {
     }
 
     if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE || t.value.type == TOKENTYPE_NULL) {
-        Expr *e = expr_new_lit(ctx, &t.value);
+        Expr *e = expr_new_lit(ctx, t.value);
         consume(ctx);
         return e;
     }
 
     if (t.value.type == TOKENTYPE_IDENT) {
         consume(ctx);
-        Expr *e = expr_new_ident(ctx, &t.value);
+        Expr *e = expr_new_ident(ctx, t.value);
         return e;
     }
 

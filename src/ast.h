@@ -68,13 +68,6 @@ typedef enum {
     SYMFLAG_MUT = 1 << 5
 } SymbolFlags;
 
-typedef struct {
-    String name;
-    string_array args;
-    bool consumed;
-    Token token;
-} Attribute;
-
 struct Literal {
     enum {
         LITERAL_INT,
@@ -94,6 +87,15 @@ struct Literal {
     };
     Token token;
 };
+
+INSTANTIATE(Literal, lit, ARRAY_TEMPLATE)
+
+typedef struct {
+    String name;
+    lit_array args;
+    bool consumed;
+    Token token;
+} Attribute;
 
 struct Expr {
     enum {

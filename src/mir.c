@@ -152,7 +152,7 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
         }
 
         case HIR_EXPR_CALL: {
-            MirOperand *args = arena_alloc(ctx->arena, sizeof(MirOperand) * hir->call.args.len);
+            MirOperand *args = arena_calloc(ctx->arena, sizeof(MirOperand) * hir->call.args.len);
             for (size_t i = 0; i < hir->call.args.len; i++) {
                 args[i] = mir_lower_expr(ctx, hir->call.args.data[i]);
             }

@@ -73,7 +73,7 @@ static void inject_builtin_types(Analyser *ctx) {
 }
 
 Scope *scope_init(Arena *a) {
-    Scope *s = arena_alloc(a, sizeof(Scope));
+    Scope *s = arena_calloc(a, sizeof(Scope));
     s->symbols = syms_array_init();
     s->parent = NULL;
     return s;
@@ -159,13 +159,13 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
     for (size_t i = 0; i < d->attributes.len; i++) {
         Attribute *a = &d->attributes.data[i];
         if (a->consumed) continue;
-
+        
         if (string_eq(a->name, string_make("export"))) {
             d->is_export = true;
             a->consumed = true;
         }
     }
-
+    
     // now specific
     for (size_t i = 0; i < d->attributes.len; i++) {
         Attribute *a = &d->attributes.data[i];
@@ -177,6 +177,19 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
                 break;
             }
             case DECL_STRUCT: {
+                if (string_eq(a->name, string_make("packed"))) {
+                    found = true;
+                    d->_struct->align = 1;
+                    a->consumed = true;
+                }
+                if (string_eq(a->name, string_make("align"))) {
+                    found = true;
+                    if (a->args.len != 1 || a->args.data[0].type != LITERAL_INT) {
+                        error(a->args.data[0].token, "Attribute only expects a single integer argument");
+                    }
+                    d->_struct->align = a->args.data[0]._int;
+                    a->consumed = true;
+                }
                 break;
             }
             case DECL_TYPE: {
@@ -188,7 +201,7 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
         }
         if (found) continue;
         
-        error(d->token, format("Unknown attribute %.*s", string_fmt(a->name)));
+        error(a->token, format("Unknown attribute %.*s", string_fmt(a->name)));
     }
 }
 
@@ -197,6 +210,7 @@ void register_globals(Analyser *ctx, Module *mod) {
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
+        validate_decl_attrs(ctx, d);
 
         switch (d->type) {
             case DECL_FN: {
@@ -215,7 +229,6 @@ void register_globals(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_STRUCT: {
-                validate_decl_attrs(ctx, d);
                 Symbol *sym = declare_symbol(ctx, d->_struct->name, SYMFLAG_TYPE);
                 sym->decl = d;
                 d->symbol = sym;
