@@ -4,9 +4,6 @@ CFLAGS = -g -Werror -MMD -MD -std=gnu23
 SRCS = $(shell find src/ -type f -name "*.c" 2>/dev/null)
 OBJS = $(patsubst %.c,%.o,$(SRCS))
 
-PCH = src/pch.hpp
-PCH_GCH = $(PCH).gch
-
 TARGET = coda
 
 .PHONY: all clean

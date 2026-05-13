@@ -327,6 +327,7 @@ struct Symbol {
     TypeRef *type;
     uint32_t flags;
     Scope *defined_in;
+    uint32_t vreg;  // for LIR
 };
 
 INSTANTIATE(Symbol*, syms, ARRAY_TEMPLATE)
