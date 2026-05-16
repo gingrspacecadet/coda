@@ -8,6 +8,8 @@
 #include "hir.h"
 #include "mir.h"
 #include "opt.h"
+#include "lir.h"
+#include "codegen.h"
 
 char *read_file(char *path) {
     FILE *f = fopen(path, "r");
@@ -73,5 +75,11 @@ int main(void) {
         opt_constant_folding(mir->functions.data[i]);
     }
 
-    mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
+    // hir_pretty_print(hir);
+    // mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
+
+    LirFunction *lir = lir_lower_fn(&mirbuilder, mir->functions.data[0]);
+    // lir_pretty_print(lir);
+
+    codegen(stdout, lir);
 }

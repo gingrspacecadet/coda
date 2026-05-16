@@ -119,5 +119,6 @@ typedef struct {
 } HirModule;
 
 HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod);
+void hir_pretty_print(HirModule *mod);
 
 #endif
