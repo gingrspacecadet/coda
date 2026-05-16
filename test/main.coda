@@ -1,7 +1,12 @@
 module main;
 
-@extern fn int test();
+@extern fn none write(char *p, uint l);
+
+fn none puts(string s) {
+    write(s.ptr, s.len);
+}
 
 fn int main() {
-    return test();
+    puts("Hello, world!");
+    return 0;
 }

@@ -4,6 +4,6 @@
 #include <stdio.h>
 #include "lir.h"
 
-void codegen(FILE *out, LirFunction *fn);
+void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx);
 
 #endif

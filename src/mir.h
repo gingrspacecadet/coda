@@ -30,12 +30,12 @@ typedef struct {
         MIR_VAL_SYMBOL,
         MIR_VAL_TEMP,
         MIR_VAL_LABEL,
+        MIR_VAL_GLOBAL,
     } type;
     union {
         Literal lit;
         Symbol *symbol;
-        uint32_t temp;
-        uint32_t label_id;
+        uint32_t imm;
     };
     TypeRef *resolved_type;
 } MirOperand;
@@ -80,11 +80,19 @@ typedef struct {
 } MirModule;
 
 typedef struct {
+    uint32_t id;
+    String value;
+} StringConstant;
+
+INSTANTIATE(StringConstant, strconst, ARRAY_TEMPLATE)
+
+typedef struct {
     uint32_t temp_counter;
     uint32_t label_counter;
     uint32_t block_counter;
     MirBlock *current_block;
     MirFunction *current_fn;
+    strconst_array strings;
 
     Arena *arena;
     Scope *global_scope;
@@ -96,9 +104,15 @@ void mir_pretty_print(MirModule *mod);
 static inline MirOperand make_temp(MirBuilder *ctx, TypeRef *type) {
     return (MirOperand){
         .type = MIR_VAL_TEMP,
-        .temp = ctx->temp_counter++,
+        .imm = ctx->temp_counter++,
         .resolved_type = type
     };
+}
+
+static inline MirOperand make_temp_aggregate(MirBuilder *ctx, TypeRef *type) {
+    reutrn (MirOperand){
+        .type = MIR_VAL_
+    }
 }
 
 static inline MirOperand make_symbol(Symbol *sym) {

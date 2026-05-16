@@ -110,9 +110,9 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 case MIR_OP_SUB:
                 case MIR_OP_MUL:
                 case MIR_OP_DIV: {
-                    LirOperand dest = lower_operand(mir->result);
-                    LirOperand lhs = lower_operand(mir->lhs);
-                    LirOperand rhs = lower_operand(mir->rhs);
+                    LirOperand dest = lower_operand(ctx, mir->result);
+                    LirOperand lhs = lower_operand(ctx, mir->lhs);
+                    LirOperand rhs = lower_operand(ctx, mir->rhs);
 
                     if (mir->op == MIR_OP_DIV) {
                         LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
@@ -133,7 +133,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     break;
                 }
                 case MIR_OP_COPY: {
-                    emit_lir(lir_fn, ctx, LIR_MOV, lower_operand(mir->result), lower_operand(mir->lhs));
+                    emit_lir(lir_fn, ctx, LIR_MOV, lower_operand(ctx, mir->result), lower_operand(ctx, mir->lhs));
                     break;
                 }
                 case MIR_OP_JMP: {
@@ -147,9 +147,9 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 case MIR_OP_GE:
                 case MIR_OP_EQ:
                 case MIR_OP_NE: {
-                    LirOperand dest = lower_operand(mir->result);
-                    LirOperand lhs = lower_operand(mir->lhs);
-                    LirOperand rhs = lower_operand(mir->rhs);
+                    LirOperand dest = lower_operand(ctx, mir->result);
+                    LirOperand lhs = lower_operand(ctx, mir->lhs);
+                    LirOperand rhs = lower_operand(ctx, mir->rhs);
                     emit_lir(lir_fn, ctx, LIR_CMP, lhs, rhs);
                     LirInstr *set = emit_lir(lir_fn, ctx, LIR_SETCC, dest, (LirOperand){0});
                     switch (mir->op) {
@@ -164,7 +164,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     break;
                 }
                 case MIR_OP_BRANCH_FALSE: {
-                    LirOperand cond = lower_operand(mir->lhs);
+                    LirOperand cond = lower_operand(ctx, mir->lhs);
                     LirOperand zero = { .type = LIR_IMM, .imm = 0 };
                     emit_lir(lir_fn, ctx, LIR_CMP, cond, zero);
                     
@@ -176,7 +176,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
 
                 case MIR_OP_RET: {
                     if (mir->lhs.type != MIR_VAL_NONE) {
-                        LirOperand ret_val = lower_operand(mir->lhs);
+                        LirOperand ret_val = lower_operand(ctx, mir->lhs);
                         LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
                         emit_lir(lir_fn, ctx, LIR_MOV, rax, ret_val);
                     }
@@ -185,27 +185,27 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 }
 
                 case MIR_OP_CALL: {
-                    PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_R8, REG_R9 };
+                    PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9 };
 
-                    for (size_t j = 0; j < mir->arg_count && j < 6; j++) {
-                        LirOperand preg = { .type = LIR_REG_PHYSICAL, .preg = arg_regs[i] };
-                        LirOperand arg_val = lower_operand(mir->call_args[j]);
+                    for (size_t j = 0; j < mir->arg_count && j < sizeof(arg_regs) / sizeof(arg_regs[0]); j++) {
+                        LirOperand preg = { .type = LIR_REG_PHYSICAL, .preg = arg_regs[j] };
+                        LirOperand arg_val = lower_operand(ctx, mir->call_args[j]);
                         emit_lir(lir_fn, ctx, LIR_MOV, preg, arg_val);
                     }
                     //TODO: if more than 6 args, push them to stack
 
-                    LirOperand callee = lower_operand(mir->lhs);
+                    LirOperand callee = lower_operand(ctx, mir->lhs);
                     emit_lir(lir_fn, ctx, LIR_CALL, callee, (LirOperand){0});
 
                     LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
-                    LirOperand dest = lower_operand(mir->result);
+                    LirOperand dest = lower_operand(ctx, mir->result);
                     emit_lir(lir_fn, ctx, LIR_MOV, dest, rax);
                     break;
                 }
 
                 case MIR_OP_LOAD: {
-                    LirOperand dest = lower_operand(mir->result);
-                    LirOperand ptr = lower_operand(mir->lhs);
+                    LirOperand dest = lower_operand(ctx, mir->result);
+                    LirOperand ptr = lower_operand(ctx, mir->lhs);
 
                     LirOperand mem = {
                         .type = LIR_MEM,
@@ -216,8 +216,8 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 }
 
                 case MIR_OP_STORE: {
-                    LirOperand ptr = lower_operand(mir->lhs);
-                    LirOperand val = lower_operand(mir->rhs);
+                    LirOperand ptr = lower_operand(ctx, mir->lhs);
+                    LirOperand val = lower_operand(ctx, mir->rhs);
 
                     LirOperand mem = {
                         .type = LIR_MEM,

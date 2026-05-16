@@ -3,10 +3,15 @@
 main:
     push rbp
     mov rbp, rsp
+    sub rsp, 16
 .L0:
-    call test
+    lea rax, QWORD PTR [rip + .Lstr0]
     mov QWORD PTR [rbp - 8], rax
-    mov rax, QWORD PTR [rbp - 8]
+    mov rax, 0
     mov rsp, rbp
     pop rbp
     ret
+
+.section .rodata
+.Lstr0:
+    .string "hello, world!"

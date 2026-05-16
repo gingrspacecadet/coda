@@ -113,10 +113,36 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
     }
 }
 
+static uint32_t add_string_to_pool(MirBuilder *ctx, String str) {
+    StringConstant c = {
+        .id = ctx->strings.len,
+        .value = str,
+    };
+    strconst_array_push(&ctx->strings, c);
+    return c.id;
+}
+
 MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
     if (!hir) return (MirOperand){};
     switch (hir->type) {
         case HIR_EXPR_LIT:
+            if (hir->literal.type == LITERAL_STRING) {
+                MirOperand string_struct = make_temp_aggregate(ctx, hir->resolved_type);
+
+                uint32_t str_id = add_string_to_pool(ctx, hir->literal.string);
+                MirOperand str_ptr = { .type = MIR_VAL_GLOBAL, .imm = str_id };
+
+                MirOperand str_len = { .type = MIR_VAL_LIT, .lit = { .type = LITERAL_INT, ._int = hir->literal.string.length } };
+
+                emit(ctx, MIR_OP_STORE, string_struct, str_ptr, null_op());
+
+                MirOperand offset_8 = { .type = MIR_VAL_LIT, .lit = { .type = LITERAL_INT, ._int = 8 } };
+                MirOperand len_addr = make_temp(ctx, type_int());
+                emit(ctx, MIR_OP_ADD, len_addr, string_struct, offset_8);
+                emit(ctx, MIR_OP_STORE, len_addr, str_len, null_op());
+
+                return string_struct;
+            }
             return make_literal(hir->literal, hir->resolved_type);
 
         case HIR_EXPR_UNARY: {
@@ -408,10 +434,10 @@ static void print_operand(MirOperand op) {
             printf("%.*s", string_fmt(op.symbol->name));
             break;
         case MIR_VAL_TEMP:
-            printf("t%d", op.temp);
+            printf("t%d", op.imm);
             break;
         case MIR_VAL_LABEL:
-            printf("L%d", op.label_id);
+            printf("L%d", op.imm);
             break;
     }
 }

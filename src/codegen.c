@@ -1,8 +1,22 @@
 #include "codegen.h"
 
 static const char* phys_reg_names[] = {
-    "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+    [REG_RAX] = "rax", 
+    [REG_RCX] = "rcx", 
+    [REG_RDX] = "rdx", 
+    [REG_RBX] = "rbx", 
+    [REG_RSP] = "rsp", 
+    [REG_RBP] = "rbp", 
+    [REG_RSI] = "rsi", 
+    [REG_RDI] = "rdi",
+    [REG_R8] = "r8", 
+    [REG_R9] = "r9", 
+    [REG_R10] = "r10", 
+    [REG_R11] = "r11", 
+    [REG_R12] = "r12", 
+    [REG_R13] = "r13", 
+    [REG_R14] = "r14", 
+    [REG_R15] = "r15"
 };
 
 static int get_vreg_offset(uint32_t vreg_id) {
@@ -37,12 +51,19 @@ static void emit_operand(FILE *out, LirOperand op, PhysReg fallback_reg) {
     }
 }
 
-void codegen(FILE *out, LirFunction *fn) {
+void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
     fprintf(out, ".intel_syntax noprefix\n");
     fprintf(out, ".global %.*s\n", string_fmt(fn->symbol->name));
     fprintf(out, "%.*s:\n", string_fmt(fn->symbol->name));
 
-    int total_stack_bytes = fn->vreg_count * 8;
+    /* Reserve stack for virtual registers and parameter slots (whichever is larger). */
+    size_t param_count = 0;
+    if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
+        param_count = fn->symbol->type->fn.params.len;
+    }
+
+    size_t required_vregs = fn->vreg_count > param_count ? fn->vreg_count : param_count;
+    int total_stack_bytes = (int)(required_vregs * 8);
     if (total_stack_bytes % 16 != 0) {
         total_stack_bytes += 16 - (total_stack_bytes % 16);
     }
@@ -54,9 +75,9 @@ void codegen(FILE *out, LirFunction *fn) {
     }
 
     if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
-        PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_R8, REG_R9 };
-        size_t param_count = fn->symbol->type->fn.params.len;
-        for (size_t i = 0; i < param_count && i < sizeof(arg_regs) / sizeof(arg_regs[0]); i++) {
+        PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9 };
+        size_t param_count_local = fn->symbol->type->fn.params.len;
+        for (size_t i = 0; i < param_count_local && i < sizeof(arg_regs) / sizeof(arg_regs[0]); i++) {
             int slot = get_vreg_offset((uint32_t)i);
             fprintf(out, "    mov QWORD PTR [rbp - %d], %s\n", slot, phys_reg_names[arg_regs[i]]);
         }
@@ -143,7 +164,6 @@ void codegen(FILE *out, LirFunction *fn) {
                     fprintf(out, "    call %.*s\n", string_fmt(instr->dest.symbol->name));
                 } else {
                     fprintf(out, "    call "); emit_operand(out, instr->dest, REG_RAX); fprintf(out, "\n");
-
                 }
                 break;
             }
@@ -154,6 +174,14 @@ void codegen(FILE *out, LirFunction *fn) {
                 fprintf(out, "    ret\n");
                 break;
             }
+        }
+    }
+
+    if (ctx->strings.len != 0) {
+        fprintf(out, "\n.section .rodata\n");
+        for (size_t i = 0; i < ctx->strings.len; i++) {
+            fprintf(out, ".Lstr%u:\n", ctx->strings.data[i].id);
+            fprintf(out, "    .ascii \"%.*s\"\n", string_fmt(ctx->strings.data[i].value));
         }
     }
 }

@@ -69,6 +69,7 @@ int main(void) {
     MirBuilder mirbuilder = {
         .arena = lexer.arena,
         .global_scope = analyser.global_scope,
+        .strings = strconst_array_init()
     };
     MirModule *mir = mir_lower_module(&mirbuilder, hir);
     for (size_t i = 0; i < mir->functions.len; i++) {
@@ -82,7 +83,7 @@ int main(void) {
         LirFunction *lir = lir_lower_fn(&mirbuilder, mir->functions.data[i]);
         // lir_pretty_print(lir);
     
-        codegen(stdout, lir);
+        codegen(stdout, lir, &mirbuilder);
     }
 
 }
