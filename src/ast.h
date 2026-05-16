@@ -259,6 +259,7 @@ struct FnDecl {
     Symbol *symbol;
     Scope *local_scope;
     bool is_export;
+    bool is_extern;
     Token token;
 };
 

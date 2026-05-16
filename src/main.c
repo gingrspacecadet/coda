@@ -78,8 +78,11 @@ int main(void) {
     // hir_pretty_print(hir);
     // mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
 
-    LirFunction *lir = lir_lower_fn(&mirbuilder, mir->functions.data[0]);
-    // lir_pretty_print(lir);
+    for (size_t i = 0; i < mir->functions.len; i++) {
+        LirFunction *lir = lir_lower_fn(&mirbuilder, mir->functions.data[i]);
+        // lir_pretty_print(lir);
+    
+        codegen(stdout, lir);
+    }
 
-    codegen(stdout, lir);
 }

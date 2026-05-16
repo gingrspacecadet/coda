@@ -345,6 +345,7 @@ MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     MirModule *mod = arena_calloc(ctx->arena, sizeof(MirModule));
     mod->functions = mirfns_array_init();
     for (size_t i = 0; i < hir->functions.len; i++) {
+        if (hir->functions.data[i]->is_extern) continue;
         mirfns_array_push(&mod->functions, mir_lower_fn(ctx, hir->functions.data[i]));
     }
 

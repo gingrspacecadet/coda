@@ -174,6 +174,11 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
         bool found = false;
         switch (d->type) {
             case DECL_FN: {
+                if (string_eq(a->name, string_make("extern"))) {
+                    found = true;
+                    d->fn->is_extern = true;
+                    a->consumed = true;
+                }
                 break;
             }
             case DECL_STRUCT: {
@@ -182,7 +187,7 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
                     d->_struct->align = 1;
                     a->consumed = true;
                 }
-                if (string_eq(a->name, string_make("align"))) {
+                else if (string_eq(a->name, string_make("align"))) {
                     found = true;
                     if (a->args.len != 1 || a->args.data[0].type != LITERAL_INT) {
                         error(a->args.data[0].token, "Attribute only expects a single integer argument");
@@ -216,6 +221,7 @@ void register_globals(Analyser *ctx, Module *mod) {
             case DECL_FN: {
                 uint32_t flags = SYMFLAG_FN;
                 if (d->is_export) flags |= SYMFLAG_EXPORT;
+                if (d->fn->is_extern) flags |= SYMFLAG_EXTERN;
 
                 Symbol *sym = declare_symbol(ctx, d->fn->name, flags);
                 TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
@@ -607,21 +613,21 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 }
 
 void check_fn_body(Analyser *ctx, FnDecl *fn) {
-    if (!fn->body) return;
-
     ctx->current_function = fn;
 
     enter_scope(ctx, NULL);
     fn->local_scope = ctx->current_scope;
 
     for (size_t i = 0; i < fn->params.len; i++) {
-        Param p = fn->params.data[i];
-        Symbol *sym = declare_symbol(ctx, p.name, SYMFLAG_VAR);
-        sym->type = p.type;
-        p.symbol = sym;
+        Param *p = &fn->params.data[i];
+        Symbol *sym = declare_symbol(ctx, p->name, SYMFLAG_VAR);
+        sym->type = p->type;
+        p->symbol = sym;
     }
 
-    check_stmt(ctx, fn->body);
+    if (fn->body) {
+        check_stmt(ctx, fn->body);
+    }
 
     leave_scope(ctx);
     ctx->current_function = NULL;
@@ -633,6 +639,9 @@ void check_bodies(Analyser *ctx, Module *mod) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
         if (d->type == DECL_FN) {
+            if (d->fn->body && d->fn->is_extern) {
+                error(d->fn->token, format("Extern function %.*s cannot have a body definition", string_fmt(d->fn->name)));
+            }
             check_fn_body(ctx, d->fn);
         }
     }
@@ -653,6 +662,27 @@ static bool is_integer_type(TypeRef *type) {
            string_eq(sym->name, string_make("uint16"))||
            string_eq(sym->name, string_make("uint32"))||
            string_eq(sym->name, string_make("uint64"));
+}
+
+static String type_name(TypeRef *type) {
+    if (!type) {
+        return string_make("<unknown>");
+    }
+
+    switch (type->type) {
+        case TYPEREF_NAMED: {
+            return type->named.name;
+        }
+        
+        case TYPEREF_POINTER: {
+            return string_make(format("*%.*s", string_fmt(type_name(type->pointer.pointee)))); // NOTE: this is godawful, but it only runs on errors so it's fiiiiiine
+        }
+
+        case TYPEREF_ARRAY: {
+            return string_make(format("%.*s[%d]", string_fmt(type_name(type->array.elem)), type->array.length));
+        }
+    }
+    return string_make("<unknown>");
 }
 
 TypeRef *check_expr(Analyser *ctx, Expr *expr) {
@@ -751,7 +781,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 resolve_typeref(ctx, param_type);
 
                 if (!types_compatible(ctx, arg_type, param_type)) {
-                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", string_fmt(arg_type->type_symbol->name), string_fmt(param_type->type_symbol->name)));
+                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", string_fmt(type_name(arg_type)), string_fmt(type_name(param_type))));
                 }
             }
 

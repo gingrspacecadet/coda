@@ -18,8 +18,13 @@ LirOperand lower_operand(MirOperand mir_op) {
             break;
             
         case MIR_VAL_SYMBOL:
-            lir_op.type = LIR_REG_VIRTUAL;
-            lir_op.vreg = mir_op.symbol->vreg;
+            if (mir_op.symbol->type && mir_op.symbol->type->type == TYPEREF_FN) {
+                lir_op.type = LIR_GLOBAL;
+                lir_op.symbol = mir_op.symbol;
+            } else {
+                lir_op.type = LIR_REG_VIRTUAL;
+                lir_op.vreg = mir_op.symbol->vreg;
+            }
             break;
             
         case MIR_VAL_LABEL:
@@ -53,7 +58,8 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
     LirFunction *lir_fn = arena_calloc(ctx->arena, sizeof(LirFunction));
     lir_fn->symbol = mir_fn->symbol;
     
-    uint32_t current_vreg = ctx->temp_counter;
+    ctx->temp_counter = 0;
+    uint32_t current_vreg = 0;
 
     for (size_t i = 0; i < mir_fn->params.len; i++) {
         Symbol *param_sym = mir_fn->params.data[i];
