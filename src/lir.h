@@ -5,10 +5,12 @@
 #include "mir.h"
 
 typedef enum {
+    LIR_NONE,
     LIR_REG_PHYSICAL,
     LIR_REG_VIRTUAL,
     LIR_IMM,
-    LIR_MEM
+    LIR_MEM,
+    LIR_GLOBAL,
 } LirOperandType;
 
 typedef enum {
@@ -31,6 +33,7 @@ typedef struct {
             uint32_t base_vreg;
             int32_t offset;
         } mem;
+        Symbol *symbol;
     };
     TypeRef *resolved_type;
 } LirOperand;

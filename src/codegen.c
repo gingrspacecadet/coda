@@ -1,5 +1,10 @@
 #include "codegen.h"
 
+static const char* phys_reg_names[] = {
+    "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+};
+
 static int get_vreg_offset(uint32_t vreg_id) {
     return (vreg_id + 1) * 8;
 }
@@ -46,6 +51,16 @@ void codegen(FILE *out, LirFunction *fn) {
     fprintf(out, "    mov rbp, rsp\n");
     if (total_stack_bytes > 0) {
         fprintf(out, "    sub rsp, %d\n", total_stack_bytes);
+    }
+
+    if (fn->symbol->type && fn->symbol->type->type == TYPEREF_FN) {
+        PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_R8, REG_R9 };
+        size_t param_count = fn->symbol->type->fn.params.len;
+        for (size_t i = 0; i < param_count && i < sizeof(arg_regs) / sizeof(arg_regs[0]); i++) {
+            int slot = get_vreg_offset((uint32_t)i);
+            fprintf(out, "    mov QWORD PTR [rbp - %d], %s\n", slot, phys_reg_names[arg_regs[i]]);
+        }
+        // TODO: copy stack-passed args for param_count > 6
     }
 
     for (LirInstr *instr = fn->first; instr != NULL; instr = instr->next) {
@@ -124,10 +139,11 @@ void codegen(FILE *out, LirFunction *fn) {
             }
 
             case LIR_CALL: {
-                if (instr->dest.type == LIR_REG_PHYSICAL || instr->dest.type == LIR_REG_VIRTUAL) {
-                    fprintf(out, "    call "); emit_operand(out, instr->dest, REG_RAX); fprintf(out, "\n");
+                if (instr->dest.type == LIR_GLOBAL) {
+                    fprintf(out, "    call %.*s\n", string_fmt(instr->dest.symbol->name));
                 } else {
-                    fprintf(out, "    call %.*s\n", string_fmt(instr->dest.resolved_type->named.name));
+                    fprintf(out, "    call "); emit_operand(out, instr->dest, REG_RAX); fprintf(out, "\n");
+
                 }
                 break;
             }

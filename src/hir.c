@@ -221,6 +221,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
 
         HirFnDecl *fndecl = arena_calloc(ctx->arena, sizeof(HirFnDecl));
         fndecl->symbol = d->symbol;
+        fndecl->is_extern = d->fn->is_extern;
 
         fndecl->params = syms_array_init();
         for (size_t j = 0; j < d->fn->params.len; j++) {

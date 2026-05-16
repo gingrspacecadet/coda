@@ -109,6 +109,7 @@ typedef struct {
     TypeRef *ret_type;
     syms_array params;
     syms_array locals;
+    bool is_extern;
     HirStmt *body;
 } HirFnDecl;
 

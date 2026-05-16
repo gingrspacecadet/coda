@@ -1,11 +1,7 @@
 module main;
 
-@extern fn none puts(char *s);
+@extern fn int test();
 
 fn int main() {
-    mut int x = 1;
-    for (mut int i = 0; i < 5; i = i + 1) {
-        x = x + i;
-    }
-    return x;
+    return test();
 }
