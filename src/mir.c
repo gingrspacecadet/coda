@@ -118,23 +118,77 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
     switch (hir->type) {
         case HIR_EXPR_LIT:
             return make_literal(hir->literal, hir->resolved_type);
+
+        case HIR_EXPR_UNARY: {
+            if (hir->unary.op == UOP_ADDR) {
+                return mir_lower_lvalue(ctx, hir->unary.operand);
+            }
+
+            MirOperand operand = mir_lower_expr(ctx, hir->unary.operand);
+            MirOperand result = make_temp(ctx, hir->resolved_type);
+            MirOp op;
+
+            switch (hir->unary.op) {
+                case UOP_NEG: op = MIR_OP_NEG; break;
+                case UOP_NOT: op = MIR_OP_NOT; break;
+                case UOP_DEREF:
+                    emit(ctx, MIR_OP_LOAD, result, operand, null_op());
+                    return result;
+                default:
+                    op = MIR_OP_COPY;
+                    break;
+            }
+
+            emit(ctx, op, result, operand, null_op());
+            return result;
+        }
         case HIR_EXPR_BINARY: {
+            if (hir->binary.op == BINOP_ASSIGN || hir->binary.op == BINOP_ADD_ASSIGN) {
+                MirOperand target = mir_lower_lvalue(ctx, hir->binary.left);
+                MirOperand rhs = mir_lower_expr(ctx, hir->binary.right);
+                MirOperand assigned = rhs;
+
+                if (hir->binary.op == BINOP_ADD_ASSIGN) {
+                    MirOperand lhs_value = mir_lower_expr(ctx, hir->binary.left);
+                    assigned = make_temp(ctx, hir->resolved_type);
+                    emit(ctx, MIR_OP_ADD, assigned, lhs_value, rhs);
+                }
+
+                if (target.type == MIR_VAL_SYMBOL) {
+                    emit(ctx, MIR_OP_COPY, target, assigned, null_op());
+                } else {
+                    emit(ctx, MIR_OP_STORE, target, assigned, null_op());
+                }
+                return assigned;
+            }
+
             MirOperand lhs = mir_lower_expr(ctx, hir->binary.left);
             MirOperand rhs = mir_lower_expr(ctx, hir->binary.right);
 
             MirOperand result = make_temp(ctx, hir->resolved_type);
 
             MirOp op;
-            switch (hir->binary.op) {   //TODO: more
+            switch (hir->binary.op) {
                 case BINOP_ADD: op = MIR_OP_ADD; break;
                 case BINOP_SUB: op = MIR_OP_SUB; break;
                 case BINOP_MUL: op = MIR_OP_MUL; break;
                 case BINOP_DIV: op = MIR_OP_DIV; break;
+                case BINOP_LT: op = MIR_OP_LT; break;
+                case BINOP_LE: op = MIR_OP_LE; break;
+                case BINOP_GT: op = MIR_OP_GT; break;
+                case BINOP_GE: op = MIR_OP_GE; break;
+                case BINOP_EQ: op = MIR_OP_EQ; break;
+                case BINOP_NE: op = MIR_OP_NE; break;
+                case BINOP_LOG_AND: op = MIR_OP_LOG_AND; break;
+                case BINOP_LOG_OR: op = MIR_OP_LOG_OR; break;
+                default: op = MIR_OP_COPY; break;
             }
 
             emit(ctx, op, result, lhs, rhs);
             return result;
         }
+        case HIR_EXPR_CAST:
+            return mir_lower_expr(ctx, hir->cast.expr);
         case HIR_EXPR_VAR:
         case HIR_EXPR_FIELD_OFFSET:
         case HIR_EXPR_ARRAY_INDEX: {
@@ -267,6 +321,8 @@ void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
 
 MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     MirFunction *mir_fn = arena_calloc(ctx->arena, sizeof(MirFunction));
+    mir_fn->params = hir_fn->params;
+    mir_fn->locals = hir_fn->locals;
     mir_fn->symbol = hir_fn->symbol;
     ctx->temp_counter = 0;
 
@@ -297,7 +353,7 @@ MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
 
 static void print_type(TypeRef *type) {
     if (!type) {
-        printf("<unknown>");
+        printf("<unknown type>");
         return;
     }
 
@@ -360,7 +416,8 @@ static void print_operand(MirOperand op) {
 }
 
 static void print_instr(MirInstr *instr) {
-    if (instr->result.type != MIR_VAL_LIT || instr->result.lit.type != LITERAL_INT || instr->result.lit._int != 0) {
+    if (instr->result.type != MIR_VAL_NONE &&
+        (instr->result.type != MIR_VAL_LIT || instr->result.lit.type != LITERAL_INT || instr->result.lit._int != 0)) {
         print_type(instr->result.resolved_type);
         putc(' ', stdout);
         print_operand(instr->result);
@@ -372,6 +429,14 @@ static void print_instr(MirInstr *instr) {
         case MIR_OP_SUB: printf("sub "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
         case MIR_OP_MUL: printf("mul "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
         case MIR_OP_DIV: printf("div "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_LT: printf("lt "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_LE: printf("le "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_GT: printf("gt "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_GE: printf("ge "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_EQ: printf("eq "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_NE: printf("ne "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_LOG_AND: printf("and "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_LOG_OR: printf("or "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
         case MIR_OP_NEG: printf("neg "); print_operand(instr->lhs); break;
         case MIR_OP_NOT: printf("not "); print_operand(instr->lhs); break;
         case MIR_OP_COPY: printf("copy "); print_operand(instr->lhs); break;
@@ -390,7 +455,7 @@ static void print_instr(MirInstr *instr) {
             break;
         case MIR_OP_RET: printf("ret"); if (instr->lhs.type != MIR_VAL_LIT || instr->lhs.lit._int != 0) { printf(" "); print_operand(instr->lhs); } break;
         case MIR_OP_LABEL: printf("L%d:", instr->label_id); break;
-        default: printf("<unknown op>");
+        default: printf("<unknown op %d>", instr->op);
     }
     printf("\n");
 }

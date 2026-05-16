@@ -10,6 +10,8 @@ typedef struct MirBlock MirBlock;
 // TODO: more operators
 typedef enum {
     MIR_OP_ADD, MIR_OP_SUB, MIR_OP_MUL, MIR_OP_DIV,
+    MIR_OP_LT, MIR_OP_LE, MIR_OP_GT, MIR_OP_GE, MIR_OP_EQ, MIR_OP_NE,
+    MIR_OP_LOG_AND, MIR_OP_LOG_OR,
     MIR_OP_NEG, MIR_OP_NOT,
     MIR_OP_COPY,
     MIR_OP_LOAD,
@@ -23,6 +25,7 @@ typedef enum {
 
 typedef struct {
     enum {
+        MIR_VAL_NONE,
         MIR_VAL_LIT,
         MIR_VAL_SYMBOL,
         MIR_VAL_TEMP,
@@ -36,7 +39,6 @@ typedef struct {
     };
     TypeRef *resolved_type;
 } MirOperand;
-
 
 struct MirInstr {
     MirOp op;
@@ -67,6 +69,8 @@ typedef struct {
     Symbol *symbol;
     MirBlock *entry_block;
     uint32_t temp_count;
+    syms_array params;
+    syms_array locals;
 } MirFunction;
 
 INSTANTIATE(MirFunction *, mirfns, ARRAY_TEMPLATE)

@@ -2,6 +2,7 @@
 #define LIR_H
 
 #include "ast.h"
+#include "mir.h"
 
 typedef enum {
     LIR_REG_PHYSICAL,
@@ -12,6 +13,12 @@ typedef enum {
 
 typedef enum {
     REG_RAX,
+    REG_RDI,
+    REG_RSI,
+    REG_RDX,
+    REG_RCX,
+    REG_R8,
+    REG_R9
 } PhysReg;
 
 typedef struct {
@@ -41,10 +48,12 @@ typedef enum {
 typedef enum {
     LIR_MOV,
     LIR_ADD, LIR_SUB, LIR_IMUL, LIR_IDIV,
-    LIR_CMP, LIR_JMP, LIR_JCC,
+    LIR_CMP, LIR_SETCC, LIR_JMP, LIR_JCC,
     LIR_CALL, LIR_RET,
     LIR_LABEL,
-    LIR_PUSH, LIR_POP
+    LIR_PUSH, LIR_POP,
+    // x86 shit
+    LIR_CQO
 } LirOpcode;
 
 typedef struct LirInstr LirInstr;
@@ -63,6 +72,10 @@ typedef struct {
     Symbol *symbol;
     LirInstr *first;
     LirInstr *last;
+    uint32_t vreg_count;
 } LirFunction;
+
+void lir_pretty_print(LirFunction *fn);
+LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn);
 
 #endif
