@@ -1,8 +1,8 @@
 #ifndef LIR_H
 #define LIR_H
 
-#include "ast.h"
-#include "mir.h"
+#include "../../ast.h"
+#include "../../mir.h"
 
 typedef enum {
     LIR_NONE,

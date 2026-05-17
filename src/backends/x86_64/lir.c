@@ -1,6 +1,6 @@
 #include "lir.h"
-#include "sema.h"
-#include "mir.h"
+#include "../../sema.h"
+#include "../../mir.h"
 
 LirOperand lower_operand(MirOperand mir_op) {
     LirOperand lir_op = {0};

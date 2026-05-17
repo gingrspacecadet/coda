@@ -1,7 +1,5 @@
 # final binary
 coda
 
-*.o
-*.d
-*.gch
+build/
 out*
