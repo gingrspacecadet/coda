@@ -3,5 +3,8 @@ module main;
 include std::io;
 
 fn int main() {
+    if (1 < 2) {
+        return 1;
+    }
     return 0;
 }
