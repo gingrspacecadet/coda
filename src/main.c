@@ -8,8 +8,21 @@
 #include "hir.h"
 #include "mir.h"
 #include "opt.h"
-#include "lir.h"
-#include "codegen.h"
+
+// platform-agnostic dl loading
+#ifdef WIN32
+    #include <windows.h>
+    #define lib_handle HMODULE
+    #define load_lib(name) LoadLibraryA(name)
+    #define load_sym(handle, sym) GetProcAddress(handle, sym)
+    #define close_lib FreeLibrary
+#else
+    #include <dlfcn.h>
+    #define lib_handle void*
+    #define load_lib(name) dlopen(name, RTLD_LAZY)
+    #define load_sym dlsym
+    #define close_lib dlclose
+#endif
 
 char *read_file(char *path) {
     FILE *f = fopen(path, "r");
@@ -42,7 +55,7 @@ Source setup_source(char *path) {
     return source;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     Lexer lexer = {
         .arena = arena_create(),
         .source = setup_source("test/main.coda"),
@@ -78,11 +91,19 @@ int main(void) {
     // hir_pretty_print(hir);
     // mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
 
-    for (size_t i = 0; i < mir->functions.len; i++) {
-        LirFunction *lir = lir_lower_fn(&mirbuilder, mir->functions.data[i]);
-        // lir_pretty_print(lir);
-    
-        codegen(stdout, lir);
+    // backends are dls that we load at runtime
+    // this allows for multiple backends
+    // without rebuilding/downloading a new compiler
+    lib_handle handle = load_lib("./build/backends/x86_64.so");
+    if (!handle) {
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open backend\n", argv[0]);
+        return 1;
     }
-
+    void (*backend)(FILE *, MirBuilder *, MirModule *) = load_sym(handle, "backend");
+    if (!backend) {
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to locate backend entry symbol\n", argv[0]);
+        return 1;
+    }
+    backend(stdout, &mirbuilder, mir);
+    close_lib(handle);
 }
