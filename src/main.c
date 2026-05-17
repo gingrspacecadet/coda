@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <getopt.h>
 #include "lexer.h"
 #include "parser.h"
 #include "sema.h"
@@ -56,9 +57,45 @@ Source setup_source(char *path) {
 }
 
 int main(int argc, char **argv) {
+    const char *backend_path = "./build/backends/x86_64.so";
+    const char *source_path = NULL;
+
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"backend", required_argument, 0, 'b'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int option_index = 0;
+    const char *optstring = "hb:";
+
+    while ((opt = getopt_long(argc, argv, optstring, long_options, &option_index)) != -1) {
+        switch (opt) {
+            case 'h':
+                printf("Usage: %s [--backend PATH] [--source PATH]\n", argv[0]);
+                return 0;
+            case 'b':
+                backend_path = optarg;
+                break;
+            case '?':
+            default:
+                return 1;
+        }
+    }
+
+    if (optind < argc) {
+        source_path = argv[optind];
+    }
+
+    if (!source_path) {
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Missing source file\n", argv[0]);
+        return 1;
+    }
+
     Lexer lexer = {
         .arena = arena_create(),
-        .source = setup_source("test/main.coda"),
+        .source = setup_source((char*)source_path),
         .line = 1,
         .col = 1,
     };
@@ -94,14 +131,14 @@ int main(int argc, char **argv) {
     // backends are dls that we load at runtime
     // this allows for multiple backends
     // without rebuilding/downloading a new compiler
-    lib_handle handle = load_lib("./build/backends/x86_64.so");
+    lib_handle handle = load_lib((char*)backend_path);
     if (!handle) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open backend\n", argv[0]);
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open backend %s\n", argv[0], backend_path);
         return 1;
     }
     void (*backend)(FILE *, MirBuilder *, MirModule *) = load_sym(handle, "backend");
     if (!backend) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to locate backend entry symbol\n", argv[0]);
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to locate backend entry symbol from file %s\n", argv[0], backend_path);
         return 1;
     }
     backend(stdout, &mirbuilder, mir);
