@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
     }
 
     // hir_pretty_print(hir);
-    // mir_pretty_print(mir);   // TODO: i needa add cli argssss faah
+    // mir_pretty_print(mir);
 
     // backends are dls that we load at runtime
     // this allows for multiple backends

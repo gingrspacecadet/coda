@@ -994,7 +994,16 @@ bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
         return (src->array.length == dst->array.length) && types_compatible(ctx, src->array.elem, dst->array.elem);
     }
 
-    // TODO: TYPEREF_FN
+    if (src->type == TYPEREF_FN) {
+        if (!types_compatible(ctx, src->fn.ret_type, dst->fn.ret_type)) return false;
+
+        if (src->fn.params.len != dst->fn.params.len) return false;
+        for (size_t i = 0; i < src->fn.params.len; i++) {
+            if (!types_compatible(ctx, src->fn.params.data[i].type, dst->fn.params.data[i].type)) return false;
+        }
+
+        return true;
+    }
 
     return false;
 }

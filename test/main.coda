@@ -1,7 +1,7 @@
 module main;
 
-@extern fn int test();
+include std::io;
 
 fn int main() {
-    return test();
+    return 0;
 }
