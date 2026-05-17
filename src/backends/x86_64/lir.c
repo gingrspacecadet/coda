@@ -9,7 +9,12 @@ LirOperand lower_operand(MirOperand mir_op) {
     switch (mir_op.type) {
         case MIR_VAL_LIT:   //TODO: mroe literals
             lir_op.type = LIR_IMM;
-            lir_op.imm = mir_op.lit._int; 
+            switch (mir_op.lit.type) {
+                case LITERAL_INT: lir_op.imm = mir_op.lit._int; break;
+                case LITERAL_BOOL: lir_op.imm = mir_op.lit._bool; break;
+                case LITERAL_CHAR: lir_op.imm = mir_op.lit._char; break;
+                default: lir_op.imm = mir_op.lit._int;
+            }
             break;
             
         case MIR_VAL_TEMP:
