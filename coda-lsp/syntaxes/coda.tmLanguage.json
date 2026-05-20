@@ -9,7 +9,13 @@
 			"include": "#strings"
 		},
 		{
+			"include": "#functions"
+		},
+		{
 			"include": "#punctuation"
+		},
+		{
+			"include": "#namespaces"
 		},
 		{
 			"include": "#numbers"
@@ -53,6 +59,22 @@
 							"match": "\\\\."
 						}
 					]
+				}
+			]
+		},
+		"functions": {
+			"name": "entity.name.function.coda",
+			"match": "\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\()"
+		},
+		"namespaces": {
+			"patterns": [
+				{
+					"match": "\\b([A-Za-z_]\\w*)(?=(?:;|::))",
+					"captures": {
+						"1": {
+							"name": "entity.name.namespace.coda"
+						}
+					}
 				}
 			]
 		},

@@ -4,6 +4,7 @@ include std::io;
 
 fn int main() {
     if (1 < 2) {
+        std::io::printf("Viva la revolution!!!!");
         return 1;
     }
     return 0;

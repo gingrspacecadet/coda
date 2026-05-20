@@ -41,12 +41,13 @@
     "vscode-languageserver-textdocument": "^1.0.12"
   },
   "scripts": {
-    "build:server": "tsc -p server/tsconfig.json",
-    "build:client": "tsc -p client/tsconfig.json",
+    "build:server": "npx tsc -p server/tsconfig.json",
+    "build:client": "npx tsc -p client/tsconfig.json",
     "build": "npm run build:server && npm run build:client",
-    "watch": "tsc -w -p ."
+    "watch": "npx tsc -w -p ."
   },
   "devDependencies": {
+    "typescript": "^5.4.4",
     "@types/node": "^25.8.0",
     "vscode": "^1.1.37"
   }
