@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include <string.h>
 
 static const char* phys_reg_names[] = {
     "r1", "rcx", "rdx", "rbx", "sp", "r20", "rsi", "rdi",
@@ -9,7 +10,63 @@ static int get_vreg_offset(uint32_t vreg_id) {
     return (vreg_id + 1) * 8;
 }
 
-void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
+// Collect all string constants from a function
+void collect_string_constants(LirFunction *fn, string_const_array *string_consts) {
+    for (LirInstr *instr = fn->first; instr != NULL; instr = instr->next) {
+        if (instr->opcode == LIR_MOV) {
+            if (instr->src.type == LIR_IMM && instr->src.string_const.str.length > 0) {
+                // Check if this string constant already exists
+                bool found = false;
+                for (size_t i = 0; i < string_consts->len; i++) {
+                    if (string_eq(string_consts->data[i].str, instr->src.string_const.str)) {
+                        instr->src.string_const.id = i;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    StringConstant sc = {
+                        .str = instr->src.string_const.str,
+                        .id = string_consts->len
+                    };
+                    string_const_array_push(string_consts, sc);
+                    instr->src.string_const.id = string_consts->len - 1;
+                }
+            }
+            if (instr->dest.type == LIR_IMM && instr->dest.string_const.str.length > 0) {
+                // Check if this string constant already exists
+                bool found = false;
+                for (size_t i = 0; i < string_consts->len; i++) {
+                    if (string_eq(string_consts->data[i].str, instr->dest.string_const.str)) {
+                        instr->dest.string_const.id = i;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    StringConstant sc = {
+                        .str = instr->dest.string_const.str,
+                        .id = string_consts->len
+                    };
+                    string_const_array_push(string_consts, sc);
+                    instr->dest.string_const.id = string_consts->len - 1;
+                }
+            }
+        }
+    }
+}
+
+static void emit_imm(FILE *out, LirOperand op, string_const_array *string_consts) {
+    if (op.type == LIR_IMM) {
+        if (op.string_const.str.length > 0) {
+            fprintf(out, ".LC%u", op.string_const.id);
+        } else {
+            fprintf(out, "%lld", op.imm);
+        }
+    }
+}
+
+void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
     fprintf(out, ">%.*s\n", string_fmt(fn->symbol->name));
 
     int total_stack_bytes = fn->vreg_count * 8;

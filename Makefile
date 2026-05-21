@@ -43,8 +43,8 @@ $(foreach d,$(BACKEND_DIRS), \
   $(eval build/backends/$(d).$(SOEXT): ; \
 	@mkdir -p build/backends/$(d) ; \
 	if [ -n "$$^" ]; then \
-		echo "$(CC) $(DLL_LINK) -o $@ $$^"; \
-		$(CC) $(DLL_LINK) -o $@ $$^; \
+		echo "$(CC) $(DLL_LINK) -o $$@ $$^"; \
+		$(CC) $(DLL_LINK) -o $$@ $$^; \
 	fi ) \
 )
 

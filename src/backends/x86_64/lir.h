@@ -35,6 +35,10 @@ typedef struct {
             int32_t offset;
         } mem;
         Symbol *symbol;
+        struct {
+            String str;
+            uint32_t id;  // unique ID for this string constant
+        } string_const;
     };
     TypeRef *resolved_type;
 } LirOperand;

@@ -8,12 +8,20 @@ LirOperand lower_operand(MirOperand mir_op) {
 
     switch (mir_op.type) {
         case MIR_VAL_LIT:   //TODO: mroe literals
-            lir_op.type = LIR_IMM;
             switch (mir_op.lit.type) {
-                case LITERAL_INT: lir_op.imm = mir_op.lit._int; break;
-                case LITERAL_BOOL: lir_op.imm = mir_op.lit._bool; break;
-                case LITERAL_CHAR: lir_op.imm = mir_op.lit._char; break;
-                default: lir_op.imm = mir_op.lit._int;
+                case LITERAL_STRING:
+                    lir_op.type = LIR_IMM;  // Will be replaced with string label in codegen
+                    lir_op.string_const.str = mir_op.lit.string;
+                    lir_op.string_const.id = 0;  // Will be assigned by codegen
+                    break;
+                default:
+                    lir_op.type = LIR_IMM;
+                    switch (mir_op.lit.type) {
+                        case LITERAL_INT: lir_op.imm = mir_op.lit._int; break;
+                        case LITERAL_BOOL: lir_op.imm = mir_op.lit._bool; break;
+                        case LITERAL_CHAR: lir_op.imm = mir_op.lit._char; break;
+                        default: lir_op.imm = mir_op.lit._int;
+                    }
             }
             break;
             

@@ -2,12 +2,9 @@ module main;
 
 include std::io;
 
-struct E {
-    mut int a;
-}
+@extern fn none print(string s);
 
 fn int main() {
-    E a;
-    a.a = 3;
-    return a.a;
+    print("Hello, world!");
+    return 0;
 }
