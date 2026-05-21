@@ -50,6 +50,20 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.vreg));
                     fprintf(out, "    store r19, r1\n");
                 }
+                else if (instr->src.type == LIR_STACK) {
+                    fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
+                    if (instr->src.mem.offset == 0) {
+                        fprintf(out, "    load r19, r1\n");
+                    } else {
+                        fprintf(out, "    load r19, r1\n");
+                    }
+                    if (instr->dest.type == LIR_REG_PHYSICAL) {
+                        fprintf(out, "    add zr, r1, %s\n", phys_reg_names[instr->dest.preg]);
+                    } else {
+                        fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.vreg));
+                        fprintf(out, "    store r19, r1\n");
+                    }
+                }
                 else if (instr->src.type == LIR_MEM) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
                     fprintf(out, "    load r19, r1\n");
@@ -66,6 +80,9 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                         fprintf(out, "    add zr, %s, r1\n", phys_reg_names[instr->src.preg]);
                     } else if (instr->src.type == LIR_IMM) {
                         fprintf(out, "    lli r1, %lld\n", instr->src.imm);
+                    } else if (instr->src.type == LIR_STACK) {
+                        fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
+                        fprintf(out, "    load r19, r1\n");
                     } else {
                         fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.vreg));
                         fprintf(out, "    load r19, r1\n");
@@ -101,6 +118,9 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                     fprintf(out, "    add zr, %s, r1\n", phys_reg_names[instr->src.preg]);
                 } else if (instr->src.type == LIR_IMM) {
                     fprintf(out, "    lli r1, %lld\n", instr->src.imm);
+                } else if (instr->src.type == LIR_STACK) {
+                    fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
+                    fprintf(out, "    load r19, r1\n");
                 } else {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.vreg));
                     fprintf(out, "    load r19, r1\n");
@@ -110,6 +130,9 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                     fprintf(out, "    add zr, %s, r2\n", phys_reg_names[instr->dest.preg]);
                 } else if (instr->dest.type == LIR_REG_VIRTUAL) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.vreg));
+                    fprintf(out, "    load r19, r2\n");
+                } else if (instr->dest.type == LIR_STACK) {
+                    fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.mem.base_vreg));
                     fprintf(out, "    load r19, r2\n");
                 } else if (instr->dest.type == LIR_IMM) {
                     fprintf(out, "    lli r2, %lld\n", instr->dest.imm);
@@ -143,6 +166,9 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                 } else if (instr->dest.type == LIR_REG_VIRTUAL) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.vreg));
                     fprintf(out, "    load r19, r1\n");
+                } else if (instr->dest.type == LIR_STACK) {
+                    fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.mem.base_vreg));
+                    fprintf(out, "    load r19, r1\n");
                 } else if (instr->dest.type == LIR_IMM) {
                     fprintf(out, "    lli r1, %lld\n", instr->dest.imm);
                 }
@@ -151,6 +177,9 @@ void codegen(FILE *out, LirFunction *fn, MirBuilder *ctx) {
                     fprintf(out, "    add zr, %s, r2\n", phys_reg_names[instr->src.preg]);
                 } else if (instr->src.type == LIR_REG_VIRTUAL) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.vreg));
+                    fprintf(out, "    load r19, r2\n");
+                } else if (instr->src.type == LIR_STACK) {
+                    fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
                     fprintf(out, "    load r19, r2\n");
                 } else if (instr->src.type == LIR_IMM) {
                     fprintf(out, "    lli r2, %lld\n", instr->src.imm);

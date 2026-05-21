@@ -10,6 +10,7 @@ typedef enum {
     LIR_REG_VIRTUAL,
     LIR_IMM,
     LIR_MEM,
+    LIR_STACK,
     LIR_GLOBAL,
 } LirOperandType;
 

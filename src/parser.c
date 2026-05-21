@@ -777,7 +777,7 @@ Stmt *parse_stmt(Parser *ctx) {
         case TOKENTYPE_WHILE: return parse_while_stmt(ctx);
         case TOKENTYPE_IDENT: {
             t = ahead(ctx, 1);
-            if (t.has_value && (t.value.type == TOKENTYPE_DOUBLECOLON || t.value.type == TOKENTYPE_EQ || t.value.type == TOKENTYPE_LPAREN)) {
+            if (t.has_value && (t.value.type == TOKENTYPE_DOUBLECOLON || t.value.type == TOKENTYPE_EQ || t.value.type == TOKENTYPE_LPAREN || t.value.type == TOKENTYPE_DOT)) {
                 return parse_expr_stmt(ctx);
             } else {
                 FALLTHROUGH

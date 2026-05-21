@@ -87,6 +87,12 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
     
     switch (ast_stmt->type) {
         case STMT_VAR: {
+            if (!ast_stmt->var->init) {
+                hir->type = HIR_STMT_BLOCK;
+                hir->block.stmts = hirstmts_array_init();
+                break;
+            }
+
             hir->type = HIR_STMT_ASSIGN;
             
             HirExpr *target = arena_calloc(ctx->arena, sizeof(HirExpr));
@@ -167,6 +173,13 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
     return hir;
 }
 
+static bool symbol_in_array(syms_array *array, Symbol *sym) {
+    for (size_t i = 0; i < array->len; i++) {
+        if (array->data[i] == sym) return true;
+    }
+    return false;
+}
+
 static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt) {
     if (!stmt) return;
 
@@ -180,15 +193,7 @@ static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt
                     if (params->data[i] == sym) { is_param = true; break; }
                 }
 
-                bool already_added = false;
-                for (size_t i = 0; i < locals->len; i++) {
-                    if (locals->data[i] == sym) {
-                        already_added = true;
-                        break;
-                    }
-                }
-
-                if (!is_param && !already_added) {
+                if (!is_param && !symbol_in_array(locals, sym)) {
                     syms_array_push(locals, sym);
                 }
             }
@@ -209,6 +214,57 @@ static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt
             collect_locals(locals, params, stmt->_while.body);
             break;
         }
+        default:
+            break;
+    }
+}
+
+static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stmt) {
+    if (!stmt) return;
+
+    switch (stmt->type) {
+        case STMT_VAR: {
+            Symbol *sym = stmt->var->symbol;
+            bool is_param = false;
+            for (size_t i = 0; i < params->len; i++) {
+                if (params->data[i] == sym) { is_param = true; break; }
+            }
+            if (!is_param && !symbol_in_array(locals, sym)) {
+                syms_array_push(locals, sym);
+            }
+            if (stmt->var->init) {
+                // No need to traverse the initializer for locals, but keep the structure consistent.
+            }
+            break;
+        }
+        case STMT_BLOCK: {
+            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
+                collect_ast_locals(locals, params, stmt->block.stmts.data[i]);
+            }
+            break;
+        }
+        case STMT_IF: {
+            collect_ast_locals(locals, params, stmt->_if.then);
+            collect_ast_locals(locals, params, stmt->_if._else);
+            break;
+        }
+        case STMT_WHILE: {
+            collect_ast_locals(locals, params, stmt->_while.body);
+            break;
+        }
+        case STMT_FOR: {
+            collect_ast_locals(locals, params, stmt->_for.init);
+            collect_ast_locals(locals, params, stmt->_for.body);
+            break;
+        }
+        case STMT_UNSAFE: {
+            for (size_t i = 0; i < stmt->unsafe.stmts.len; i++) {
+                collect_ast_locals(locals, params, stmt->unsafe.stmts.data[i]);
+            }
+            break;
+        }
+        default:
+            break;
     }
 }
 
@@ -237,6 +293,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
 
         fndecl->locals = syms_array_init();
         collect_locals(&fndecl->locals, &fndecl->params, fndecl->body);
+        collect_ast_locals(&fndecl->locals, &fndecl->params, d->fn->body);
 
         hirfndecls_array_push(&hir->functions, fndecl);
     }

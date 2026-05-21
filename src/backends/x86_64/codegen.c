@@ -24,6 +24,18 @@ static void emit_operand(FILE *out, LirOperand op, PhysReg fallback_reg) {
             fprintf(out, "QWORD PTR [rbp - %d]", get_vreg_offset(op.vreg));
             break;
         }
+
+        case LIR_STACK: {
+            int64_t base_offset = get_vreg_offset(op.mem.base_vreg);
+            if (op.mem.offset == 0) {
+                fprintf(out, "QWORD PTR [rbp - %d]", base_offset);
+            } else if (op.mem.offset > 0) {
+                fprintf(out, "QWORD PTR [rbp - %d + %d]", base_offset, op.mem.offset);
+            } else {
+                fprintf(out, "QWORD PTR [rbp - %d - %d]", base_offset, -op.mem.offset);
+            }
+            break;
+        }
         
         case LIR_IMM: {
             fprintf(out, "%lld", op.imm);
@@ -77,13 +89,32 @@ void codegen(FILE *out, LirFunction *fn) {
                 }
                 else if (instr->src.type == LIR_MEM) {
                     fprintf(out, "    mov rbx, QWORD PTR [rbp - %d]\n", get_vreg_offset(instr->src.mem.base_vreg));
-                    fprintf(out, "    mov rax, QWORD PTR [rbx]\n");
+                    if (instr->src.mem.offset == 0) {
+                        fprintf(out, "    mov rax, QWORD PTR [rbx]\n");
+                    } else if (instr->src.mem.offset > 0) {
+                        fprintf(out, "    mov rax, QWORD PTR [rbx + %d]\n", instr->src.mem.offset);
+                    } else {
+                        fprintf(out, "    mov rax, QWORD PTR [rbx - %d]\n", -instr->src.mem.offset);
+                    }
+                    fprintf(out, "    mov "); emit_operand(out, instr->dest, REG_RCX); fprintf(out, ", rax\n");
+                }
+                else if (instr->src.type == LIR_STACK) {
+                    fprintf(out, "    mov rax, "); emit_operand(out, instr->src, REG_RAX); fprintf(out, "\n");
                     fprintf(out, "    mov "); emit_operand(out, instr->dest, REG_RCX); fprintf(out, ", rax\n");
                 }
                 else if (instr->dest.type == LIR_MEM) {
                     fprintf(out, "    mov rbx, QWORD PTR [rbp - %d]\n", get_vreg_offset(instr->dest.mem.base_vreg));
                     fprintf(out, "    mov rax, "); emit_operand(out, instr->src, REG_RAX); fprintf(out, "\n");
-                    fprintf(out, "    mov QWORD PTR [rbx], rax");
+                    if (instr->dest.mem.offset == 0) {
+                        fprintf(out, "    mov QWORD PTR [rbx], rax\n");
+                    } else if (instr->dest.mem.offset > 0) {
+                        fprintf(out, "    mov QWORD PTR [rbx + %d], rax\n", instr->dest.mem.offset);
+                    } else {
+                        fprintf(out, "    mov QWORD PTR [rbx - %d], rax\n", -instr->dest.mem.offset);
+                    }
+                }
+                else if (instr->dest.type == LIR_STACK) {
+                    fprintf(out, "    mov "); emit_operand(out, instr->dest, REG_RAX); fprintf(out, ", "); emit_operand(out, instr->src, REG_RAX); fprintf(out, "\n");
                 }
                 else {
                     fprintf(out, "    mov "); emit_operand(out, instr->dest, REG_RAX);

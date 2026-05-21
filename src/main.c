@@ -59,16 +59,18 @@ Source setup_source(char *path) {
 int main(int argc, char **argv) {
     const char *backend_path = "./build/backends/x86_64.so";
     const char *source_path = NULL;
+    const char *output_file = "a.s";
 
     static struct option long_options[] = {
         {"help", no_argument, 0, 'h'},
         {"backend", required_argument, 0, 'b'},
+        {"output", required_argument, 0, 'o'},
         {0, 0, 0, 0}
     };
 
     int opt;
     int option_index = 0;
-    const char *optstring = "hb:";
+    const char *optstring = "hbo:";
 
     while ((opt = getopt_long(argc, argv, optstring, long_options, &option_index)) != -1) {
         switch (opt) {
@@ -77,6 +79,9 @@ int main(int argc, char **argv) {
                 return 0;
             case 'b':
                 backend_path = optarg;
+                break;
+            case 'o':
+                output_file = optarg;
                 break;
             case '?':
             default:
@@ -136,11 +141,18 @@ int main(int argc, char **argv) {
         fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open backend %s\n", argv[0], backend_path);
         return 1;
     }
-    void (*backend)(FILE *, MirBuilder *, MirModule *) = load_sym(handle, "backend");
+    typedef void (*backend_fn)(FILE *, MirBuilder *, MirModule *);
+    backend_fn backend = (backend_fn)load_sym(handle, "backend");
     if (!backend) {
         fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to locate backend entry symbol from file %s\n", argv[0], backend_path);
         return 1;
     }
-    backend(stdout, &mirbuilder, mir);
+
+    FILE *output = fopen(output_file, "w");
+    if (!output) {
+        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open output file %s\n", argv[0], output_file);
+        return 1;
+    }
+    backend(output, &mirbuilder, mir);
     close_lib(handle);
 }

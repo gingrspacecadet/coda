@@ -82,15 +82,33 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
         case HIR_EXPR_FIELD_OFFSET: {
             MirOperand base_addr = mir_lower_lvalue(ctx, hir->field_offset.base);
 
-            Literal offset_lit = {
-                .type = LITERAL_INT,
-                ._int = hir->field_offset.byte_offset
-            };
-            MirOperand offset = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
-            MirOperand field_addr = make_temp(ctx, hir->resolved_type->pointer.pointee);
-            emit(ctx, MIR_OP_ADD, field_addr, base_addr, offset);
+            if (base_addr.type == MIR_VAL_MEM) {
+                base_addr.offset += hir->field_offset.byte_offset;
+                return base_addr;
+            }
 
-            return field_addr;
+            MirOperand field_mem = {0};
+            field_mem.type = MIR_VAL_MEM;
+            field_mem.resolved_type = hir->resolved_type;
+            field_mem.offset = hir->field_offset.byte_offset;
+
+            if (base_addr.type == MIR_VAL_SYMBOL) {
+                field_mem.base_symbol = base_addr.symbol;
+            } else if (base_addr.type == MIR_VAL_TEMP) {
+                field_mem.base_temp = base_addr.temp;
+            } else {
+                // Fallback: compute the address via pointer arithmetic.
+                Literal offset_lit = {
+                    .type = LITERAL_INT,
+                    ._int = hir->field_offset.byte_offset
+                };
+                MirOperand offset = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
+                MirOperand field_addr = make_temp(ctx, hir->resolved_type->pointer.pointee);
+                emit(ctx, MIR_OP_ADD, field_addr, base_addr, offset);
+                return field_addr;
+            }
+
+            return field_mem;
         }
         case HIR_EXPR_ARRAY_INDEX: {
             MirOperand base_addr = mir_lower_lvalue(ctx, hir->array_index.base);
@@ -410,6 +428,13 @@ static void print_operand(MirOperand op) {
         case MIR_VAL_TEMP:
             printf("t%d", op.temp);
             break;
+        case MIR_VAL_MEM:
+            if (op.base_symbol) {
+                printf("mem(sym=%.*s, off=%lld)", string_fmt(op.base_symbol->name), op.offset);
+            } else {
+                printf("mem(tmp=t%d, off=%lld)", op.base_temp, op.offset);
+            }
+            break;
         case MIR_VAL_LABEL:
             printf("L%d", op.label_id);
             break;
@@ -442,7 +467,7 @@ static void print_instr(MirInstr *instr) {
         case MIR_OP_NOT: printf("not "); print_operand(instr->lhs); break;
         case MIR_OP_COPY: printf("copy "); print_operand(instr->lhs); break;
         case MIR_OP_LOAD: printf("load "); print_operand(instr->lhs); break;
-        case MIR_OP_STORE: printf("store "); print_operand(instr->lhs); printf(", "); print_operand(instr->rhs); break;
+        case MIR_OP_STORE: printf("store "); print_operand(instr->result); printf(", "); print_operand(instr->lhs); break;
         case MIR_OP_JMP: printf("jmp L%d", instr->label_id); break;
         case MIR_OP_BRANCH: printf("br "); print_operand(instr->lhs); printf(", L%d", instr->label_id); break;
         case MIR_OP_BRANCH_FALSE: printf("brf "); print_operand(instr->lhs); printf(", L%d", instr->label_id); break;

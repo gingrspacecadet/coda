@@ -31,6 +31,18 @@ LirOperand lower_operand(MirOperand mir_op) {
                 lir_op.vreg = mir_op.symbol->vreg;
             }
             break;
+
+        case MIR_VAL_MEM:
+            if (mir_op.base_symbol) {
+                lir_op.type = LIR_STACK;
+                lir_op.mem.base_vreg = mir_op.base_symbol->vreg;
+                lir_op.mem.offset = mir_op.offset;
+            } else {
+                lir_op.type = LIR_MEM;
+                lir_op.mem.base_vreg = mir_op.base_temp;
+                lir_op.mem.offset = mir_op.offset;
+            }
+            break;
             
         case MIR_VAL_LABEL:
             lir_op.type = LIR_IMM;
@@ -204,23 +216,27 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     LirOperand dest = lower_operand(mir->result);
                     LirOperand ptr = lower_operand(mir->lhs);
 
-                    LirOperand mem = {
-                        .type = LIR_MEM,
-                        .mem = { .base_vreg = ptr.vreg, .offset = 0}
-                    };
-                    emit_lir(lir_fn, ctx, LIR_MOV, dest, mem);
+                    if (ptr.type == LIR_REG_VIRTUAL || ptr.type == LIR_REG_PHYSICAL) {
+                        ptr.type = LIR_MEM;
+                        ptr.mem.base_vreg = ptr.vreg;
+                        ptr.mem.offset = 0;
+                    }
+
+                    emit_lir(lir_fn, ctx, LIR_MOV, dest, ptr);
                     break;
                 }
 
                 case MIR_OP_STORE: {
-                    LirOperand ptr = lower_operand(mir->lhs);
-                    LirOperand val = lower_operand(mir->rhs);
+                    LirOperand ptr = lower_operand(mir->result);
+                    LirOperand val = lower_operand(mir->lhs);
 
-                    LirOperand mem = {
-                        .type = LIR_MEM,
-                        .mem = { .base_vreg = ptr.vreg, .offset = 0}
-                    };
-                    emit_lir(lir_fn, ctx, LIR_MOV, mem, val);
+                    if (ptr.type == LIR_REG_VIRTUAL || ptr.type == LIR_REG_PHYSICAL) {
+                        ptr.type = LIR_MEM;
+                        ptr.mem.base_vreg = ptr.vreg;
+                        ptr.mem.offset = 0;
+                    }
+
+                    emit_lir(lir_fn, ctx, LIR_MOV, ptr, val);
                     break;
                 }
             }

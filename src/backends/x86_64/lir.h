@@ -10,6 +10,7 @@ typedef enum {
     LIR_REG_VIRTUAL,
     LIR_IMM,
     LIR_MEM,
+    LIR_STACK,
     LIR_GLOBAL,
 } LirOperandType;
 
@@ -77,6 +78,12 @@ typedef struct {
     LirInstr *last;
     uint32_t vreg_count;
 } LirFunction;
+
+INSTANTIATE(LirFunction *, lirfns, ARRAY_TEMPLATE)
+
+typedef struct {
+    lirfns_array functions;
+} LirModule;
 
 void lir_pretty_print(LirFunction *fn);
 LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn);

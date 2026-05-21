@@ -7,6 +7,7 @@
 void backend(FILE *out, MirBuilder *ctx, MirModule *module) {
     for (size_t i = 0; i < module->functions.len; i++) {
         LirFunction *lir = lir_lower_fn(ctx, module->functions.data[i]);
+        // lir_pretty_print(lir);
         codegen(out, lir);
     }
 }

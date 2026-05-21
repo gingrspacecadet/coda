@@ -30,6 +30,7 @@ typedef struct {
         MIR_VAL_SYMBOL,
         MIR_VAL_TEMP,
         MIR_VAL_LABEL,
+        MIR_VAL_MEM,
     } type;
     union {
         Literal lit;
@@ -37,6 +38,9 @@ typedef struct {
         uint32_t temp;
         uint32_t label_id;
     };
+    Symbol *base_symbol;
+    uint32_t base_temp;
+    int64_t offset;
     TypeRef *resolved_type;
 } MirOperand;
 

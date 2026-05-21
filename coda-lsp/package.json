@@ -10,9 +10,6 @@
     "Programming Languages"
   ],
   "main": "./client/out/extension.js",
-  "activationEvents": [
-    "onLanguage:coda"
-  ],
   "contributes": {
     "languages": [
       {
