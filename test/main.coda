@@ -2,7 +2,11 @@ module main;
 
 include std::io;
 
-@extern fn none print(string s);
+@extern fn none write(char *ptr, uint64 len);
+
+fn none print(string s) {
+    write(s.ptr, s.len);
+}
 
 fn int main() {
     print("Hello, world!");

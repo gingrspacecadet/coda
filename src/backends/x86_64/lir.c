@@ -213,7 +213,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_R8, REG_R9 };
 
                     for (size_t j = 0; j < mir->arg_count && j < 6; j++) {
-                        LirOperand preg = { .type = LIR_REG_PHYSICAL, .preg = arg_regs[i] };
+                        LirOperand preg = { .type = LIR_REG_PHYSICAL, .preg = arg_regs[j] };
                         LirOperand arg_val = lower_operand(mir->call_args[j]);
                         emit_lir(lir_fn, ctx, LIR_MOV, preg, arg_val);
                     }
