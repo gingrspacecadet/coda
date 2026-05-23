@@ -97,6 +97,15 @@ typedef struct {
     Token token;
 } Attribute;
 
+typedef struct {
+    String name;
+    bool is_arg_type;
+    union {
+        Expr *expr;
+        TypeRef *type;
+    };
+} Intrinsic;
+
 struct Expr {
     enum {
         EXPR_LIT,
@@ -107,11 +116,13 @@ struct Expr {
         EXPR_CALL,
         EXPR_INDEX,
         EXPR_MEMBER,
-        EXPR_CAST
+        EXPR_CAST,
+        EXPR_INTRINSIC,
     } type;
 
     union {
         Literal literal;
+        Intrinsic intrinsic;
         struct {
             String name;
         } ident;

@@ -1,0 +1,5 @@
+module sizeof;
+
+fn int main() {
+    return sizeof(uint8);
+}

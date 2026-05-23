@@ -108,7 +108,7 @@ void collect_attributes(Parser *ctx, attr_array *out) {
     }
 }
 
-bool is_valid_type(Parser *ctx) {
+bool looks_like_type(Parser *ctx) {
     token_optional first = peek(ctx);
     bool is_mut = false;
     size_t stepped = 0;
@@ -466,7 +466,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
     if (t.value.type == TOKENTYPE_LPAREN) {
         Token start = consume(ctx);
 
-        if (is_valid_type(ctx)) {
+        if (looks_like_type(ctx)) {
             TypeRef *to = parse_type(ctx);
             expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after type cast");
             Expr *target = parse_expr(ctx, 80);
@@ -501,6 +501,28 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
     while (true) {
         token_optional next = peek(ctx);
         if (next.has_value && next.value.type == TOKENTYPE_LPAREN) {
+            // compiler intrinsics
+            if (left->type == EXPR_IDENT && (string_eq(left->ident.name, string_make("sizeof")) || string_eq(left->ident.name, string_make("typeid")))) {
+                Token lparen = consume(ctx);
+                Expr *intr = arena_calloc(ctx->arena, sizeof(Expr));
+                intr->type = EXPR_INTRINSIC;
+                intr->token = left->token;
+                intr->intrinsic.name = left->ident.name;
+
+                if (peek(ctx).has_value && looks_like_type(ctx)) {
+                    intr->intrinsic.is_arg_type = true;
+                    intr->intrinsic.type = parse_type(ctx);
+                } else {
+                    intr->intrinsic.is_arg_type = false;
+                    intr->intrinsic.expr = parse_expr(ctx, 0);
+                }
+
+                expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
+                left = intr;
+
+                continue;
+            }
+
             consume(ctx);
             exprs_array args = exprs_array_init();
             next = peek(ctx);

@@ -9,6 +9,44 @@ void check_bodies(Analyser *ctx, Module *mod);
 TypeRef *check_expr(Analyser *ctx, Expr *expr);
 bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst);
 
+static String type_to_string(TypeRef *t) {
+    String s = {0};
+    if (!t) return s;
+    if (t->type == TYPEREF_NAMED) {
+        return t->named.name;
+    }
+    else if (t->type == TYPEREF_POINTER) {
+        String pointee = type_to_string(t->pointer.pointee);
+        s.data = malloc(pointee.length + 1);
+        s.length = pointee.length + 1;
+        strncpy(s.data, pointee.data, pointee.length);
+        s.data[pointee.length + 1] = '*';
+        return s;
+    }
+    else if (t->type == TYPEREF_ARRAY) {
+        String base = type_to_string(t->array.elem);
+        s.data = malloc(base.length + 1);
+        s.length = base.length + 1;
+        strncpy(s.data, base.data, base.length);
+        s.data[s.length] = '[';
+        size_t nlen = sprintf(NULL, "%zu", t->array.length);
+        s.length += nlen + 1;
+        s.data = realloc(s.data, s.length);
+        snprintf(s.data + base.length + 1, nlen, "%zu", t->array.length);
+        s.data[s.length] = ']';
+        return s;
+    }
+    else if (t->type == TYPEREF_FN) {
+        String ret = type_to_string(t->fn.ret_type);
+        s.data = malloc(ret.length + 4);
+        s.data[0] = 'f'; s.data[1] = 'n'; s.data[2] = ' ';
+        strncpy(s.data + 3, ret.data, ret.length);
+        s.data[ret.length + 3] = ')';
+        // TODO: param printing
+        return s;
+    }
+}
+
 static bool is_unsigned_integer(TypeRef *t) {
     if (!t || t->type != TYPEREF_NAMED) return false;
     Symbol *s = t->type_symbol;
@@ -544,7 +582,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
                 if (!types_compatible(ctx, ret_type, ctx->current_function->ret_type)) {
-                    error(stmt->_return.value->token, "Return types do not match");
+                    error(stmt->_return.value->token, format("Cannot return %.*s in function expecting %.*s", string_fmt(type_to_string(ret_type)), string_fmt(type_to_string(ctx->current_function->ret_type))));
                 }
             } else {
                 if (ctx->current_function->ret_type
@@ -915,6 +953,41 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             result_type = expr->cast.to;
             goto check_expr_finished;
+        }
+        case EXPR_INTRINSIC: {
+            Intrinsic *p = &expr->intrinsic;
+            if (p->is_arg_type) {
+                resolve_typeref(ctx, p->type);
+                if (!p->type->type_symbol) {
+                    error(expr->token, format("Unknown type %.*s", string_fmt(type_to_string(p->type))));
+                }
+                if (string_eq(p->name, string_make("sizeof"))) {
+                    size_t sz = get_type_size(p->type);
+                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type %.*s", string_fmt(type_to_string(p->type))));
+                    result_type = lookup_symbol(ctx, string_make("int"))->type;
+                    expr->type = EXPR_LIT;
+                    expr->literal.type = LITERAL_INT;
+                    expr->literal._int = (int64_t)sz;
+                }
+                else {
+                    // TODO: typeid stuff
+                    error(expr->token, "TODO");
+                }
+            } else {
+                TypeRef *t = check_expr(ctx, p->expr);
+                if (string_eq(p->name, string_make("sizeof"))) {
+                    size_t sz = get_type_size(t);
+                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type %.*s", string_fmt(type_to_string(t))));
+                    result_type = lookup_symbol(ctx, string_make("int"))->type;
+                    expr->type = EXPR_LIT;
+                    expr->literal.type = LITERAL_INT;
+                    expr->literal._int = (int64_t)sz;
+                } else {
+                    // TODO: typeid stuff
+                    error(expr->token, "TODO");
+                }
+            }
+            break;
         }
         default: {
             result_type = NULL;
