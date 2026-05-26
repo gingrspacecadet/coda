@@ -15,14 +15,14 @@ typedef enum {
 } LirOperandType;
 
 typedef enum {
-    REG_RAX,
-    REG_RCX,
-    REG_RDX,
-    REG_RBX,
-    REG_RSP,
-    REG_RBP,
-    REG_RSI,
-    REG_RDI,
+    REG_R0,
+    REG_R1,
+    REG_R2,
+    REG_R3,
+    REG_R4,
+    REG_R5,
+    REG_R6,
+    REG_R7,
     REG_R8,
     REG_R9,
     REG_R10,
@@ -30,7 +30,7 @@ typedef enum {
     REG_R12,
     REG_R13,
     REG_R14,
-    REG_R15
+    REG_RSP,
 } PhysReg;
 
 typedef struct {

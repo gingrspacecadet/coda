@@ -14,22 +14,24 @@ void backend(FILE *out, MirBuilder *ctx, MirModule *module) {
     }
     
     // Emit .rodata section with string constants
-    if (string_consts.len > 0) {
-        fprintf(out, ".section .rodata\n");
-        for (size_t i = 0; i < string_consts.len; i++) {
-            fprintf(out, ".LC%u:\n", (unsigned int)i);
-            fprintf(out, "    .string \"");
-            for (size_t j = 0; j < string_consts.data[i].str.length; j++) {
-                char c = string_consts.data[i].str.data[j];
-                if (c == '\\') fprintf(out, "\\\\");
-                else if (c == '"') fprintf(out, "\\\"");
-                else if (c == '\n') fprintf(out, "\\n");
-                else if (c == '\t') fprintf(out, "\\t");
-                else fprintf(out, "%c", c);
-            }
-            fprintf(out, "\"\n");
-        }
-    }
+    // if (string_consts.len > 0) {
+    //     fprintf(out, ".section .rodata\n");
+    //     for (size_t i = 0; i < string_consts.len; i++) {
+    //         fprintf(out, ".LC%u:\n", (unsigned int)i);
+    //         fprintf(out, "    .string \"");
+    //         for (size_t j = 0; j < string_consts.data[i].str.length; j++) {
+    //             char c = string_consts.data[i].str.data[j];
+    //             if (c == '\\') fprintf(out, "\\\\");
+    //             else if (c == '"') fprintf(out, "\\\"");
+    //             else if (c == '\n') fprintf(out, "\\n");
+    //             else if (c == '\t') fprintf(out, "\\t");
+    //             else fprintf(out, "%c", c);
+    //         }
+    //         fprintf(out, "\"\n");
+    //     }
+    // }
+
+    fprintf(out, "call $main\nhalt\n");
     
     // Second pass: code generation
     for (size_t i = 0; i < module->functions.len; i++) {

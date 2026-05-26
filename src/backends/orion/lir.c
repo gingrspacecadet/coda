@@ -140,7 +140,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     LirOperand rhs = lower_operand(mir->rhs);
 
                     if (mir->op == MIR_OP_DIV) {
-                        LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
+                        LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_R12 };
                         emit_lir(lir_fn, ctx, LIR_MOV, rax, lhs);
                         emit_lir(lir_fn, ctx, LIR_CQO, (LirOperand){0}, (LirOperand){0});
                         emit_lir(lir_fn, ctx, LIR_IDIV, rhs, (LirOperand){0});
@@ -202,7 +202,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 case MIR_OP_RET: {
                     if (mir->lhs.type != MIR_VAL_NONE) {
                         LirOperand ret_val = lower_operand(mir->lhs);
-                        LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
+                        LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_R0 };
                         emit_lir(lir_fn, ctx, LIR_MOV, rax, ret_val);
                     }
                     emit_lir(lir_fn, ctx, LIR_RET, (LirOperand){0}, (LirOperand){0});
@@ -210,7 +210,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                 }
 
                 case MIR_OP_CALL: {
-                    PhysReg arg_regs[] = { REG_RDI, REG_RSI, REG_RDX, REG_R8, REG_R9 };
+                    PhysReg arg_regs[] = { REG_R0, REG_R1, REG_R2, REG_R3, REG_R4 };
 
                     for (size_t j = 0; j < mir->arg_count && j < 6; j++) {
                         LirOperand preg = { .type = LIR_REG_PHYSICAL, .preg = arg_regs[j] };
@@ -222,7 +222,7 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
                     LirOperand callee = lower_operand(mir->lhs);
                     emit_lir(lir_fn, ctx, LIR_CALL, callee, (LirOperand){0});
 
-                    LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_RAX };
+                    LirOperand rax = { .type = LIR_REG_PHYSICAL, .preg = REG_R12 };
                     LirOperand dest = lower_operand(mir->result);
                     emit_lir(lir_fn, ctx, LIR_MOV, dest, rax);
                     break;
@@ -265,8 +265,8 @@ LirFunction *lir_lower_fn(MirBuilder *ctx, MirFunction *mir_fn) {
 // TODO: move all the printing stuffs into their own file
 
 static const char* phys_reg_names[] = {
-    "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-    "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "none"
+    "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+    "r8", "r9", "r10", "r11", "r12", "r13", "rfp", "rsp"
 };
 
 static const char* lir_opcode_names[] = {
@@ -300,11 +300,11 @@ static void print_lir_operand(LirOperand op) {
             break;
         case LIR_STACK:
             if (op.mem.offset == 0) {
-                printf("[rbp - v%u]", op.mem.base_vreg);
+                printf("[rfp - v%u]", op.mem.base_vreg);
             } else if (op.mem.offset > 0) {
-                printf("[rbp - v%u + %d]", op.mem.base_vreg, op.mem.offset);
+                printf("[rfp - v%u + %d]", op.mem.base_vreg, op.mem.offset);
             } else {
-                printf("[rbp - v%u - %d]", op.mem.base_vreg, -op.mem.offset);
+                printf("[rfp - v%u - %d]", op.mem.base_vreg, -op.mem.offset);
             }
             break;
     }
