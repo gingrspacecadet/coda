@@ -6,11 +6,11 @@ module idea;
 // some common includes
 // including a path imports all exported symbols
 // into the current namespace
-include std::io;
-include std::system::handle;
 
-// the ':' allows you to specify the namespace to add them under
-include custom::thingy : yay;
+// by default, the namespace they will be added as is the full path
+// *however*, using `:` you can specify.
+include std::io : io;
+include std::system::handle;
 
 @packed
 struct Vec3 {
@@ -27,16 +27,6 @@ union Onion {
 // `@extern` disables name mangling
 @extern fn none foo();
 
-fn int bar(string mut* baz) {
-    int x = 0;
-    
-    for (int i = 0; i < baz->len; i++) {
-        x += baz[i]; 
-    }
-
-    return x;
-}
-
 // this function returns an optional function pointer
 // of which said function pointer returns an int
 // and takes an optional, mutable pointer to a char
@@ -49,6 +39,86 @@ fn fn int (char mut*?) *? test() {
 // you can now use "loooooong" instead of this mess
 // and it'll work the same
 type loooooong = fn int (fn char (uint32 *?) *) *;
+
+// demonstration of the `typeid` system
+fn string type_names(any[] args) {
+    for (mut uint i = 0; i < args.len; i++) {
+        // `$foo()` is a compiler intrinsic
+        // `$typeid()` returns the id of the type at runtime.
+        // if used on anything except something of type `any`,
+        // it returns the calculated typeid of said type.
+        // if used on an `any` type, it accesses a private field of the `any` struct
+        // `any` is in the form `struct {typeid_t typeid; T data}`
+        // and all uses of it (except for `$typeid()`) implicitly access said `.data` field
+        // `typeid.md` has the algorithm used for calculating type ids
+        
+        if (typeid(args[i]) == $typeid(int)) {
+            return "int";
+        }
+        if ($typeid(args[i]) == $typeid(char)) {
+            return "char";
+        }
+        
+        // type introspection maybe? if possible
+        return $typestr(args[i]);   // if possible to reconstruct at runtime
+    }
+}
+
+// a demonstration of the error system!
+// possible errors
+enum FileError { NotFound, Denied, }
+
+// the `|` specifies potential return types
+fn int | FileError get_base_port() {
+    return FileError::NotFound; // enum namespacing
+}
+
+fn int | FileError setup_network() {
+    int  port = get_base_port()? + 1000; // `?` early-exits if it returns an error
+
+    bind_to_hardware(port, get_system_bus()?);
+
+    return port;
+}
+
+// pattern matching
+fn none pattern() {
+    match (setup_network()) {
+        FileError err {
+            io::printn($enumstr(err));
+        }
+        int val {
+            io::printn("Flawless.");
+        }
+    }
+}
+
+// constraints, templates, methods, and interfaces!
+
+// basic function
+fn none load_config<T: fn uint64 read(T mut* self, uint8[] buffer)>(T mut *source) {
+    uint8[1024] buf;
+
+    source.read(buf);
+}
+
+// requiring multiple methods on a single type using a semicolon
+fn none copy_data<T: fn uint64 read(T mut* self, uint8[] buf); 
+                     fn none write(T* self, uint8[] buf)>(T mut* source, T mut* dest) {
+    uint8[1024] buf;
+    source.read(buf);
+    dest.write(buf);
+}
+
+fn none pipe_data<R: fn uint64 read(R mut* self, uint8[] buf), 
+                  W: fn none write(W mut* self, uint8[] buf)>(R mut* src, W mut* dest) {
+    // ...
+}
+
+// method decl
+fn none Counter.increment(Counter mut* self) {
+    self->i++;
+}
 
 @export // export this function so it can be ran
 fn int main(string[] args) {
@@ -64,5 +134,6 @@ fn int main(string[] args) {
         io::println(args[i]);
     }
 
-
+    int i = 1;
+    io::printf("Hello, {}", {type_names({i})}); // potentially have implicit `{..}` for trailing `any[]` parameters
 }

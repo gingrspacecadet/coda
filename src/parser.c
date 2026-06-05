@@ -55,7 +55,7 @@ Include *parse_include(Parser *ctx) {
         break;
     }
 
-    if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_COLON) {
+    if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_EQ) {
         consume(ctx);
         
         inc->alias = (string_optional){
@@ -743,8 +743,7 @@ Stmt *parse_while_stmt(Parser *ctx) {
 Stmt *parse_var_stmt(Parser *ctx) {
     TypeRef *type = NULL;
 
-    token_optional t = ahead(ctx, 1);
-    if (!t.has_value || t.value.type != TOKENTYPE_EQ) {
+    if (looks_like_type(ctx)) {
         type = parse_type(ctx);
     }
 
@@ -755,7 +754,7 @@ Stmt *parse_var_stmt(Parser *ctx) {
     v->type = type;
     v->name = name.value.value;
 
-    t = peek(ctx);
+    token_optional t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_EQ) {
         consume(ctx);
         v->init = parse_expr(ctx, 0);
