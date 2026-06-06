@@ -15,6 +15,7 @@ typedef struct Stmt Stmt;
 typedef struct Decl Decl;
 typedef struct VarDecl VarDecl;
 typedef struct FnDecl FnDecl;
+typedef struct EnumDecl EnumDecl;
 typedef struct StructDecl StructDecl;
 typedef struct UnionDecl UnionDecl;
 typedef struct TypeDecl TypeDecl;
@@ -118,6 +119,7 @@ struct Expr {
         EXPR_MEMBER,
         EXPR_CAST,
         EXPR_INTRINSIC,
+        EXPR_BUBBLE,
     } type;
 
     union {
@@ -149,11 +151,15 @@ struct Expr {
         struct {
             Expr *base;
             String member;
+            bool deref;
         } member;
         struct {
             TypeRef *to;
             Expr *expr;
         } cast;
+        struct {
+            Expr *expr;
+        } bubble;
     };
 
     TypeRef *resolved_type;
@@ -174,6 +180,7 @@ struct Stmt {
         STMT_FOR,
         STMT_WHILE,
         STMT_UNSAFE,
+        STMT_DEFER,
     } type;
 
     union {
@@ -203,6 +210,9 @@ struct Stmt {
         struct {
             stmts_array stmts;
         } unsafe;
+        struct  {
+            Stmt *deferred;
+        } defer;
     };
 
     Scope *scope;
@@ -221,16 +231,29 @@ struct Param {
 
 INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 
+INSTANTIATE(TypeRef *, typerefs, ARRAY_TEMPLATE)
+INSTANTIATE(FnDecl *, fndecls, ARRAY_TEMPLATE)
+
+typedef struct {
+    String name;
+    fndecls_array constraints;
+    Token token;
+} GenericParam;
+
+INSTANTIATE(GenericParam, genparam, ARRAY_TEMPLATE)
+
 struct TypeRef {
     enum {
         TYPEREF_NAMED,
         TYPEREF_POINTER,
         TYPEREF_ARRAY,
         TYPEREF_FN,
+        TYPEREF_SUM,
     } type;
     union {
         struct {
             String name;
+            typerefs_array generic_args;
         } named;
         struct {
             TypeRef *pointee;
@@ -243,6 +266,9 @@ struct TypeRef {
             TypeRef *ret_type;
             param_array params;
         } fn;
+        struct {
+            typerefs_array cases;
+        } sum;
     };
 
     bool is_mutable;
@@ -264,6 +290,7 @@ struct VarDecl {
 
 struct FnDecl {
     String name;
+    genparam_array generic_params;
     TypeRef *ret_type;
     param_array params;
     Stmt *body;
@@ -281,6 +308,7 @@ struct Decl {
         DECL_STRUCT,
         DECL_UNION,
         DECL_TYPE,
+        DECL_ENUM,
     } type;
     union {
         FnDecl *fn;
@@ -288,6 +316,7 @@ struct Decl {
         StructDecl *_struct;
         UnionDecl *_union;
         TypeDecl *_type;
+        EnumDecl *_enum;
     };
     attr_array attributes;
     Symbol *symbol;
@@ -298,8 +327,24 @@ struct Decl {
 INSTANTIATE(VarDecl *, vardecls, ARRAY_TEMPLATE)
 INSTANTIATE(size_t, size, ARRAY_TEMPLATE)
 
+typedef struct {
+    String name;
+    Expr *value;
+    Token token;
+} EnumVariant;
+
+INSTANTIATE(EnumVariant, enumvar, ARRAY_TEMPLATE)
+
+struct EnumDecl {
+    String name;
+    enumvar_array variants;
+    Symbol *symbol;
+    Token token;
+};
+
 struct StructDecl {
     String name;
+    genparam_array generic_params;
     vardecls_array members;
     Symbol *symbol;
     size_t size;
@@ -310,6 +355,7 @@ struct StructDecl {
 
 struct UnionDecl {
     String name;
+    genparam_array generic_params;
     vardecls_array members;
     Symbol *symbol;
     size_t size;
@@ -319,6 +365,7 @@ struct UnionDecl {
 
 struct TypeDecl {
     String name;
+    genparam_array generic_params;
     TypeRef *alias;
     Symbol *symbol;
     Token token;

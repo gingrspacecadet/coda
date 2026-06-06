@@ -12,7 +12,7 @@ typedef struct {
 } Parser;
 
 Include *parse_include(Parser *ctx);
-TypeRef *parse_type(Parser *ctx);
+TypeRef *parse_type_single(Parser *ctx);
 Expr *parse_expr_prefix(Parser *ctx);
 Expr *expr_handle_postfix(Parser *ctx, Expr *left);
 Expr *parse_expr(Parser *ctx, int min_bp);

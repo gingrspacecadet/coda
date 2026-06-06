@@ -39,6 +39,7 @@ static Keyword keywords[] = {
     {"return", TOKENTYPE_RETURN},
     {"struct", TOKENTYPE_STRUCT},
     {"union", TOKENTYPE_UNION},
+    {"defer", TOKENTYPE_DEFER},
     {"enum", TOKENTYPE_ENUM},
     {"type", TOKENTYPE_TYPE},
     {"mut", TOKENTYPE_MUT},
@@ -264,6 +265,9 @@ token_array lex(Lexer *ctx) {
                     if (peek(ctx).has_value && peek(ctx).value == '=') {
                         consume(ctx);
                         token_array_push(&tokens, (Token){ .type = TOKENTYPE_MINUSEQ });
+                    } else if (peek(ctx).has_value && peek(ctx).value == '>') {
+                        consume(ctx);
+                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_RARROW });
                     } else {
                         token_array_push(&tokens, (Token){ .type = TOKENTYPE_MINUS });
                     }
