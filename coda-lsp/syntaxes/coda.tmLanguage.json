@@ -1,262 +1,244 @@
 {
-	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "coda",
-	"patterns": [
-		{
-			"include": "#modules"
-		},
-		{
-			"include": "#keywords"
-		},
-		{
-			"include": "#strings"
-		},
-		{
-			"include": "#comments"
-		},
-		{
-			"include": "#operators"
-		},
-		{
-			"include": "#generics"
-		},
-		{
-			"include": "#functions"
-		},
-		{
-			"include": "#punctuation"
-		},
-		{
-			"include": "#namespaces"
-		},
-		{
-			"include": "#numbers"
-		},
-		{
-			"include": "#attributes"
-		},
-		{
-			"include": "#structs"
-		}
-	],
-	"repository": {
-		"modules": {
-			"patterns": [
-				{
-					"begin": "^\\s*(include|module)\\b",
-					"beginCaptures": {
-						"1": {
-							"name": "keyword.control.coda"
-						}
-					},
-					"end": "(?=;|//|$)",
-					"patterns": [
-						{
-							"name": "punctuation.separator.double-colon.coda",
-							"match": "::"
-						},
-						{
-							"name": "punctuation.separator.equal.coda",
-							"match": "="
-						},
-						{
-							"name": "entity.name.namespace.coda",
-							"match": "\\b[A-Za-z_]\\w*\\b"
-						}
-					]
-				}
-			]
-		},
-		"keywords": {
-			"patterns": [
-				{
-					"name": "keyword.control.coda",
-					"match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|mut|type)\\b"
-				},
-				{
-					"name": "support.type.primitive.coda",
-					"match": "\\b(u?int(8|16|32|64)?|char|string|bool)\\b"
-				},
-				{
-					"name": "constant.language.boolean.coda",
-					"match": "\\b(true|false)\\b"
-				},
-				{
-					"name": "constant.language.null.coda",
-					"match": "\\b(null|none)\\b"
-				}
-			]
-		},
-		"strings": {
-			"patterns": [
-				{
-					"name": "string.quoted.double.coda",
-					"begin": "\"",
-					"end": "\"",
-					"patterns": [
-						{
-							"name": "constant.character.escape.coda",
-							"match": "\\\\."
-						}
-					]
-				},
-				{
-					"name": "string.quoted.single.coda",
-					"begin": "'",
-					"end": "'",
-					"patterns": [
-						{
-							"name": "constant.character.escape.coda",
-							"match": "\\\\."
-						}
-					]
-				}
-			]
-		},
-		"generics": {
-			"patterns": [
-				{
-					"match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(:)",
-					"captures": {
-						"1": {
-							"name": "entity.name.type.parameter.coda"
-						},
-						"2": {
-							"name": "punctuation.separator.colon.coda"
-						}
-					}
-				}
-			]
-		},
-		"functions": {
-			"name": "entity.name.function.coda",
-			"match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?=[\\(<])"
-		},
-		"namespaces": {
-			"patterns": [
-				{
-					"comment": "Handles inline namespace resolution like io::println",
-					"match": "\\b([A-Za-z_]\\w*)(?=::)",
-					"captures": {
-						"1": {
-							"name": "entity.name.namespace.coda"
-						}
-					}
-				}
-			]
-		},
-		"numbers": {
-			"patterns": [
-				{
-					"name": "constant.numeric.float.coda",
-					"match": "\\b\\d+(?:_\\d+)*\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
-				},
-				{
-					"name": "constant.numeric.float.leading-dot.coda",
-					"match": "\\b\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
-				},
-				{
-					"name": "constant.numeric.hex.coda",
-					"match": "\\b0x[0-9A-Fa-f]+(?:_[0-9A-Fa-f]+)*\\b"
-				},
-				{
-					"name": "constant.numeric.binary.coda",
-					"match": "\\b0b[01]+(?:_[01]+)*\\b"
-				},
-				{
-					"name": "constant.numeric.octal.coda",
-					"match": "\\b0o[0-7]+(?:_[0-7]+)*\\b"
-				},
-				{
-					"name": "constant.numeric.integer.coda",
-					"match": "\\b\\d+(?:_\\d+)*\\b"
-				}
-			]
-		},
-		"punctuation": {
-			"patterns": [
-				{
-					"name": "punctuation.separator.double-colon.coda",
-					"match": "::"
-				},
-				{
-					"name": "punctuation.separator.colon.coda",
-					"match": ":"
-				},
-				{
-					"name": "punctuation.separator.comma.coda",
-					"match": ","
-				},
-				{
-					"name": "punctuation.access.dot.coda",
-					"match": "\\."
-				},
-				{
-					"name": "punctuation.terminator.semicolon.coda",
-					"match": ";"
-				},
-				{
-					"name": "storage.modifier.pointer.coda",
-					"match": "\\*"
-				},
-				{
-					"name": "punctuation.definition.typeparameters.coda",
-					"match": "[<>]"
-				}
-			]
-		},
-		"comments": {
-			"patterns": [
-				{
-					"name": "comment.line.coda",
-					"match": "//.*"
-				}
-			]
-		},
-		"attributes": {
-			"patterns": [
-				{
-					"name": "keyword.operator.coda",
-					"match": "@[a-zA-Z]+(\\([\\(]*\\))?"
-				}
-			]
-		},
-		"structs": {
-			"patterns": [
-				{
-					"name": "entity.name.type.coda",
-					"match": "[A-Z][A-Za-z_0-9]*"
-				}
-			]
-		},
-		"operators": {
-			"patterns": [
-				{
-					"name": "keyword.operator.comparison.coda",
-					"match": "(>=|<=|==|!=|>|<)"
-				},
-				{
-					"name": "keyword.operator.logical.coda",
-					"match": "(\\!|&&|\\|\\|)"
-				},
-				{
-					"name": "keyword.operator.arithmetic.coda",
-					"match": "(\\+|\\-|\\*|\\/|%)"
-				},
-				{
-					"name": "keyword.operator.assignment.coda",
-					"match": "(=|\\+=|\\-=|\\*=|\\/=|%=)"
-				},
-				{
-					"name": "keyword.operator.bitwise.coda",
-					"match": "(\\&|\\||\\^|~|<<|>>)"
-				},
-				{
-					"name": "keyword.operator.ternary.coda",
-					"match": "(\\?|:)"
-				}
-			]
-		}
-	},
-	"scopeName": "source.coda"
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "coda",
+    "patterns": [
+        {
+            "include": "#imports"
+        },
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#generics"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#punctuation"
+        },
+        {
+            "include": "#namespaces"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#attributes"
+        },
+        {
+            "include": "#types"
+        }
+    ],
+    "repository": {
+        "imports": {
+            "patterns": [
+                {
+                    "comment": "Scopes the import line, allowing internal tokens like :: and = to be colored individually",
+                    "begin": "^\\s*(include|module)\\b",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.control.coda"
+                        }
+                    },
+                    "end": "(?=;|//|$)",
+                    "patterns": [
+                        {
+                            "name": "punctuation.separator.double-colon.coda",
+                            "match": "::"
+                        },
+                        {
+                            "name": "punctuation.separator.equal.coda",
+                            "match": "="
+                        },
+                        {
+                            "name": "entity.name.namespace.coda",
+                            "match": "\\b[A-Za-z_]\\w*\\b"
+                        }
+                    ]
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.coda",
+                    "match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|mut|defer|match)\\b"
+                },
+                {
+                    "name": "support.type.primitive.coda",
+                    "match": "\\b(u?int(8|16|32|64)?|char|string|bool)\\b"
+                },
+                {
+                    "name": "constant.language.boolean.coda",
+                    "match": "\\b(true|false)\\b"
+                },
+                {
+                    "name": "constant.language.null.coda",
+                    "match": "\\b(null|none)\\b"
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.coda",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.coda",
+                            "match": "\\\\."
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.coda",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.coda",
+                            "match": "\\\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "generics": {
+            "patterns": [
+                {
+                    "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(:)",
+                    "captures": {
+                        "1": {
+                            "name": "entity.name.type.parameter.coda"
+                        },
+                        "2": {
+                            "name": "punctuation.separator.colon.coda"
+                        }
+                    }
+                }
+            ]
+        },
+        "functions": {
+            "name": "entity.name.function.coda",
+            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?=[\\(<])"
+        },
+        "namespaces": {
+            "patterns": [
+                {
+                    "comment": "Handles inline namespace resolution like io::println",
+                    "match": "\\b([A-Za-z_]\\w*)(?=::)",
+                    "captures": {
+                        "1": {
+                            "name": "entity.name.namespace.coda"
+                        }
+                    }
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.float.coda",
+                    "match": "\\b\\d+(?:_\\d+)*\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
+                },
+                {
+                    "name": "constant.numeric.float.leading-dot.coda",
+                    "match": "\\b\\.\\d+(?:_\\d+)*(?:[eE][+-]?\\d+(?:_\\d+)*)?[fF]?\\b"
+                },
+                {
+                    "name": "constant.numeric.hex.coda",
+                    "match": "\\b0x[0-9A-Fa-f]+(?:_[0-9A-Fa-f]+)*\\b"
+                },
+                {
+                    "name": "constant.numeric.binary.coda",
+                    "match": "\\b0b[01]+(?:_[01]+)*\\b"
+                },
+                {
+                    "name": "constant.numeric.octal.coda",
+                    "match": "\\b0o[0-7]+(?:_[0-7]+)*\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.coda",
+                    "match": "\\b\\d+(?:_\\d+)*\\b"
+                }
+            ]
+        },
+        "punctuation": {
+            "patterns": [
+                {
+                    "name": "punctuation.separator.double-colon.coda",
+                    "match": "::"
+                },
+                {
+                    "name": "punctuation.separator.colon.coda",
+                    "match": ":"
+                },
+                {
+                    "name": "punctuation.separator.comma.coda",
+                    "match": ","
+                },
+                {
+                    "name": "punctuation.access.pointer.coda",
+                    "match": "->"
+                },
+                {
+                    "name": "punctuation.access.dot.coda",
+                    "match": "\\."
+                },
+                {
+                    "name": "punctuation.terminator.semicolon.coda",
+                    "match": ";"
+                },
+                {
+                    "name": "storage.modifier.pointer.coda",
+                    "match": "\\*"
+                },
+                {
+                    "name": "keyword.operator.address-of.coda",
+                    "match": "&"
+                },
+                {
+                    "name": "keyword.operator.optional.coda",
+                    "match": "\\?"
+                },
+                {
+                    "name": "punctuation.definition.typeparameters.coda",
+                    "match": "[<>]"
+                }
+            ]
+        },
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.coda",
+                    "match": "//.*"
+                }
+            ]
+        },
+        "attributes": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.coda",
+                    "match": "@[a-zA-Z]+(\\([\\(]*\\))?"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "entity.name.type.coda",
+                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+                }
+            ]
+        }
+    },
+    "scopeName": "source.coda"
 }

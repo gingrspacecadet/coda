@@ -13,10 +13,10 @@ include std::io = io;
 include std::system::handle;
 
 @packed
-struct Vec3 {
-    int x;
-    int y;
-    int z;
+struct Vec3<T> {
+    T x;
+    T y;
+    T z;
 }
 
 union Onion {
@@ -96,28 +96,50 @@ fn none pattern() {
 // constraints, templates, methods, and interfaces!
 
 // basic function
-fn none load_config<T: fn uint64 read(T mut* self, uint8[] buffer)>(T mut *source) {
+fn none load_config<T: fn uint64 read(T mut *self, uint8[] buffer)>(T mut *source) {
     uint8[1024] buf;
 
     source.read(buf);
 }
 
 // requiring multiple methods on a single type using a semicolon
-fn none copy_data<T: fn uint64 read(T mut* self, uint8[] buf); 
-                     fn none write(T* self, uint8[] buf)>(T mut* source, T mut* dest) {
+fn none copy_data<T: fn uint64 read(T mut *self, uint8[] buf); 
+                     fn none write(T *self, uint8[] buf)>(T mut *source, T mut *dest) {
     uint8[1024] buf;
     source.read(buf);
     dest.write(buf);
 }
 
-fn none pipe_data<R: fn uint64 read(R mut* self, uint8[] buf), 
-                  W: fn none write(W mut* self, uint8[] buf)>(R mut* src, W mut* dest) {
+fn none pipe_data<R: fn uint64 read(R mut *self, uint8[] buf), 
+                  W: fn none write(W mut *self, uint8[] buf)>(R mut *src, W mut *dest) {
     // ...
 }
 
 // method decl
-fn none Counter.increment(Counter mut* self) {
+fn none Counter.increment(Counter mut *self) {
     self->i++;
+}
+
+fn none test_init() {
+    Vec3<int> v1 = {
+        .x = 1,
+        .y = 2,
+        .z = 3
+    };
+}
+
+// example allocator interface
+fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &std::mem::default_heap) {
+    // ...
+}
+
+fn none test_alloc() {
+    int mut *buffer = std::mem::allocate<int>(100);
+    defer std::mem::default_heap.free(buffer);
+    Arena my_arena = std::mem::Arena.init();
+    defer my_arena.destroy();
+    int mut *fast_buffset = std::mem::allocate<int>(100, &my_arena);
+    defer std::mem::Arena.free(fast_buffset);
 }
 
 @export // export this function so it can be ran
@@ -136,4 +158,11 @@ fn int main(string[] args) {
 
     int i = 1;
     io::printf("Hello, {}", {type_names({i})}); // potentially have implicit `{..}` for trailing `any[]` parameters
+
+    // type casting
+    uint64 big = 42424242;
+    uint8 small = (uint8)big;
+
+    // multidimensional arrays
+    uint32[4][4] matrix;
 }
