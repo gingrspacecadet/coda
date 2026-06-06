@@ -7,12 +7,15 @@ void register_globals(Analyser *ctx, Module *mod);
 void resolve_types(Analyser *ctx, Module *mod);
 void check_bodies(Analyser *ctx, Module *mod);
 TypeRef *check_expr(Analyser *ctx, Expr *expr);
-bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst);
+bool types_compatible(TypeRef *src, TypeRef *dst);
+
+INSTANTIATE(char, char, ARRAY_TEMPLATE)
 
 static String type_to_string(TypeRef *t) {
     String s = {0};
-    if (!t) return s;
+    if (!t) return string_make("(null)");
     if (t->type == TYPEREF_NAMED) {
+        if (t->type_symbol) return t->type_symbol->name;
         return t->named.name;
     }
     else if (t->type == TYPEREF_POINTER) {
@@ -44,6 +47,20 @@ static String type_to_string(TypeRef *t) {
         s.data[ret.length + 3] = ')';
         // TODO: param printing
         return s;
+    }
+    else if (t->type == TYPEREF_SUM) {
+        char_array cs = char_array_init();
+        for (size_t i = 0; i < t->sum.cases.len; i++) {
+            String c = type_to_string(t->sum.cases.data[i]);
+            for (size_t j = 0; j < c.length; j++) {
+                char_array_push(&cs, c.data[j]);
+            }
+            if (i + 1 < t->sum.cases.len) char_array_push(&cs, '|');
+        }
+        return (String){.data = cs.data, .length = cs.len};
+    }
+    else {
+        return string_make("Unknown");
     }
 }
 
@@ -294,6 +311,18 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->_type->symbol = sym;
                 break;
             }
+            case DECL_ENUM: {
+                Symbol *sym = declare_symbol(ctx, d->_enum->name, SYMFLAG_TYPE);
+
+                TypeRef *enum_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                enum_type->type = TYPEREF_NAMED;
+                enum_type->type_symbol = sym;
+                sym->type = enum_type;
+
+                sym->decl = d;
+                d->symbol = sym;
+                break;
+            }
             case DECL_VAR: {
                 error(d->token, "Global variables are not allowed");
             }
@@ -339,6 +368,12 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
         }
         case TYPEREF_ARRAY: {
             resolve_typeref(ctx, type->array.elem);
+            break;
+        }
+        case TYPEREF_SUM: {
+            for (size_t i = 0; i < type->sum.cases.len; i++) {
+                resolve_typeref(ctx, type->sum.cases.data[i]);
+            }
             break;
         }
     }
@@ -500,21 +535,57 @@ void resolve_types(Analyser *ctx, Module *mod) {
 
         switch (d->type) {
             case DECL_FN: {
+                enter_scope(ctx, NULL);
+
+                if (d->fn->generic_params.len > 0) {
+                    for (size_t k = 0; k < d->fn->generic_params.len; k++) {
+                        String param_name = d->fn->generic_params.data[k].name;
+
+                        Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+
+                        TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                        generic_type->type = TYPEREF_NAMED;
+                        generic_type->type_symbol = sym;
+                        sym->type = generic_type;
+                    }
+                }
+
                 resolve_typeref(ctx, d->fn->ret_type);
 
                 for (size_t j = 0; j < d->fn->params.len; j++) {
                     Param p = d->fn->params.data[j];
                     resolve_typeref(ctx, p.type);
                 }
+
+                leave_scope(ctx);
                 break;
             }
             case DECL_STRUCT: {
+                enter_scope(ctx, NULL);
+
+                if (d->_struct->generic_params.len > 0) {
+                    for (size_t k = 0; k < d->_struct->generic_params.len; k++) {
+                        String param_name = d->_struct->generic_params.data[k].name;
+
+                        Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+
+                        TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                        generic_type->type = TYPEREF_NAMED;
+                        generic_type->type_symbol = sym;
+                        sym->type = generic_type;
+                    }
+                }
+
                 for (size_t j = 0; j < d->_struct->members.len; j++) {
                     VarDecl *m = d->_struct->members.data[j];
                     resolve_typeref(ctx, m->type);
                 }
 
-                calculate_struct_layout(d->_struct);
+                if (d->_struct->generic_params.len == 0) {
+                    calculate_struct_layout(d->_struct);
+                }
+
+                leave_scope(ctx);
                 break;
             }
             case DECL_UNION: {
@@ -560,7 +631,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (var->init) {
                 TypeRef *init_type = check_expr(ctx, var->init);
 
-                if (!types_compatible(ctx, init_type, var->type)) {
+                if (!types_compatible(init_type, var->type)) {
                     if (init_type->type_symbol && var->type->type_symbol) {
                         error(var->token, format("Cannot assign value of type %.*s to variable of type %.*s", string_fmt(init_type->type_symbol->name), string_fmt(var->type->type_symbol->name)));
                     } else {
@@ -581,7 +652,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
         case STMT_RETURN: {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
-                if (!types_compatible(ctx, ret_type, ctx->current_function->ret_type)) {
+                if (!types_compatible(ret_type, ctx->current_function->ret_type)) {
                     error(stmt->_return.value->token, format("Cannot return %.*s in function expecting %.*s", string_fmt(type_to_string(ret_type)), string_fmt(type_to_string(ctx->current_function->ret_type))));
                 }
             } else {
@@ -655,6 +726,18 @@ void check_fn_body(Analyser *ctx, FnDecl *fn) {
 
     enter_scope(ctx, NULL);
     fn->local_scope = ctx->current_scope;
+
+    if (fn->generic_params.len > 0) {
+        for (size_t k = 0; k < fn->generic_params.len; k++) {
+            String param_name = fn->generic_params.data[k].name;
+
+            Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+            TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+            generic_type->type = TYPEREF_NAMED;
+            generic_type->type_symbol = sym;
+            sym->type = generic_type;
+        }
+    }
 
     for (size_t i = 0; i < fn->params.len; i++) {
         Param *p = &fn->params.data[i];
@@ -754,8 +837,8 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *left_t = check_expr(ctx, expr->binary.left);
             TypeRef *right_t = check_expr(ctx, expr->binary.right);
 
-            if (!types_compatible(ctx, left_t, right_t)) {
-                error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", string_fmt(left_t->type_symbol->name), string_fmt(right_t->type_symbol->name)));
+            if (!types_compatible(left_t, right_t)) {
+                error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", string_fmt(type_to_string(left_t)), string_fmt(type_to_string(right_t))));
             }
 
             if (expr->binary.op == BINOP_EQ || 
@@ -769,7 +852,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
 
             if (expr->binary.op == BINOP_ASSIGN) {
-                if (!types_compatible(ctx, left_t, right_t)) {
+                if (!types_compatible(left_t, right_t)) {
                     error(expr->token, "Can only assign equal types");
                 }
 
@@ -818,7 +901,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 TypeRef *param_type = callee_type->fn.params.data[i].type;
                 resolve_typeref(ctx, param_type);
 
-                if (!types_compatible(ctx, arg_type, param_type)) {
+                if (!types_compatible(arg_type, param_type)) {
                     error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", string_fmt(type_name(arg_type)), string_fmt(type_name(param_type))));
                 }
             }
@@ -851,13 +934,28 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     error(expr->member.base->token, format("Unknown array member %.*s", string_fmt(expr->member.member)));
                 }
             } else {
-                Symbol *type_sym = base_type->type_symbol;
-                if (!type_sym || !(type_sym->flags & SYMFLAG_TYPE)) {
-                    if (type_sym) {
-                        error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(base_type->type_symbol->name)));
-                    } else {
-                        error(expr->member.base->token, "Unknown base type");
-                    }
+                TypeRef *actual_struct_type = base_type;
+                
+                if (actual_struct_type->type == TYPEREF_POINTER && expr->member.deref) {
+                    actual_struct_type = actual_struct_type->pointer.pointee;
+                }
+
+                if (actual_struct_type->type == TYPEREF_GENERIC) {
+                    actual_struct_type = actual_struct_type->generic.base_type;
+                }
+
+                Symbol *type_sym = actual_struct_type->type_symbol;
+                if (!type_sym) {
+                    error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(type_to_string(base_type))));
+                }
+
+                if (!type_sym->decl) {
+                    // TODO: ensure constraints allow this, otherwise error
+                    error(expr->token, format("Type placeholder %.*s does not have member elements", string_fmt(type_sym->name)));
+                }
+
+                if (!(type_sym->flags & SYMFLAG_TYPE)) {
+                    error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(type_to_string(base_type))));
                 }
     
                 StructDecl *str = NULL;
@@ -870,15 +968,45 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     error(expr->token, "Cannot get member of type without members");
                 }
     
-                vardecls_array members = str ? str->members : unn->members;
-                for (size_t i = 0; i < members.len; i++) {
-                    if (string_eq(members.data[i]->name, expr->member.member)) {
-                        result_type = members.data[i]->type;
-                        goto check_expr_finished;
+                VarDecl *found_member = NULL;
+                size_t member_index = 0;
+
+                for (size_t i = 0; i < (str ? str->members.len : unn->members.len); i++) {
+                    if (string_eq(str ? str->members.data[i]->name : unn->members.data[i]->name, expr->member.member)) {
+                        found_member = str ? str->members.data[i] : unn->members.data[i];
+                        member_index = i;
+                        break;
                     }
                 }
+
+                if (!found_member) {
+                    error(expr->token, "Unknown member");
+                }
     
-                error(expr->token, "Unknown member");
+                if (base_type->type == TYPEREF_GENERIC) {
+                    TypeRef *member_type = found_member->type;
+
+                    if (member_type->type == TYPEREF_NAMED && member_type->type_symbol->flags & SYMFLAG_GENERIC) {
+                        int param_idx = -1;
+                        for (size_t k = 0; k < (str ? str->generic_params.len : unn->generic_params.len); k++) {
+                            if (string_eq(str ? str->generic_params.data[k].name : unn->generic_params.data[k].name, member_type->named.name)) {
+                                param_idx = k;
+                                break;
+                            }
+                        }
+
+                        if (param_idx != -1) {
+                            result_type = base_type->generic.arg_types.data[param_idx];
+                        } else {
+                            result_type = member_type;
+                        }
+                    } else {
+                        result_type = member_type;
+                    }
+                } else {
+                    result_type = found_member->type;
+                }
+                goto check_expr_finished;
             }
         }
         case EXPR_UNARY: {
@@ -989,6 +1117,82 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
             break;
         }
+        case EXPR_PATH: {
+            if (expr->path.components.len < 2) {
+                error(expr->token, "Invalid path expression"); // shouldn't be possible but just in case
+            }
+
+            String base_name = expr->path.components.data[0];
+            Symbol *parent_sym = lookup_symbol(ctx, base_name);
+            if (!parent_sym) {
+                error(expr->token, format("Unknown namespace %.*s", string_fmt(base_name)));
+            }
+
+            String target_name = expr->path.components.data[1];
+
+            if (parent_sym->decl && parent_sym->decl->type == DECL_ENUM) {
+                EnumDecl *en = parent_sym->decl->_enum;
+                bool found = false;
+
+                for (size_t i = 0; i < en->variants.len; i++) {
+                    if (string_eq(en->variants.data[i].name, target_name)) {
+                        result_type = parent_sym->type;
+                        expr->symbol = parent_sym;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    error(expr->token, format("Enum %.*s has no variant %.*s", string_fmt(parent_sym->name), string_fmt(target_name)));
+                }
+            }
+            else if (parent_sym->decl && parent_sym->decl->type == DECL_UNION) {
+                UnionDecl *unn = parent_sym->decl->_union;
+                bool found = false;
+
+                for (size_t i = 0; i < unn->members.len; i++) {
+                    if (string_eq(unn->members.data[i]->name, target_name)) {
+                        result_type = parent_sym->type;
+                        expr->symbol = parent_sym;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    error(expr->token, format("Union %.*s has no constructor variant %.*s", string_fmt(parent_sym->name), string_fmt(target_name)));
+                }
+            } 
+            else {
+                error(expr->token, "Path resolution is only supported on Enums and Unions currently");
+            }
+
+            goto check_expr_finished;
+        }
+        case EXPR_BUBBLE: {
+            TypeRef *inner_t = check_expr(ctx, expr->bubble.expr);
+            if (!inner_t) {
+                result_type = NULL;
+                goto check_expr_finished;
+            }
+
+            if (inner_t->type != TYPEREF_SUM) {
+                error(expr->token, format("Cannot use '?' on non-sum type %.*s", string_fmt(type_to_string(inner_t))));
+            }
+
+            if (inner_t->sum.cases.len == 0) {
+                error(expr->token, "Empty sum type cannot be bubbled");
+            }
+
+            TypeRef *success_type = inner_t->sum.cases.data[0];
+            
+            // TODO: validate that the remaining variants in inner_t->sum.cases 
+            // are compatible with ctx->current_function->ret_type's error variants
+
+            result_type = success_type;
+            goto check_expr_finished;
+        }
         default: {
             result_type = NULL;
             goto check_expr_finished;
@@ -1026,10 +1230,17 @@ bool types_equal(TypeRef *a, TypeRef *b) {
     }
 }
 
-bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
+bool types_compatible(TypeRef *src, TypeRef *dst) {
     if (!src || !dst) return false;
 
     if (types_equal(src, dst)) return true;
+
+    if (dst->type == TYPEREF_SUM) {
+        for (size_t i = 0; i < dst->sum.cases.len; i++) {
+            if (types_compatible(src, dst->sum.cases.data[i])) return true;
+        }
+        return false;
+    }
 
     if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
         // `null` may only be assigned to optional types.
@@ -1060,22 +1271,29 @@ bool types_compatible(Analyser *ctx, TypeRef *src, TypeRef *dst) {
     }
 
     if (src->type == TYPEREF_POINTER) {
-        return types_compatible(ctx, src->pointer.pointee, dst->pointer.pointee);
+        return types_compatible(src->pointer.pointee, dst->pointer.pointee);
     }
 
     if (src->type == TYPEREF_ARRAY) {
-        return (src->array.length == dst->array.length) && types_compatible(ctx, src->array.elem, dst->array.elem);
+        return (src->array.length == dst->array.length) && types_compatible(src->array.elem, dst->array.elem);
     }
 
     if (src->type == TYPEREF_FN) {
-        if (!types_compatible(ctx, src->fn.ret_type, dst->fn.ret_type)) return false;
+        if (!types_compatible(src->fn.ret_type, dst->fn.ret_type)) return false;
 
         if (src->fn.params.len != dst->fn.params.len) return false;
         for (size_t i = 0; i < src->fn.params.len; i++) {
-            if (!types_compatible(ctx, src->fn.params.data[i].type, dst->fn.params.data[i].type)) return false;
+            if (!types_compatible(src->fn.params.data[i].type, dst->fn.params.data[i].type)) return false;
         }
 
         return true;
+    }
+
+    if (src->type == TYPEREF_SUM) {
+        for (size_t i = 0; i < src->sum.cases.len; i++) {
+            if (types_compatible(src->sum.cases.data[i], dst)) return true;
+        }
+        return false;
     }
 
     return false;

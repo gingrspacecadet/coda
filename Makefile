@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Werror -MMD -MD -std=gnu23
+CFLAGS = -g -Werror -MMD -MD -std=gnu23 -O0
 
 SRCS = $(shell find src -type f -name "*.c" ! -path "src/backends/*" 2>/dev/null)
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))

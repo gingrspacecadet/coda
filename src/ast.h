@@ -66,7 +66,8 @@ typedef enum {
     SYMFLAG_TYPE = 1 << 2,
     SYMFLAG_EXPORT = 1 << 3,
     SYMFLAG_EXTERN = 1 << 4,
-    SYMFLAG_MUT = 1 << 5
+    SYMFLAG_MUT = 1 << 5,
+    SYMFLAG_GENERIC = 1 << 6,
 } SymbolFlags;
 
 struct Literal {
@@ -279,6 +280,7 @@ struct TypeRef {
         TYPEREF_ARRAY,
         TYPEREF_FN,
         TYPEREF_SUM,
+        TYPEREF_GENERIC,
     } type;
     union {
         struct {
@@ -299,6 +301,10 @@ struct TypeRef {
         struct {
             typerefs_array cases;
         } sum;
+        struct {
+            TypeRef *base_type;
+            typerefs_array arg_types;
+        } generic;
     };
 
     bool is_mutable;

@@ -8,7 +8,7 @@ module idea;
 // into the current namespace
 
 // by default, the namespace they will be added as is the full path
-// *however*, using `:` you can specify.
+// *however*, using `=` you can specify.
 include std::io = io;
 include std::system::handle;
 
@@ -41,28 +41,28 @@ fn fn int (char mut*?) *? test() {
 type loooooong = fn int (fn char (uint32 *?) *) *;
 
 // demonstration of the `typeid` system
-fn string type_names(any[] args) {
-    for (mut uint i = 0; i < args.len; i = i + 1) {
-        // `$foo()` is a compiler intrinsic
-        // `$typeid()` returns the id of the type at runtime.
-        // if used on anything except something of type `any`,
-        // it returns the calculated typeid of said type.
-        // if used on an `any` type, it accesses a private field of the `any` struct
-        // `any` is in the form `struct {typeid_t typeid; T data}`
-        // and all uses of it (except for `$typeid()`) implicitly access said `.data` field
-        // `typeid.md` has the algorithm used for calculating type ids
+// fn string type_names(any[] args) {
+//     for (mut uint i = 0; i < args.len; i = i + 1) {
+//         // `$foo()` is a compiler intrinsic
+//         // `$typeid()` returns the id of the type at runtime.
+//         // if used on anything except something of type `any`,
+//         // it returns the calculated typeid of said type.
+//         // if used on an `any` type, it accesses a private field of the `any` struct
+//         // `any` is in the form `struct {typeid_t typeid; T data}`
+//         // and all uses of it (except for `$typeid()`) implicitly access said `.data` field
+//         // `typeid.md` has the algorithm used for calculating type ids
         
-        if ($typeid(args[i]) == $typeid(int)) {
-            return "int";
-        }
-        if ($typeid(args[i]) == $typeid(char)) {
-            return "char";
-        }
+//         if ($typeid(args[i]) == $typeid(int)) {
+//             return "int";
+//         }
+//         if ($typeid(args[i]) == $typeid(char)) {
+//             return "char";
+//         }
         
-        // type introspection maybe? if possible
-        return $typestr(args[i]);   // if possible to reconstruct at runtime
-    }
-}
+//         // type introspection maybe? if possible
+//         return $typestr(args[i]);   // if possible to reconstruct at runtime
+//     }
+// }
 
 // a demonstration of the error system!
 // possible errors
@@ -76,7 +76,7 @@ fn int | FileError get_base_port() {
 fn int | FileError setup_network() {
     int port = get_base_port()? + 1000; // `?` early-exits if it returns an error
 
-    bind_to_hardware(port, get_system_bus()?);
+    // bind_to_hardware(port, get_system_bus()?);
 
     return port;
 }
@@ -116,9 +116,9 @@ fn none pipe_data<R: fn uint64 read(R mut *self, uint8[] buf),
 }
 
 // method decl
-fn none Counter.increment(Counter mut *self) {
-    self->i = self->i + 1;
-}
+// fn none Counter.increment(Counter mut *self) {
+//     self->i = self->i + 1;
+// }
 
 fn none test_init() {
     Vec3<int> v1 = {
@@ -129,9 +129,9 @@ fn none test_init() {
 }
 
 // example allocator interface
-fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &std::mem::default_heap) {
-    // ...
-}
+// fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &std::mem::default_heap) {
+//     // ...
+// }
 
 fn none test_alloc() {
     int mut *buffer = std::mem::allocate<int>(100);
