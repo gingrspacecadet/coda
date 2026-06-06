@@ -9,7 +9,7 @@ module idea;
 
 // by default, the namespace they will be added as is the full path
 // *however*, using `:` you can specify.
-include std::io : io;
+include std::io = io;
 include std::system::handle;
 
 @packed
@@ -52,7 +52,7 @@ fn string type_names(any[] args) {
         // and all uses of it (except for `$typeid()`) implicitly access said `.data` field
         // `typeid.md` has the algorithm used for calculating type ids
         
-        if (typeid(args[i]) == $typeid(int)) {
+        if ($typeid(args[i]) == $typeid(int)) {
             return "int";
         }
         if ($typeid(args[i]) == $typeid(char)) {
