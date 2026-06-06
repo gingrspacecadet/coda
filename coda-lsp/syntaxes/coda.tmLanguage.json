@@ -9,6 +9,9 @@
 			"include": "#strings"
 		},
 		{
+			"include": "#generics"
+		},
+		{
 			"include": "#functions"
 		},
 		{
@@ -25,6 +28,9 @@
 		},
 		{
 			"include": "#attributes"
+		},
+		{
+			"include": "#types"
 		}
 	],
 	"repository": {
@@ -74,9 +80,24 @@
 				}
 			]
 		},
+		"generics": {
+			"patterns": [
+				{
+					"match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(:)",
+					"captures": {
+						"1": {
+							"name": "entity.name.type.parameter.coda"
+						},
+						"2": {
+							"name": "punctuation.separator.colon.coda"
+						}
+					}
+				}
+			]
+		},
 		"functions": {
 			"name": "entity.name.function.coda",
-			"match": "\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\()"
+			"match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?=[\\(<])"
 		},
 		"namespaces": {
 			"patterns": [
@@ -143,6 +164,10 @@
 				{
 					"name": "storage.modifier.pointer.coda",
 					"match": "\\*"
+				},
+				{
+					"name": "punctuation.definition.typeparameters.coda",
+					"match": "[<>]"
 				}
 			]
 		},
@@ -159,6 +184,14 @@
 				{
 					"name": "keyword.operator.coda",
 					"match": "@[a-zA-Z]+(\\([\\(]*\\))?"
+				}
+			]
+		},
+		"types": {
+			"patterns": [
+				{
+					"name": "entity.name.type.coda",
+					"match": "[A-Z][A-Za-z_]+"
 				}
 			]
 		}
