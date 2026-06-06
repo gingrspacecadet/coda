@@ -128,7 +128,7 @@
         },
         "functions": {
             "name": "entity.name.function.coda",
-            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?=[\\(<])"
+            "match": "\\b(?:[a-z_]\\w*\\s*(?=[\\(<])|[A-Z]\\w*\\s*(?=\\())"
         },
         "namespaces": {
             "patterns": [
