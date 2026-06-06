@@ -643,6 +643,10 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             resolve_typeref(ctx, var->type);
 
             if (var->init) {
+                if (var->init->type == EXPR_INIT) {
+                    var->init->resolved_type = var->type;
+                }
+
                 TypeRef *init_type = check_expr(ctx, var->init);
 
                 if (!types_compatible(init_type, var->type)) {
@@ -1255,6 +1259,19 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             // are compatible with ctx->current_function->ret_type's error variants
 
             result_type = success_type;
+            goto check_expr_finished;
+        }
+        case EXPR_INIT: {
+            if (expr->resolved_type) {
+                result_type = expr->resolved_type;
+                goto check_expr_finished;
+            }
+
+            for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+                check_expr(ctx, expr->init_list.fields.data[i].value);
+            }
+
+            result_type = NULL;
             goto check_expr_finished;
         }
         default: {
