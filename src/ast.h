@@ -107,6 +107,15 @@ typedef struct {
     };
 } Intrinsic;
 
+typedef struct {
+    string_optional field_name;
+    Expr *value;
+    Token token;
+} InitField;
+
+INSTANTIATE(InitField, initfield, ARRAY_TEMPLATE)
+INSTANTIATE(TypeRef *, typerefs, ARRAY_TEMPLATE)
+
 struct Expr {
     enum {
         EXPR_LIT,
@@ -120,6 +129,8 @@ struct Expr {
         EXPR_CAST,
         EXPR_INTRINSIC,
         EXPR_BUBBLE,
+        EXPR_INIT,
+        EXPR_SPECIALISE,
     } type;
 
     union {
@@ -160,6 +171,13 @@ struct Expr {
         struct {
             Expr *expr;
         } bubble;
+        struct {
+            initfield_array fields;
+        } init_list;
+        struct {
+            Expr *expr;
+            typerefs_array args;
+        } specialise;
     };
 
     TypeRef *resolved_type;
@@ -244,7 +262,6 @@ struct Param {
 
 INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 
-INSTANTIATE(TypeRef *, typerefs, ARRAY_TEMPLATE)
 INSTANTIATE(FnDecl *, fndecls, ARRAY_TEMPLATE)
 
 typedef struct {
@@ -303,6 +320,7 @@ struct VarDecl {
 
 struct FnDecl {
     String name;
+    string_optional struct_name;
     genparam_array generic_params;
     TypeRef *ret_type;
     param_array params;

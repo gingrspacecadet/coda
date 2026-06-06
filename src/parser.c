@@ -125,6 +125,27 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
 
     String type_name = consume(ctx).value.value; stepped++;
 
+    t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_LT) {
+        consume(ctx); stepped++;
+        int lt_depth = 1;
+
+        while (lt_depth > 0) {
+            t = peek(ctx);
+            if (!t.has_value || t.value.type == TOKENTYPE_SEMICOLON) {
+                goto failed;
+            }
+
+            if (t.value.type == TOKENTYPE_LT) {
+                lt_depth++;
+            } else if (t.value.type == TOKENTYPE_GT) {
+                lt_depth--;
+            }
+
+            consume(ctx); stepped++;
+        }
+    }
+
     while (true) {
         token_optional t = peek(ctx);
         if (t.has_value && t.value.type != TOKENTYPE_MUT && t.value.type != TOKENTYPE_STAR && t.value.type != TOKENTYPE_LBRACK) break;
@@ -488,15 +509,28 @@ Expr *expr_new_ident(Parser *ctx, Token t) {
     return e;
 }
 
+bool is_generic_call_lookahead(Parser *ctx) {
+    size_t i = 1;
+    while (true) {
+        token_optional t = ahead(ctx, i); 
+        
+        if (!t.has_value || t.value.type == TOKENTYPE_SEMICOLON) {
+            return false;
+        }
+        
+        if (t.value.type == TOKENTYPE_GT) {
+            token_optional next = ahead(ctx, i + 1);
+            return next.has_value || next.value.type == TOKENTYPE_LPAREN;
+        }
+        i++;
+    }
+}
+
 Expr *parse_expr_prefix(Parser *ctx) {
     token_optional t = peek(ctx);
 
     if (!t.has_value) {
         error(ctx, "Expected a token for expression");
-    }
-
-    if (t.has_value && t.value.type == TOKENTYPE_PLUS) {
-        
     }
 
     if (t.value.type == TOKENTYPE_DOLLAR) {
@@ -552,8 +586,44 @@ Expr *parse_expr_prefix(Parser *ctx) {
         return inner;
     }
 
+    if (t.value.type == TOKENTYPE_LBRACE) {
+        Token lbrace = consume(ctx);
+        Expr *expr = arena_calloc(ctx->arena, sizeof(Expr));
+        expr->type = EXPR_INIT;
+        expr->token = lbrace;
+        expr->init_list.fields = initfield_array_init();
+
+        t = peek(ctx);
+        while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+            InitField field = {0};
+            field.token = t.value;
+
+            if (t.value.type == TOKENTYPE_DOT) {
+                consume(ctx);
+                Token name_tok = expect(ctx, TOKENTYPE_IDENT, "Expected field identifier after '.'");
+                field.field_name = (string_optional){ .has_value = true, .value = name_tok.value.value };
+                expect(ctx, TOKENTYPE_EQ, "Expected '=' after field designator");
+            } else {
+                field.field_name = (string_optional){ .has_value = false };
+            }
+
+            field.value = parse_expr(ctx, 0);
+            initfield_array_push(&expr->init_list.fields, field);
+
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
+                consume(ctx);
+                t = peek(ctx);
+            } else if (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+                error(ctx, "Expected ',' or '}' in initialiser list");
+            }
+        }
+
+        expect(ctx, TOKENTYPE_RBRACE, "Expected '}' to close initialiser list");
+        return expr;
+    }
+
     UnaryOp uop;
-    
 
     if (token_to_unary(t.value.type, &uop)) {
         Token start = consume(ctx);
@@ -566,9 +636,6 @@ Expr *parse_expr_prefix(Parser *ctx) {
         return e;
     }
 
-    /* Debug: print token type to help trace why parse_expr_prefix was called
-       on an unexpected token. */
-    error(ctx, "Unexpected token in expression");
     error(ctx, "Unexpected token in expression");
 }
 
@@ -598,7 +665,8 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
             call->token = left->token;
             left = call;
             continue;
-        } else if (next.has_value && next.value.type == TOKENTYPE_LBRACK) {
+        }
+        else if (next.has_value && next.value.type == TOKENTYPE_LBRACK) {
             Token lb = consume(ctx);
             Expr *len = parse_expr(ctx, 0);
             Token rb = consume(ctx);
@@ -637,6 +705,34 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
             e->bubble.expr = left;
             left = e;
             continue;
+        } else if (next.has_value && next.value.type == TOKENTYPE_LT) {
+            if (is_generic_call_lookahead(ctx)) {
+                Token lt = consume(ctx);
+                typerefs_array args = typerefs_array_init();
+
+                while (true) {
+                    typerefs_array_push(&args, parse_type(ctx));
+
+                    next = peek(ctx);
+                    if (next.has_value && next.value.type == TOKENTYPE_COMMA) {
+                        consume(ctx);
+                        continue;
+                    }
+                    break;
+                }
+                expect(ctx, TOKENTYPE_GT, "Expected '>' to close generic arguments");
+                
+                Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
+                e->type = EXPR_SPECIALISE;
+                e->token = lt;
+                e->specialise.expr = left;
+                e->specialise.args = args;
+
+                left = e;
+                continue;
+            } else {
+                break;
+            }
         } else {
             break;
         }
@@ -1130,8 +1226,20 @@ FnDecl *parse_fn_signature(Parser *ctx) {
     fn->params = param_array_init();
 
     fn->ret_type = parse_type(ctx);
-    Token fn_name = expect(ctx, TOKENTYPE_IDENT, "Expected fn name");
-    fn->name = fn_name.value.value;
+    
+    Token first_ident = expect(ctx, TOKENTYPE_IDENT, "Expected name");
+    
+    token_optional dot_check = peek(ctx);
+    if (dot_check.has_value && dot_check.value.type == TOKENTYPE_DOT) {
+        consume(ctx);
+        fn->struct_name = (string_optional){ .has_value = true, .value = first_ident.value.value };
+        
+        Token method_name = expect(ctx, TOKENTYPE_IDENT, "Expected method name after '.'");
+        fn->name = method_name.value.value;
+    } else {
+        fn->struct_name = (string_optional){ .has_value = false };
+        fn->name = first_ident.value.value;
+    }
 
     parse_optional_generic_params(ctx, &fn->generic_params);
 
