@@ -147,7 +147,7 @@ fn int main(string[] args) {
     // the array type holds size and data
     if (args.len != 2) {
         // string literals like "foo" are stored as `string` types,
-        // not char*, but they can explicitly decay
+        // not char*, but they can explicitly decay through the .ptr member
         // io::println("Missing requires arguments!");
     }
 
