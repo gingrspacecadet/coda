@@ -1153,6 +1153,12 @@ FnDecl *parse_fn_signature(Parser *ctx) {
             .token = param_start,
         };
 
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_EQ) {
+            consume(ctx);
+            p.default_value = parse_expr(ctx, 0);
+        }
+
         param_array_push(&fn->params, p);
         t = peek(ctx);
         if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;

@@ -237,6 +237,7 @@ struct Param {
     TypeRef *type;
     String name;
     attr_array attributes;
+    Expr *default_value;
     Symbol *symbol;
     Token token;
 };
