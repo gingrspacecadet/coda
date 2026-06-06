@@ -167,7 +167,12 @@
                 },
                 {
                     "name": "constant.numeric.integer.coda",
-                    "match": "\\b\\d+(?:_\\d+)*\\b"
+                    "match": "\\b\\d+(?:_\\d+)*([uU])?\\b",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.other.unit.suffix.integer.coda"
+                        }
+                    }
                 }
             ]
         },

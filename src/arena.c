@@ -7,7 +7,7 @@
 Arena *arena_create() {
     Arena *a = malloc(sizeof(Arena));
     if (!a) {
-        exit(1);
+        exit(1u);
     }
     a->block_size = BLOCK_SIZE;
     a->block_count = 1;
