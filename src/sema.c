@@ -11,57 +11,71 @@ bool types_compatible(TypeRef *src, TypeRef *dst);
 
 INSTANTIATE(char, char, ARRAY_TEMPLATE)
 
+static void append_string_to_char_array(char_array *cs, String s) {
+    for (size_t i = 0; i < s.length; ++i) {
+        char_array_push(cs, s.data[i]);
+    }
+}
+
 static String type_to_string(TypeRef *t) {
-    String s = {0};
-    if (!t) return string_make("(null)");
+    if (!t) return string_make("(null)"); // keep existing behavior for null
+
     if (t->type == TYPEREF_NAMED) {
-        if (t->type_symbol) return t->type_symbol->name;
+        if (t->type_symbol) {
+            return t->type_symbol->name;
+        }
         return t->named.name;
     }
-    else if (t->type == TYPEREF_POINTER) {
+
+    char_array cs = char_array_init();
+
+    if (t->type == TYPEREF_POINTER) {
         String pointee = type_to_string(t->pointer.pointee);
-        s.data = malloc(pointee.length + 1);
-        s.length = pointee.length + 1;
-        strncpy(s.data, pointee.data, pointee.length);
-        s.data[pointee.length + 1] = '*';
-        return s;
+        append_string_to_char_array(&cs, pointee);
+        if (t->is_mutable) append_string_to_char_array(&cs, string_make(" mut"));
+        char_array_push(&cs, '*');
+        if (t->is_optional) char_array_push(&cs, '?');
+        return (String){ .data = cs.data, .length = cs.len };
     }
     else if (t->type == TYPEREF_ARRAY) {
         String base = type_to_string(t->array.elem);
-        s.data = malloc(base.length + 1);
-        s.length = base.length + 1;
-        strncpy(s.data, base.data, base.length);
-        s.data[s.length] = '[';
-        size_t nlen = sprintf(NULL, "%zu", t->array.length);
-        s.length += nlen + 1;
-        s.data = realloc(s.data, s.length);
-        snprintf(s.data + base.length + 1, nlen, "%zu", t->array.length);
-        s.data[s.length] = ']';
-        return s;
+        append_string_to_char_array(&cs, base);
+        char_array_push(&cs, '[');
+
+        char buf[32];
+        int n = snprintf(buf, sizeof buf, "%zu", t->array.length);
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) char_array_push(&cs, buf[i]);
+        }
+
+        char_array_push(&cs, ']');
+        return (String){ .data = cs.data, .length = cs.len };
     }
     else if (t->type == TYPEREF_FN) {
+        char_array_push(&cs, 'f');
+        char_array_push(&cs, 'n');
+        char_array_push(&cs, ' ');
+
         String ret = type_to_string(t->fn.ret_type);
-        s.data = malloc(ret.length + 4);
-        s.data[0] = 'f'; s.data[1] = 'n'; s.data[2] = ' ';
-        strncpy(s.data + 3, ret.data, ret.length);
-        s.data[ret.length + 3] = ')';
-        // TODO: param printing
-        return s;
+        append_string_to_char_array(&cs, ret);
+
+        char_array_push(&cs, '(');
+        // TODO: append parameters here, using the same pattern
+        char_array_push(&cs, ')');
+
+        return (String){ .data = cs.data, .length = cs.len };
     }
     else if (t->type == TYPEREF_SUM) {
-        char_array cs = char_array_init();
-        for (size_t i = 0; i < t->sum.cases.len; i++) {
-            String c = type_to_string(t->sum.cases.data[i]);
-            for (size_t j = 0; j < c.length; j++) {
-                char_array_push(&cs, c.data[j]);
-            }
+        for (size_t i = 0; i < t->sum.cases.len; ++i) {
+            TypeRef *case_t = t->sum.cases.data[i];
+            String cs_str = type_to_string(case_t);
+            append_string_to_char_array(&cs, cs_str);
             if (i + 1 < t->sum.cases.len) char_array_push(&cs, '|');
         }
-        return (String){.data = cs.data, .length = cs.len};
+        return (String){ .data = cs.data, .length = cs.len };
     }
-    else {
-        return string_make("Unknown");
-    }
+
+    return string_make("Unknown");
 }
 
 static bool is_unsigned_integer(TypeRef *t) {
@@ -887,22 +901,42 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
             }
 
-            if (expr->call.args.len != callee_type->fn.params.len) {
+            bool is_method_call = false;
+            Expr *method_base = NULL;
+
+            if (expr->call.callee->type == EXPR_MEMBER) {
+                method_base = expr->call.callee->member.base;
+                is_method_call = true;
+            }
+
+            size_t expected_params = callee_type->fn.params.len;
+            size_t provided_args = expr->call.args.len;
+            size_t virtual_args_len = is_method_call ? (provided_args + 1) : provided_args;
+
+            if (virtual_args_len != expected_params) {
                 if (callee_sym && callee_sym->decl) {
-                    error(callee_sym->decl->token, format("Function expects %ld arguments", callee_type->fn.params.len));
+                    error(callee_sym->decl->token, format("Function expects %ld arguments", expected_params));
                 } else {
-                    error(expr->call.callee->token, format("Function expects %ld arguments", callee_type->fn.params.len));
+                    error(expr->call.callee->token, format("Function expects %ld arguments, got %ld", expected_params, provided_args));
                 }
             }
 
-            for (size_t i = 0; i < expr->call.args.len; i++) {
-                Expr *arg = expr->call.args.data[i];
-                TypeRef *arg_type = check_expr(ctx, arg);
+            for (size_t i = 0; i < expected_params; i++) {
                 TypeRef *param_type = callee_type->fn.params.data[i].type;
                 resolve_typeref(ctx, param_type);
+                TypeRef *arg_type = NULL;
+
+                if (is_method_call && i == 0) {
+                    arg_type = check_expr(ctx, method_base);
+                } else {
+                    size_t arg_idx = is_method_call ? (i - 1) : i;
+                    Expr *arg = expr->call.args.data[arg_idx];
+                    arg_type = check_expr(ctx, arg);
+                }
 
                 if (!types_compatible(arg_type, param_type)) {
-                    error(arg->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", string_fmt(type_name(arg_type)), string_fmt(type_name(param_type))));
+                    error(expr->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", 
+                        string_fmt(type_to_string(arg_type)), string_fmt(type_to_string(param_type))));
                 }
             }
 
@@ -950,6 +984,36 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
 
                 if (!type_sym->decl) {
+                    FnDecl *current_fn = ctx->current_function;
+
+                    if (current_fn && current_fn->generic_params.len > 0) {
+                        for (size_t i = 0; i < current_fn->generic_params.len; i++) {
+                            if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
+                                for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
+                                    FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
+    
+                                    if (constraint && string_eq(constraint->name, expr->member.member)) {
+                                        resolve_typeref(ctx, constraint->ret_type);
+                                        for (size_t k = 0; k < constraint->params.len; k++) {
+                                            resolve_typeref(ctx, constraint->params.data[k].type);
+                                        }
+
+                                        TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                                        fn_type->type = TYPEREF_FN;
+                                        fn_type->fn.ret_type = constraint->ret_type;
+                                        fn_type->fn.params = constraint->params;
+                                        
+                                        result_type = fn_type;
+                                        expr->symbol = NULL;
+                                        goto check_expr_finished;
+                                    }
+                                }
+                            }
+                        }
+
+                        error(expr->token, format("Generic parameter %.*s has no method named %.*s", string_fmt(type_sym->name), string_fmt(expr->member.member)));
+                    }
+
                     // TODO: ensure constraints allow this, otherwise error
                     error(expr->token, format("Type placeholder %.*s does not have member elements", string_fmt(type_sym->name)));
                 }
@@ -1267,7 +1331,22 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
             return false;
         }
 
-        return src->type_symbol == dst->type_symbol;
+        if (src->type_symbol == dst->type_symbol) {
+            return true;
+        }
+
+        if (src->type_symbol && dst->type_symbol) {
+            bool src_is_generic = (src->type_symbol->flags & SYMFLAG_GENERIC) || 
+                                  (src->type_symbol->flags & SYMFLAG_TYPE && !src->type_symbol->decl);
+            bool dst_is_generic = (dst->type_symbol->flags & SYMFLAG_GENERIC) || 
+                                  (dst->type_symbol->flags & SYMFLAG_TYPE && !dst->type_symbol->decl);
+
+            if (src_is_generic && dst_is_generic) {
+                return string_eq(src->type_symbol->name, dst->type_symbol->name);
+            }
+        }
+
+        return false;
     }
 
     if (src->type == TYPEREF_POINTER) {
@@ -1275,7 +1354,11 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
     }
 
     if (src->type == TYPEREF_ARRAY) {
-        return (src->array.length == dst->array.length) && types_compatible(src->array.elem, dst->array.elem);
+        if (dst->array.length != 0 && src->array.length != dst->array.length) {
+            return false;
+        }
+        
+        return types_compatible(src->array.elem, dst->array.elem);
     }
 
     if (src->type == TYPEREF_FN) {
