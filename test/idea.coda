@@ -99,15 +99,15 @@ fn none pattern() {
 fn none load_config<T: fn uint64 read(T mut *self, uint8[] buffer)>(T mut *source) {
     uint8[1024] buf;
 
-    source.read(buf);
+    source->read(buf);
 }
 
 // requiring multiple methods on a single type using a semicolon
 fn none copy_data<T: fn uint64 read(T mut *self, uint8[] buf); 
                      fn none write(T *self, uint8[] buf)>(T mut *source, T mut *dest) {
     uint8[1024] buf;
-    source.read(buf);
-    dest.write(buf);
+    source->read(buf);
+    dest->write(buf);
 }
 
 fn none pipe_data<R: fn uint64 read(R mut *self, uint8[] buf), 

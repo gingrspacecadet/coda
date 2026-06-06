@@ -147,6 +147,10 @@ token_array lex(Lexer *ctx) {
                     token_array_push(&tokens, (Token){ .type = TOKENTYPE_AT });
                     break;
                 }
+                case '$': {
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_DOLLAR });
+                    break;
+                }
                 case '\'': {
                     char c = decode_esc(ctx);
                     if (!peek(ctx).has_value || peek(ctx).value != '\'') {
@@ -327,6 +331,10 @@ token_array lex(Lexer *ctx) {
                 }
                 case '?': {
                     token_array_push(&tokens, (Token){ .type = TOKENTYPE_QUESTION });
+                    break;
+                }
+                case '|': {
+                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_PIPE });
                     break;
                 }
                 default: {
