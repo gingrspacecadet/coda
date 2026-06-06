@@ -40,6 +40,7 @@ static Keyword keywords[] = {
     {"struct", TOKENTYPE_STRUCT},
     {"union", TOKENTYPE_UNION},
     {"defer", TOKENTYPE_DEFER},
+    {"match", TOKENTYPE_MATCH},
     {"enum", TOKENTYPE_ENUM},
     {"type", TOKENTYPE_TYPE},
     {"mut", TOKENTYPE_MUT},

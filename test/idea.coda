@@ -74,7 +74,7 @@ fn int | FileError get_base_port() {
 }
 
 fn int | FileError setup_network() {
-    int  port = get_base_port()? + 1000; // `?` early-exits if it returns an error
+    int port = get_base_port()? + 1000; // `?` early-exits if it returns an error
 
     bind_to_hardware(port, get_system_bus()?);
 

@@ -170,6 +170,13 @@ struct Expr {
 
 INSTANTIATE(Stmt *, stmts, ARRAY_TEMPLATE)
 
+typedef struct {
+    VarDecl *var;
+    Stmt *body;
+} Case;
+
+INSTANTIATE(Case, case, ARRAY_TEMPLATE)
+
 struct Stmt {
     enum {
         STMT_VAR,
@@ -181,6 +188,7 @@ struct Stmt {
         STMT_WHILE,
         STMT_UNSAFE,
         STMT_DEFER,
+        STMT_MATCH,
     } type;
 
     union {
@@ -213,6 +221,10 @@ struct Stmt {
         struct  {
             Stmt *deferred;
         } defer;
+        struct {
+            Expr *expr;
+            case_array cases;
+        } match;
     };
 
     Scope *scope;

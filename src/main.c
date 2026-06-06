@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <string.h>
 #include "lexer.h"
 #include "parser.h"
 #include "sema.h"

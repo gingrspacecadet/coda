@@ -10,7 +10,6 @@ static token_optional peek(Parser *ctx) {
     if (ctx->index >= ctx->tokens.len) return (token_optional){};
     return (token_optional){true, ctx->tokens.data[ctx->index]};
 }
-
 static token_optional ahead(Parser *ctx, size_t ahead) {
     if (ctx->index + ahead >= ctx->tokens.len) return (token_optional){};
     return (token_optional){true, ctx->tokens.data[ctx->index + ahead]};
@@ -228,7 +227,7 @@ TypeRef *parse_type_single(Parser *ctx) {
             consume(ctx);
             t = peek(ctx);
         }
-        expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
+        expect(ctx, TOKENTYPE_RPAREN, "Expecetd ')'");
     }
     else if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
         error(ctx, "Expected type name");
@@ -496,6 +495,10 @@ Expr *parse_expr_prefix(Parser *ctx) {
         error(ctx, "Expected a token for expression");
     }
 
+    if (t.has_value && t.value.type == TOKENTYPE_PLUS) {
+        
+    }
+
     if (t.value.type == TOKENTYPE_DOLLAR) {
         Token dollar = consume(ctx);
         Token name = expect(ctx, TOKENTYPE_IDENT, "Expected intrinsic name after '$'");
@@ -550,6 +553,8 @@ Expr *parse_expr_prefix(Parser *ctx) {
     }
 
     UnaryOp uop;
+    
+
     if (token_to_unary(t.value.type, &uop)) {
         Token start = consume(ctx);
         Expr *operand = parse_expr(ctx, 80);
@@ -561,6 +566,9 @@ Expr *parse_expr_prefix(Parser *ctx) {
         return e;
     }
 
+    /* Debug: print token type to help trace why parse_expr_prefix was called
+       on an unexpected token. */
+    error(ctx, "Unexpected token in expression");
     error(ctx, "Unexpected token in expression");
 }
 
@@ -568,25 +576,26 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
     while (true) {
         token_optional next = peek(ctx);
         if (next.has_value && next.value.type == TOKENTYPE_LPAREN) {
-            consume(ctx);
+            Token lparen = consume(ctx);
+
             exprs_array args = exprs_array_init();
-            next = peek(ctx);
-            if (!next.has_value || next.value.type != TOKENTYPE_RPAREN) {
+            token_optional argpeek = peek(ctx);
+            if (!argpeek.has_value || argpeek.value.type != TOKENTYPE_RPAREN) {
                 while (true) {
                     exprs_array_push(&args, parse_expr(ctx, 0));
-
-                    next = peek(ctx);
-                    if (!next.has_value || next.value.type != TOKENTYPE_COMMA) break;
+                    token_optional comma = peek(ctx);
+                    if (!comma.has_value || comma.value.type != TOKENTYPE_COMMA) break;
                     consume(ctx);
                 }
             }
 
-            Token start = consume(ctx);
+            Token rp = expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after call arguments");
+
             Expr *call = arena_calloc(ctx->arena, sizeof(Expr));
             call->type = EXPR_CALL;
             call->call.callee = left;
             call->call.args = args;
-            call->token = start;
+            call->token = left->token;
             left = call;
             continue;
         } else if (next.has_value && next.value.type == TOKENTYPE_LBRACK) {
@@ -749,49 +758,53 @@ Stmt *parse_return_stmt(Parser *ctx) {
 Stmt *parse_for_stmt(Parser *ctx) {
     Token start = consume(ctx);
 
-    expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
+    expect(ctx, TOKENTYPE_LPAREN, "Expected '(' after 'for'");
 
-    // TODO: i do believe that the init logic is wrong but i cba to fix it rn
     Stmt *init = NULL;
     token_optional t = peek(ctx);
-    if (!t.has_value || t.value.type == TOKENTYPE_SEMICOLON) {
-        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+
+    if (!t.has_value) {
+        error(ctx, "Unexpected end of input in for-init");
+    }
+
+    if (t.value.type == TOKENTYPE_SEMICOLON) {
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';' after for-init");
     } else {
-        if (t.value.type == TOKENTYPE_MUT || t.value.type == TOKENTYPE_FN) {
+        if (looks_like_type(ctx, &t)) {
             init = parse_var_stmt(ctx);
-        } else if (t.value.type == TOKENTYPE_IDENT) {
-            if (looks_like_type(ctx, NULL)) {
-                init = parse_var_stmt(ctx);
-            } else if (ahead(ctx, 1).has_value && ahead(ctx, 1).value.type == TOKENTYPE_LPAREN) {
-                init = parse_expr_stmt(ctx);
-                expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
-            } else {
-                error(ctx, "Invalid for-init: expected declaration or function call");
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_SEMICOLON) {
+                expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';' after declaration in for-init");
             }
         } else {
             init = parse_expr_stmt(ctx);
-            expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+            expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';' after for-init expression");
         }
     }
 
-
     Expr *cond = NULL;
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_SEMICOLON) {
+    if (!t.has_value) {
+        error(ctx, "Unexpected end of input in for condition");
+    }
+    if (t.value.type != TOKENTYPE_SEMICOLON) {
         cond = parse_expr(ctx, 0);
     }
-    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';' after for condition");
 
     Expr *post = NULL;
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_RPAREN) {
+    if (!t.has_value) {
+        error(ctx, "Unexpected end of input in for post expression");
+    }
+    if (t.value.type != TOKENTYPE_RPAREN) {
         post = parse_expr(ctx, 0);
     }
-    expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
+    expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after for clauses");
 
     t = peek(ctx);
     if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
-        error(ctx, "Expected '{'");
+        error(ctx, "Expected '{' to start for body");
     }
     Stmt *body = parse_block_stmt(ctx);
 
@@ -805,6 +818,7 @@ Stmt *parse_for_stmt(Parser *ctx) {
 
     return s;
 }
+
 
 Stmt *parse_if_stmt(Parser *ctx) {
     Token start = consume(ctx);
@@ -859,7 +873,7 @@ Stmt *parse_while_stmt(Parser *ctx) {
     return s;
 }
 
-Stmt *parse_var_stmt(Parser *ctx) {
+VarDecl *parse_var_decl(Parser *ctx) {
     TypeRef *type = NULL;
 
     if (looks_like_type(ctx, NULL)) {
@@ -878,10 +892,16 @@ Stmt *parse_var_stmt(Parser *ctx) {
         consume(ctx);
         v->init = parse_expr(ctx, 0);
     }
-    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+    
+    return v;
+}
+
+Stmt *parse_var_stmt(Parser *ctx) {
+    VarDecl *v = parse_var_decl(ctx);
+    expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';' after declaration");
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
-    s->token = name;
+    s->token = v->token;
     s->type = STMT_VAR;
     s->var = v;
 
@@ -911,6 +931,33 @@ Stmt *parse_defer_stmt(Parser *ctx) {
     return s; 
 }
 
+Stmt *parse_match_stmt(Parser *ctx) {
+    Token m = consume(ctx);
+    Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
+    s->type = STMT_MATCH;
+    expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
+    s->match.expr = parse_expr(ctx, 0);
+    expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
+    
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
+    
+    s->match.cases = case_array_init();
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        Case c = {
+            .var = parse_var_decl(ctx),
+            .body = parse_stmt(ctx),
+        };
+        
+        case_array_push(&s->match.cases, c);
+        t = peek(ctx);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
+
+    return s;
+}
+
 Stmt *parse_stmt(Parser *ctx) {
     attr_array attrs = attr_array_init();
     collect_attributes(ctx, &attrs);
@@ -926,6 +973,9 @@ Stmt *parse_stmt(Parser *ctx) {
         case TOKENTYPE_FOR: return parse_for_stmt(ctx);
         case TOKENTYPE_IF: return parse_if_stmt(ctx);
         case TOKENTYPE_WHILE: return parse_while_stmt(ctx);
+        case TOKENTYPE_DEFER: return parse_defer_stmt(ctx);
+        case TOKENTYPE_MATCH: return parse_match_stmt(ctx);
+        case TOKENTYPE_LBRACE: return parse_block_stmt(ctx);
         default: break;
     }
 
