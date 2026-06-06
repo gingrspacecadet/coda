@@ -135,12 +135,18 @@ token_array lex(Lexer *ctx) {
                 char_array_push(&buffer, consume(ctx));
                 p = peek(ctx);
             }
+
+            bool is_unsigned = false;
+            if (peek(ctx).has_value && (peek(ctx).value == 'u' || peek(ctx).value == 'U')) {
+                consume(ctx);
+                is_unsigned = true;
+            }
             
             char_array_push(&buffer, '\0');
 
             char *num_str = arena_strdup(ctx->arena, buffer.data);
             String num_string = { .data = num_str, .length = strlen(num_str) };
-            token_array_push(&tokens, (Token){ .type = TOKENTYPE_INT_LIT, .value = (string_optional){true, num_string} });
+            token_array_push(&tokens, (Token){ .type = is_unsigned ? TOKENTYPE_UINT_LIT : TOKENTYPE_INT_LIT , .value = (string_optional){true, num_string} });
         }
         else {
             char c = consume(ctx);

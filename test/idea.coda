@@ -152,15 +152,15 @@ fn int main(string[] args) {
     }
 
     // Coda supports c-like for loops
-    for (mut uint i = 0; i < args.len; i = i + 1) {
-        io::println(args[i]);
+    for (mut uint i = 0u; i < args.len; i = i + 1) {
+        // io::println(args[i]);
     }
 
     int i = 1;
-    io::printf("Hello, {}!", {type_names({i})}); // potentially have implicit `{..}` for trailing `any[]` parameters
+    // io::printf("Hello, {}!", {type_names({i})}); // potentially have implicit `{..}` for trailing `any[]` parameters
 
     // type casting
-    uint64 big = 42424242;
+    uint64 big = 42424242u;
     uint8 small = (uint8)big;
 
     // multidimensional arrays

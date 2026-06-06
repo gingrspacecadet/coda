@@ -7,7 +7,7 @@
 #include <stdarg.h>
 
 #define error(T, msg) _Generic((T), \
-    Parser*: error_parser, \
+    Parser *: error_parser, \
     Token: error_sema \
 )(T, msg)
 

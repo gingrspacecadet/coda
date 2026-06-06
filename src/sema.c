@@ -833,6 +833,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             String type_name;
             switch (expr->literal.type) {
                 case LITERAL_INT: type_name = string_make("int"); break;
+                case LITERAL_UINT: type_name = string_make("uint"); break;
                 case LITERAL_BOOL: type_name = string_make("bool"); break;
                 case LITERAL_STRING: type_name = string_make("string"); break;
                 case LITERAL_CHAR: type_name = string_make("char"); break;

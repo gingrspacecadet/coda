@@ -170,7 +170,7 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
         if (t.has_value && t.value.type == TOKENTYPE_LBRACK) {
             Token lb = consume(ctx); stepped++;
             t = peek(ctx);
-            if (t.has_value && t.value.type == TOKENTYPE_INT_LIT) {
+            if (t.has_value && (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT)) {
                 consume(ctx); stepped++;
             }
             t = peek(ctx);
@@ -318,7 +318,7 @@ TypeRef *parse_type_single(Parser *ctx) {
             Token lb = consume(ctx);
             size_t length = 0;
             t = peek(ctx);
-            if (t.has_value && t.value.type == TOKENTYPE_INT_LIT) {
+            if (t.has_value && (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT)) {
                 consume(ctx);
                 length = strtoul(t.value.value.value.data, NULL, 10);
             }
@@ -426,6 +426,14 @@ Literal new_lit(Parser *ctx, Token t) {
     if (t.type == TOKENTYPE_INT_LIT) {
         lit = (Literal){
             .type = LITERAL_INT,
+            .raw = t.value.value,
+            ._int = strtoll(t.value.value.data, NULL, 0),
+            .token = t
+        };
+    }
+    else if (t.type == TOKENTYPE_UINT_LIT) {
+        lit = (Literal){
+            .type = LITERAL_UINT,
             .raw = t.value.value,
             ._int = strtoll(t.value.value.data, NULL, 0),
             .token = t
@@ -555,7 +563,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
         return intr;
     }
 
-    if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE || t.value.type == TOKENTYPE_NULL) {
+    if (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT || t.value.type == TOKENTYPE_STR_LIT || t.value.type == TOKENTYPE_CHAR_LIT || t.value.type == TOKENTYPE_TRUE || t.value.type == TOKENTYPE_FALSE || t.value.type == TOKENTYPE_NULL) {
         Expr *e = expr_new_lit(ctx, t.value);
         consume(ctx);
         return e;

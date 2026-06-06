@@ -73,6 +73,7 @@ typedef enum {
 struct Literal {
     enum {
         LITERAL_INT,
+        LITERAL_UINT,
         LITERAL_FLOAT,
         LITERAL_STRING,
         LITERAL_BOOL,

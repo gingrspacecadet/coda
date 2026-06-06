@@ -32,6 +32,7 @@ typedef enum {
     TOKENTYPE_STR_LIT,
     TOKENTYPE_CHAR_LIT,
     TOKENTYPE_INT_LIT,    // TODO: more number literals maybe
+    TOKENTYPE_UINT_LIT,
     TOKENTYPE_TRUE,
     TOKENTYPE_FALSE,
     TOKENTYPE_NULL,
