@@ -224,7 +224,7 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
         case HIR_EXPR_ARRAY_INDEX: {
             MirOperand address = mir_lower_lvalue(ctx, hir);
 
-            if (address.type == MIR_VAL_SYMBOL) {
+            if (address.type == MIR_VAL_SYMBOL || address.type == MIR_VAL_MEM) {
                 return address;
             }
 
@@ -335,6 +335,26 @@ static size_t get_init_field_offset(TypeRef *target_type, size_t index, string_o
 
 static MirOperand make_init_field_addr(MirBuilder *ctx, MirOperand base, TypeRef *target_type, size_t index, string_optional name) {
     size_t offset = get_init_field_offset(target_type, index, name);
+    
+    // If base is a symbol or memory location, create a MIR_VAL_MEM directly
+    if (base.type == MIR_VAL_SYMBOL) {
+        MirOperand field_mem = {0};
+        field_mem.type = MIR_VAL_MEM;
+        field_mem.base_symbol = base.symbol;
+        field_mem.offset = offset;
+        field_mem.resolved_type = get_init_field_type(target_type, index, name);
+        return field_mem;
+    } else if (base.type == MIR_VAL_MEM) {
+        MirOperand field_mem = {0};
+        field_mem.type = MIR_VAL_MEM;
+        field_mem.base_symbol = base.base_symbol;
+        field_mem.base_temp = base.base_temp;
+        field_mem.offset = base.offset + offset;
+        field_mem.resolved_type = get_init_field_type(target_type, index, name);
+        return field_mem;
+    }
+    
+    // Fallback: compute the address via pointer arithmetic
     Literal offset_lit = {.type = LITERAL_INT, ._int = offset};
     MirOperand offset_op = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
     TypeRef *field_type = get_init_field_type(target_type, index, name);

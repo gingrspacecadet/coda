@@ -1,0 +1,11 @@
+module structs;
+
+struct Point {
+    int x;
+    int y;
+}
+
+fn int main() {
+    Point p = {3, 4};
+    return p.y;
+}

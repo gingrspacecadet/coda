@@ -7,15 +7,10 @@ main:
     mov rbp, rsp
     sub rsp, 16
 .Lblock_0:
-    mov rax, 42
-    mov QWORD PTR [rbp-8], rax
-    lea rax, [rbp-8]
+    mov rax, 3
     mov QWORD PTR [rbp-16], rax
-    mov rax, QWORD PTR [rbp-16]
-    mov QWORD PTR [rbp-24], rax
-    mov rax, 20
-    mov rbx, QWORD PTR [rbp-24]
-    mov QWORD PTR [rbx], rax
+    mov rax, 4
+    mov QWORD PTR [rbp-8], rax
     mov rax, QWORD PTR [rbp-8]
     mov rsp, rbp
     pop rbp

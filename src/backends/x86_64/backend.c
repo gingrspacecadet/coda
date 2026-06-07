@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../../mir.h"
+#include "../../sema.h"
 
 static const char *ABI_ARG_REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
@@ -17,14 +18,22 @@ static int64_t compute_stack_layout(MirFunction *fn, SymbolOffset *sym_offsets, 
     size_t index = 0;
 
     for (size_t i = 0; i < fn->params.len; i++) {
-        current_offset -= 8;
+        size_t param_size = get_type_size(fn->params.data[i]->type);
+        if (param_size == 0) param_size = 8;  // default to 8 if unknown
+        // Align to 8 bytes for parameters
+        param_size = (param_size + 7) & ~7;
+        current_offset -= param_size;
         sym_offsets[index].sym = fn->params.data[i];
         sym_offsets[index].offset = current_offset;
         index++;
     }
 
     for (size_t i = 0; i < fn->locals.len; i++) {
-        current_offset -= 8;
+        size_t local_size = get_type_size(fn->locals.data[i]->type);
+        if (local_size == 0) local_size = 8;  // default to 8 if unknown
+        // Align to 8 bytes for locals
+        local_size = (local_size + 7) & ~7;
+        current_offset -= local_size;
         sym_offsets[index].sym = fn->locals.data[i];
         sym_offsets[index].offset = current_offset;
         index++;
@@ -32,7 +41,20 @@ static int64_t compute_stack_layout(MirFunction *fn, SymbolOffset *sym_offsets, 
 
     int64_t temp_start_offset = current_offset;
     
-    size_t total_bytes = ((fn->params.len + fn->locals.len) * 8) + (fn->temp_count * 8);
+    size_t total_bytes = 0;
+    for (size_t i = 0; i < fn->params.len; i++) {
+        size_t param_size = get_type_size(fn->params.data[i]->type);
+        if (param_size == 0) param_size = 8;
+        param_size = (param_size + 7) & ~7;
+        total_bytes += param_size;
+    }
+    for (size_t i = 0; i < fn->locals.len; i++) {
+        size_t local_size = get_type_size(fn->locals.data[i]->type);
+        if (local_size == 0) local_size = 8;
+        local_size = (local_size + 7) & ~7;
+        total_bytes += local_size;
+    }
+    total_bytes += fn->temp_count * 8;
     *out_total_size = (total_bytes + 15) & ~15;
 
     return temp_start_offset;
@@ -55,6 +77,16 @@ static void format_rbp_operand(char *buf, size_t len, int64_t off) {
         snprintf(buf, len, "QWORD PTR [rbp+%ld]", off);
     } else {
         snprintf(buf, len, "QWORD PTR [rbp%ld]", off);
+    }
+}
+
+static void format_rbp_address(char *buf, size_t len, int64_t off) {
+    if (off == 0) {
+        snprintf(buf, len, "[rbp]");
+    } else if (off > 0) {
+        snprintf(buf, len, "[rbp+%ld]", off);
+    } else {
+        snprintf(buf, len, "[rbp%ld]", off);
     }
 }
 
@@ -247,8 +279,22 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
 
         case MIR_OP_STORE:
             emit_load(out, "rax", fn, offsets, temp_start, inst->lhs);
-            emit_load(out, "rbx", fn, offsets, temp_start, inst->result);
-            fprintf(out, "    mov QWORD PTR [rbx], rax\n");
+            
+            // If result is a direct memory location, use it directly
+            if (inst->result.type == MIR_VAL_MEM) {
+                char addr_str[128];
+                int64_t off;
+                if (inst->result.base_symbol) {
+                    off = lookup_symbol_offset(fn, offsets, inst->result.base_symbol) + inst->result.offset;
+                } else {
+                    off = temp_start - ((inst->result.base_temp + 1) * 8) + inst->result.offset;
+                }
+                format_rbp_address(addr_str, sizeof(addr_str), off);
+                fprintf(out, "    mov QWORD PTR %s, rax\n", addr_str);
+            } else {
+                emit_load(out, "rbx", fn, offsets, temp_start, inst->result);
+                fprintf(out, "    mov QWORD PTR [rbx], rax\n");
+            }
             break;
 
         case MIR_OP_JMP:
