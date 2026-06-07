@@ -1,0 +1,9 @@
+module control;
+
+fn int main() {
+    mut int j;
+    for (mut int i = 0; i < 67; i = i + 1) {
+        j = i;
+    }
+    return j;
+}

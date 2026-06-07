@@ -77,6 +77,15 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir);
 
 MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
     switch (hir->type) {
+        case HIR_EXPR_UNARY: {
+            if (hir->unary.op == UOP_DEREF) {
+                MirOperand base = mir_lower_expr(ctx, hir->unary.operand);
+                MirOperand addr_tmp = make_temp(ctx, base.resolved_type);
+                emit(ctx, MIR_OP_COPY, addr_tmp, base, null_op());
+                return addr_tmp;
+            }
+            break;
+        }
         case HIR_EXPR_VAR:
             return make_symbol(hir->var.symbol);
         case HIR_EXPR_FIELD_OFFSET: {
@@ -232,11 +241,17 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
                 args[i] = mir_lower_expr(ctx, hir->call.args.data[i]);
             }
 
-            MirOperand result = make_temp(ctx, hir->resolved_type);
+            MirOperand callee = {0};
+            if (hir->call.callee && hir->call.callee->type == HIR_EXPR_VAR) {
+                callee = make_symbol(hir->call.callee->var.symbol);
+            } else {
+                callee = mir_lower_expr(ctx, hir->call.callee);
+            }
 
-            // MirInstr *instr = emit(ctx, MIR_OP_CALL, result, make_symbol(hir->call.callee), null_op());
-            // instr->call_args = args;
-            // instr->arg_count = hir->call.args.len;
+            MirOperand result = make_temp(ctx, hir->resolved_type);
+            MirInstr *instr = emit(ctx, MIR_OP_CALL, result, callee, null_op());
+            instr->call_args = args;
+            instr->arg_count = hir->call.args.len;
 
             return result;
         }

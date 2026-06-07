@@ -124,8 +124,7 @@ int main(int argc, char **argv) {
     HirModule *hir = hir_lower_module(&analyser, module);
     hir_pass_monomorphise(&analyser, hir);
     hir_pass_resolve_defers(&analyser, hir);
-    hir_pretty_print(hir);
-    return 0;
+    // hir_pretty_print(hir);
 
     MirBuilder mirbuilder = {
         .arena = lexer.arena,

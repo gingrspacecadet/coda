@@ -907,10 +907,12 @@ Stmt *parse_for_stmt(Parser *ctx) {
     expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after for clauses");
 
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
-        error(ctx, "Expected '{' to start for body");
+    Stmt *body = NULL;
+    if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
+        body = parse_block_stmt(ctx);
+    } else {
+        body = parse_stmt(ctx);
     }
-    Stmt *body = parse_block_stmt(ctx);
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
@@ -931,16 +933,24 @@ Stmt *parse_if_stmt(Parser *ctx) {
     Expr *cond = parse_expr(ctx, 0);
     expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
 
-    Stmt *then = parse_block_stmt(ctx);
-    Stmt *_else = NULL;
+    Stmt *then = NULL;
     token_optional t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
+        then = parse_block_stmt(ctx);
+    } else {
+        then = parse_stmt(ctx);
+    }
+
+    Stmt *_else = NULL;
+    t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_ELSE) {
         consume(ctx);
         t = peek(ctx);
-        if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
-            error(ctx, "Expected '{'");
+        if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
+            _else = parse_block_stmt(ctx);
+        } else {
+            _else = parse_stmt(ctx);
         }
-        _else = parse_block_stmt(ctx);
     }
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
@@ -963,10 +973,12 @@ Stmt *parse_while_stmt(Parser *ctx) {
     Expr *cond = parse_expr(ctx, 0);
 
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) {
-        error(ctx, "Expected '{'");
+    Stmt *body = NULL;
+    if (t.has_value && t.value.type == TOKENTYPE_LBRACE) {
+        body = parse_block_stmt(ctx);
+    } else {
+        body = parse_stmt(ctx);
     }
-    Stmt *body = parse_block_stmt(ctx);
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
@@ -1102,7 +1114,7 @@ Stmt *parse_stmt(Parser *ctx) {
 }
 
 Stmt *parse_block_stmt(Parser *ctx) {
-    Token start = consume(ctx);
+    Token start = expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
 
     stmts_array stmts = stmts_array_init();
     token_optional t = peek(ctx);

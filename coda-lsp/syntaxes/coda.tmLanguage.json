@@ -69,7 +69,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.coda",
-                    "match": "\\b(if|while|for|return|enum|union|struct|fn|module|include|mut|defer|match|type)\\b"
+                    "match": "\\b(if|else|while|for|return|enum|union|struct|fn|module|include|mut|defer|match|type)\\b"
                 },
                 {
                     "name": "support.type.primitive.coda",

@@ -1,0 +1,10 @@
+module max;
+
+fn int max(int a, int b) {
+    if (a > b) return a;
+    else return b;
+}
+
+fn int main() {
+    return max(6, 7);
+}
