@@ -248,7 +248,7 @@ TypeRef *parse_type_single(Parser *ctx) {
             consume(ctx);
             t = peek(ctx);
         }
-        expect(ctx, TOKENTYPE_RPAREN, "Expecetd ')'");
+        expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
     }
     else if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
         error(ctx, "Expected type name");

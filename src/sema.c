@@ -428,7 +428,7 @@ static void calculate_struct_layout(StructDecl *str) {
             max_align = member_align;
         }
 
-        // Align the offset
+        // align the offset
         if (offset % member_align != 0) {
             offset += member_align - (offset % member_align);
         }
@@ -437,7 +437,7 @@ static void calculate_struct_layout(StructDecl *str) {
         offset += member_size;
     }
 
-    // Final struct size must be a multiple of its alignment
+    // final struct size must be a multiple of its alignment
     if (offset % max_align != 0) {
         offset += max_align - (offset % max_align);
     }
@@ -463,7 +463,7 @@ static void calculate_union_layout(UnionDecl *unn) {
         }
     }
 
-    // Final union size must be a multiple of its alignment
+    // final union size must be a multiple of its alignment
     if (max_size % max_align != 0) {
         max_size += max_align - (max_size % max_align);
     }
@@ -1343,192 +1343,10 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
 }
 
 // silly monomorphisation thingies
-static TypeRef *ast_substitute_type(Arena *arena, TypeRef *src, genparam_array params, typerefs_array args) {
-    if (!src) return NULL;
+static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_array concrete_args);
+static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args);
 
-    if (src->type == TYPEREF_NAMED) {
-        for (size_t i = 0; i < params.len; i++) {
-            if (string_eq(src->named.name, params.data[i].name)) {
-                return args.data[i];
-            }
-        }
-        return src; 
-    }
-
-    TypeRef *dst = arena_alloc(arena, sizeof(TypeRef));
-    *dst = *src;
-
-    switch (dst->type) {
-        case TYPEREF_POINTER:
-            dst->pointer.pointee = ast_substitute_type(arena, src->pointer.pointee, params, args);
-            break;
-        case TYPEREF_ARRAY:
-            dst->array.elem = ast_substitute_type(arena, src->array.elem, params, args);
-            break;
-        case TYPEREF_SUM:
-            dst->sum.cases = typerefs_array_init();
-            for (size_t i = 0; i < src->sum.cases.len; i++) {
-                typerefs_array_push(&dst->sum.cases, 
-                    ast_substitute_type(arena, src->sum.cases.data[i], params, args));
-            }
-            break;
-        case TYPEREF_FN:
-            dst->fn.ret_type = ast_substitute_type(arena, src->fn.ret_type, params, args);
-            dst->fn.params = param_array_init();
-            for (size_t i = 0; i < src->fn.params.len; i++) {
-                Param p = src->fn.params.data[i];
-                p.type = ast_substitute_type(arena, p.type, params, args);
-                param_array_push(&dst->fn.params, p);
-            }
-            break;
-        default: break;
-    }
-
-    return dst;
-}
-
-static Expr *clone_ast_expr(Arena *arena, Expr *src, genparam_array params, typerefs_array args) {
-    if (!src) return NULL;
-
-    Expr *dst = arena_alloc(arena, sizeof(Expr));
-    *dst = *src;
-    
-    dst->resolved_type = ast_substitute_type(arena, src->resolved_type, params, args);
-
-    switch (src->type) {
-        case EXPR_INTRINSIC:
-            if (src->intrinsic.is_arg_type) {
-                dst->intrinsic.type = ast_substitute_type(arena, src->intrinsic.type, params, args);
-            } else {
-                dst->intrinsic.expr = clone_ast_expr(arena, src->intrinsic.expr, params, args);
-            }
-            break;
-            
-        case EXPR_SPECIALISE:
-            dst->specialise.expr = clone_ast_expr(arena, src->specialise.expr, params, args);
-            dst->specialise.args = typerefs_array_init();
-            for (size_t i = 0; i < src->specialise.args.len; i++) {
-                typerefs_array_push(&dst->specialise.args, 
-                    ast_substitute_type(arena, src->specialise.args.data[i], params, args));
-            }
-            break;
-
-        case EXPR_CALL:
-            dst->call.callee = clone_ast_expr(arena, src->call.callee, params, args);
-            dst->call.args = exprs_array_init();
-            for (size_t i = 0; i < src->call.args.len; i++) {
-                exprs_array_push(&dst->call.args, 
-                    clone_ast_expr(arena, src->call.args.data[i], params, args));
-            }
-            break;
-
-        case EXPR_UNARY:
-            dst->unary.operand = clone_ast_expr(arena, src->unary.operand, params, args);
-            break;
-
-        case EXPR_BINARY:
-            dst->binary.left = clone_ast_expr(arena, src->binary.left, params, args);
-            dst->binary.right = clone_ast_expr(arena, src->binary.right, params, args);
-            break;
-
-        case EXPR_MEMBER:
-            dst->member.base = clone_ast_expr(arena, src->member.base, params, args);
-            break;
-
-        case EXPR_INDEX:
-            dst->index.base = clone_ast_expr(arena, src->index.base, params, args);
-            dst->index.index = clone_ast_expr(arena, src->index.index, params, args);
-            break;
-
-        case EXPR_CAST:
-            dst->cast.expr = clone_ast_expr(arena, src->cast.expr, params, args);
-            dst->cast.to = ast_substitute_type(arena, src->cast.to, params, args);
-            break;
-
-        default: break;
-    }
-
-    return dst;
-}
-
-static Stmt *clone_ast_stmt(Arena *arena, Stmt *src, genparam_array params, typerefs_array args) {
-    if (!src) return NULL;
-
-    Stmt *dst = arena_alloc(arena, sizeof(Stmt));
-    *dst = *src;
-
-    switch (src->type) {
-        case STMT_EXPR:
-            dst->expr = clone_ast_expr(arena, src->expr, params, args);
-            break;
-
-        case STMT_DEFER:
-            dst->defer.deferred = clone_ast_stmt(arena, src->defer.deferred, params, args);
-            break;
-
-        case STMT_RETURN:
-            dst->_return.value = clone_ast_expr(arena, src->_return.value, params, args);
-            break;
-
-        case STMT_BLOCK:
-            dst->block.stmts = stmts_array_init();
-            for (size_t i = 0; i < src->block.stmts.len; i++) {
-                stmts_array_push(&dst->block.stmts, 
-                    clone_ast_stmt(arena, src->block.stmts.data[i], params, args));
-            }
-            break;
-
-        case STMT_IF:
-            dst->_if.cond = clone_ast_expr(arena, src->_if.cond, params, args);
-            dst->_if.then = clone_ast_stmt(arena, src->_if.then, params, args);
-            dst->_if._else = clone_ast_stmt(arena, src->_if._else, params, args);
-            break;
-
-        case STMT_WHILE:
-            dst->_while.body = clone_ast_stmt(arena, src->_while.body, params, args);
-            dst->_while.cond = clone_ast_expr(arena, src->_while.cond, params, args);
-            break;
-
-        case STMT_FOR:
-            dst->_for.body = clone_ast_stmt(arena, src->_for.body, params, args);
-            dst->_for.cond = clone_ast_expr(arena, src->_for.cond, params, args);
-            dst->_for.init = clone_ast_stmt(arena, src->_for.init, params, args);
-            dst->_for.post = clone_ast_expr(arena, src->_for.post, params, args);
-            break;
-
-        case STMT_VAR:
-            // Fix pointer alias bug: allocate a new VarDecl container
-            dst->var = arena_alloc(arena, sizeof(VarDecl));
-            *dst->var = *src->var;
-            dst->var->init = clone_ast_expr(arena, src->var->init, params, args);
-            dst->var->type = ast_substitute_type(arena, src->var->type, params, args);
-            break;
-
-        case STMT_MATCH:
-            // Fix pointer alias bug: recreate case array and deep-allocate inner variables
-            dst->match.expr = clone_ast_expr(arena, src->match.expr, params, args);
-            dst->match.cases = case_array_init();
-            for (size_t i = 0; i < src->match.cases.len; i++) {
-                Case sc = src->match.cases.data[i];
-                Case dc = sc;
-                
-                dc.body = clone_ast_stmt(arena, sc.body, params, args);
-                if (sc.var) {
-                    dc.var = arena_alloc(arena, sizeof(VarDecl));
-                    *dc.var = *sc.var;
-                    dc.var->init = clone_ast_expr(arena, sc.var->init, params, args);
-                    dc.var->type = ast_substitute_type(arena, sc.var->type, params, args);
-                }
-                case_array_push(&dst->match.cases, dc);
-            }
-            break;
-
-        default: break;
-    }
-
-    return dst;
-}
-static FnDecl *find_generic_template(Module *mod, String name) {
+static FnDecl *find_generic_fn_template(Module *mod, String name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
         if (decl->type == DECL_FN && string_eq(decl->fn->name, name)) {
@@ -1538,6 +1356,276 @@ static FnDecl *find_generic_template(Module *mod, String name) {
         }
     }
     return NULL;
+}
+
+static StructDecl *find_generic_struct_template(Module *mod, String name) {
+    for (size_t i = 0; i < mod->decls.len; i++) {
+        Decl *decl = mod->decls.data[i];
+        if (decl->type == DECL_STRUCT && string_eq(decl->_struct->name, name)) {
+            if (decl->_struct->generic_params.len > 0) {
+                return decl->_struct;
+            }
+        }
+    }
+    return NULL;
+}
+
+static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array params, typerefs_array args) {
+    if (!src) return NULL;
+
+    if (src->type == TYPEREF_NAMED) {
+        for (size_t i = 0; i < params.len; i++) {
+            if (string_eq(src->named.name, params.data[i].name)) {
+                return args.data[i];
+            }
+        }
+
+        if (src->named.generic_args.len > 0) {
+            typerefs_array substituted_args = typerefs_array_init();
+            for (size_t i = 0; i < src->named.generic_args.len; i++) {
+                typerefs_array_push(&substituted_args, 
+                    ast_substitute_type(mod, src->named.generic_args.data[i], params, args));
+            }
+
+            StructDecl *template_str = find_generic_struct_template(mod, src->named.name);
+            if (template_str) {
+                Symbol *concrete_sym = monomorphise_struct(mod, template_str, substituted_args);
+
+                TypeRef *rewritten = arena_alloc(mod->arena, sizeof(TypeRef));
+                rewritten->type = TYPEREF_NAMED;
+                rewritten->named.name = concrete_sym->name;
+                rewritten->named.generic_args = typerefs_array_init();
+                rewritten->type_symbol = concrete_sym;
+                rewritten->token = src->token;
+                return rewritten;
+            }
+        }
+
+        return src; 
+    }
+
+    TypeRef *dst = arena_alloc(mod->arena, sizeof(TypeRef));
+    *dst = *src;
+
+    switch (dst->type) {
+        case TYPEREF_POINTER:
+            dst->pointer.pointee = ast_substitute_type(mod, src->pointer.pointee, params, args);
+            break;
+        case TYPEREF_ARRAY:
+            dst->array.elem = ast_substitute_type(mod, src->array.elem, params, args);
+            break;
+        case TYPEREF_SUM:
+            dst->sum.cases = typerefs_array_init();
+            for (size_t i = 0; i < src->sum.cases.len; i++) {
+                typerefs_array_push(&dst->sum.cases, 
+                    ast_substitute_type(mod, src->sum.cases.data[i], params, args));
+            }
+            break;
+        case TYPEREF_FN:
+            dst->fn.ret_type = ast_substitute_type(mod, src->fn.ret_type, params, args);
+            dst->fn.params = param_array_init();
+            for (size_t i = 0; i < src->fn.params.len; i++) {
+                Param p = src->fn.params.data[i];
+                p.type = ast_substitute_type(mod, p.type, params, args);
+                param_array_push(&dst->fn.params, p);
+            }
+            break;
+        default: break;
+    }
+
+    return dst;
+}
+
+static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_array concrete_args) {
+    String mangled_name = mangle_generic_name(mod->arena, template->name, concrete_args);
+    
+    for (size_t i = 0; i < mod->decls.len; i++) {
+        Decl *d = mod->decls.data[i];
+        if (d->type == DECL_STRUCT && string_eq(d->_struct->name, mangled_name)) {
+            return d->symbol; 
+        }
+    }
+
+    StructDecl *concrete_struct = arena_alloc(mod->arena, sizeof(StructDecl));
+    concrete_struct->name = mangled_name;
+    concrete_struct->generic_params = (genparam_array){0};
+    concrete_struct->members = vardecls_array_init();
+    concrete_struct->field_offsets = size_array_init();
+
+    for (size_t i = 0; i < template->members.len; i++) {
+        VarDecl *src_member = template->members.data[i];
+        VarDecl *dst_member = arena_alloc(mod->arena, sizeof(VarDecl));
+        *dst_member = *src_member;
+        
+        dst_member->type = ast_substitute_type(mod, src_member->type, template->generic_params, concrete_args);
+        vardecls_array_push(&concrete_struct->members, dst_member);
+    }
+
+    Decl *new_decl = arena_alloc(mod->arena, sizeof(Decl));
+    new_decl->type = DECL_STRUCT;
+    new_decl->_struct = concrete_struct;
+    
+    Symbol *sym = arena_alloc(mod->arena, sizeof(Symbol));
+    sym->name = mangled_name;
+    sym->decl = new_decl;
+    sym->flags = SYMFLAG_TYPE;
+    
+    TypeRef *struct_type = arena_alloc(mod->arena, sizeof(TypeRef));
+    struct_type->type = TYPEREF_NAMED;
+    struct_type->named.name = mangled_name;
+    struct_type->type_symbol = sym;
+    sym->type = struct_type;
+
+    new_decl->symbol = sym; 
+
+    if (mod->scope) {
+        syms_array_push(&mod->scope->symbols, sym);
+    }
+    decls_array_push(&mod->decls, new_decl);
+
+    return sym;
+}
+
+static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typerefs_array args) {
+    if (!src) return NULL;
+
+    Expr *dst = arena_alloc(mod->arena, sizeof(Expr));
+    *dst = *src;
+    
+    dst->resolved_type = ast_substitute_type(mod, src->resolved_type, params, args);
+
+    switch (src->type) {
+        case EXPR_INTRINSIC:
+            if (src->intrinsic.is_arg_type) {
+                dst->intrinsic.type = ast_substitute_type(mod, src->intrinsic.type, params, args);
+            } else {
+                dst->intrinsic.expr = clone_ast_expr(mod, src->intrinsic.expr, params, args);
+            }
+            break;
+            
+        case EXPR_SPECIALISE:
+            dst->specialise.expr = clone_ast_expr(mod, src->specialise.expr, params, args);
+            dst->specialise.args = typerefs_array_init();
+            for (size_t i = 0; i < src->specialise.args.len; i++) {
+                typerefs_array_push(&dst->specialise.args, 
+                    ast_substitute_type(mod, src->specialise.args.data[i], params, args));
+            }
+            break;
+
+        case EXPR_CALL:
+            dst->call.callee = clone_ast_expr(mod, src->call.callee, params, args);
+            dst->call.args = exprs_array_init();
+            for (size_t i = 0; i < src->call.args.len; i++) {
+                exprs_array_push(&dst->call.args, 
+                    clone_ast_expr(mod, src->call.args.data[i], params, args));
+            }
+            break;
+
+        case EXPR_UNARY:
+            dst->unary.operand = clone_ast_expr(mod, src->unary.operand, params, args);
+            break;
+
+        case EXPR_BINARY:
+            dst->binary.left = clone_ast_expr(mod, src->binary.left, params, args);
+            dst->binary.right = clone_ast_expr(mod, src->binary.right, params, args);
+            break;
+
+        case EXPR_MEMBER:
+            dst->member.base = clone_ast_expr(mod, src->member.base, params, args);
+            break;
+
+        case EXPR_INDEX:
+            dst->index.base = clone_ast_expr(mod, src->index.base, params, args);
+            dst->index.index = clone_ast_expr(mod, src->index.index, params, args);
+            break;
+
+        case EXPR_CAST:
+            dst->cast.expr = clone_ast_expr(mod, src->cast.expr, params, args);
+            dst->cast.to = ast_substitute_type(mod, src->cast.to, params, args);
+            break;
+
+        default: break;
+    }
+
+    return dst;
+}
+
+static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typerefs_array args) {
+    if (!src) return NULL;
+
+    Stmt *dst = arena_alloc(mod->arena, sizeof(Stmt));
+    *dst = *src;
+
+    switch (src->type) {
+        case STMT_EXPR:
+            dst->expr = clone_ast_expr(mod, src->expr, params, args);
+            break;
+
+        case STMT_DEFER:
+            dst->defer.deferred = clone_ast_stmt(mod, src->defer.deferred, params, args);
+            break;
+
+        case STMT_RETURN:
+            dst->_return.value = clone_ast_expr(mod, src->_return.value, params, args);
+            break;
+
+        case STMT_BLOCK:
+            dst->block.stmts = stmts_array_init();
+            for (size_t i = 0; i < src->block.stmts.len; i++) {
+                stmts_array_push(&dst->block.stmts, 
+                    clone_ast_stmt(mod, src->block.stmts.data[i], params, args));
+            }
+            break;
+
+        case STMT_IF:
+            dst->_if.cond = clone_ast_expr(mod, src->_if.cond, params, args);
+            dst->_if.then = clone_ast_stmt(mod, src->_if.then, params, args);
+            dst->_if._else = clone_ast_stmt(mod, src->_if._else, params, args);
+            break;
+
+        case STMT_WHILE:
+            dst->_while.body = clone_ast_stmt(mod, src->_while.body, params, args);
+            dst->_while.cond = clone_ast_expr(mod, src->_while.cond, params, args);
+            break;
+
+        case STMT_FOR:
+            dst->_for.body = clone_ast_stmt(mod, src->_for.body, params, args);
+            dst->_for.cond = clone_ast_expr(mod, src->_for.cond, params, args);
+            dst->_for.init = clone_ast_stmt(mod, src->_for.init, params, args);
+            dst->_for.post = clone_ast_expr(mod, src->_for.post, params, args);
+            break;
+
+        case STMT_VAR:
+            // Fix pointer alias bug: allocate a new VarDecl container
+            dst->var = arena_alloc(mod->arena, sizeof(VarDecl));
+            *dst->var = *src->var;
+            dst->var->init = clone_ast_expr(mod, src->var->init, params, args);
+            dst->var->type = ast_substitute_type(mod, src->var->type, params, args);
+            break;
+
+        case STMT_MATCH:
+            // Fix pointer alias bug: recreate case array and deep-allocate inner variables
+            dst->match.expr = clone_ast_expr(mod, src->match.expr, params, args);
+            dst->match.cases = case_array_init();
+            for (size_t i = 0; i < src->match.cases.len; i++) {
+                Case sc = src->match.cases.data[i];
+                Case dc = sc;
+                
+                dc.body = clone_ast_stmt(mod, sc.body, params, args);
+                if (sc.var) {
+                    dc.var = arena_alloc(mod->arena, sizeof(VarDecl));
+                    *dc.var = *sc.var;
+                    dc.var->init = clone_ast_expr(mod, sc.var->init, params, args);
+                    dc.var->type = ast_substitute_type(mod, sc.var->type, params, args);
+                }
+                case_array_push(&dst->match.cases, dc);
+            }
+            break;
+
+        default: break;
+    }
+
+    return dst;
 }
 
 static bool concrete_fn_exists(Module *mod, String mangled_name) {
@@ -1579,7 +1667,7 @@ static void scan_expr(Module *mod, Expr *expr) {
             String mangled_name = mangle_generic_name(mod->arena, base_name, concrete_args);
 
             if (!concrete_fn_exists(mod, mangled_name)) {
-                FnDecl *template = find_generic_template(mod, base_name);
+                FnDecl *template = find_generic_fn_template(mod, base_name);
                 if (template) {
                     if (template->generic_params.len != concrete_args.len) {
                         printf("Monomorphisation Error: Generic param count mismatch!\n");
@@ -1592,13 +1680,13 @@ static void scan_expr(Module *mod, Expr *expr) {
                     concrete_fn->name = mangled_name;
                     concrete_fn->generic_params = (genparam_array){0};
                     
-                    concrete_fn->ret_type = ast_substitute_type(mod->arena, template->ret_type, template->generic_params, concrete_args);
-                    concrete_fn->body = clone_ast_stmt(mod->arena, template->body, template->generic_params, concrete_args);
+                    concrete_fn->ret_type = ast_substitute_type(mod, template->ret_type, template->generic_params, concrete_args);
+                    concrete_fn->body = clone_ast_stmt(mod, template->body, template->generic_params, concrete_args);
                     
                     concrete_fn->params = param_array_init();
                     for (size_t i = 0; i < template->params.len; i++) {
                         Param p = template->params.data[i];
-                        p.type = ast_substitute_type(mod->arena, p.type, template->generic_params, concrete_args);
+                        p.type = ast_substitute_type(mod, p.type, template->generic_params, concrete_args);
                         param_array_push(&concrete_fn->params, p);
                     }
 
@@ -1706,7 +1794,19 @@ static void scan_stmt(Module *mod, Stmt *stmt) {
             break;
         }
 
-        // ... add STMT_FOR, STMT_WHILE, STMT_MATCH, STMT_VAR matching structures
+        case STMT_VAR: {
+            scan_expr(mod, stmt->var->init);
+
+            if (stmt->var->type && stmt->var->type->type == TYPEREF_NAMED) {
+                if (stmt->var->type->named.generic_args.len > 0) {
+                    
+                    stmt->var->type = ast_substitute_type(mod, stmt->var->type, (genparam_array){0}, (typerefs_array){0});
+                }
+            }
+            break;
+        }
+
+        // ... add STMT_FOR, STMT_WHILE, STMT_MATCH matching structures
         default: break;
     }
 }
