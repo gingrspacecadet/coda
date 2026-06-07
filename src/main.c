@@ -116,11 +116,16 @@ int main(int argc, char **argv) {
     };
 
     Module *module = parse_module(&parser);
+    ast_pass_monomorphise(module);
 
     Analyser analyser = analyser_init(module, lexer.arena);
     analyse(&analyser);
 
     HirModule *hir = hir_lower_module(&analyser, module);
+    hir_pass_monomorphise(&analyser, hir);
+    hir_pass_resolve_defers(&analyser, hir);
+    hir_pretty_print(hir);
+    return 0;
 
     MirBuilder mirbuilder = {
         .arena = lexer.arena,
@@ -131,7 +136,6 @@ int main(int argc, char **argv) {
         opt_constant_folding(mir->functions.data[i]);
     }
 
-    // hir_pretty_print(hir);
     // mir_pretty_print(mir);
 
     // backends are dls that we load at runtime

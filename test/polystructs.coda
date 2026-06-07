@@ -1,0 +1,10 @@
+module polystructs;
+
+struct Vec3<T> {
+    T x; T y; T z;
+}
+
+fn int main() {
+    Vec3<int> v = {1, 2, 3};
+    return v.x;
+}

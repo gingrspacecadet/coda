@@ -43,7 +43,7 @@ struct HirExpr {
         } binary;
 
         struct {
-            Symbol *callee;
+            HirExpr *callee;
             hirexprs_array args;
         } call;
 
@@ -72,7 +72,8 @@ struct HirStmt {
         HIR_STMT_RETURN,
         HIR_STMT_IF,
         HIR_STMT_WHILE,
-        HIR_STMT_ASSIGN
+        HIR_STMT_ASSIGN,
+        HIR_STMT_DEFER,
     } type;
 
     union {
@@ -101,6 +102,10 @@ struct HirStmt {
             HirExpr *target;
             HirExpr *value;
         } assign;
+
+        struct {
+            HirStmt *stmt;
+        } defer;
     };
 };
 
@@ -120,6 +125,8 @@ typedef struct {
 } HirModule;
 
 HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod);
+void hir_pass_resolve_defers(Analyser *ctx, HirModule *mod);
+void hir_pass_monomorphise(Analyser *ctx, HirModule *mod);
 void hir_pretty_print(HirModule *mod);
 
 #endif

@@ -3,7 +3,6 @@
 #include "parser.h"
 
 INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
-INSTANTIATE(char, ARRAY_TEMPLATE)
 
 static Source err_source = {0};
 

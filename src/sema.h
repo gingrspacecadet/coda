@@ -17,5 +17,6 @@ typedef struct {
 Analyser analyser_init(Module *m, Arena *a);
 void analyse(Analyser *ctx);
 size_t get_type_size(TypeRef *type);
+void ast_pass_monomorphise(Module *mod);
 
 #endif

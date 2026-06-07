@@ -5,7 +5,6 @@
 #include "optional.h"
 #include "string.h"
 
-INSTANTIATE(char, char, ARRAY_TEMPLATE)
 INSTANTIATE(char, char, OPTIONAL_TEMPLATE)
 
 static char_optional peek(Lexer *ctx) {

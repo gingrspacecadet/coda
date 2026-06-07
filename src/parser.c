@@ -1371,6 +1371,7 @@ Module *parse_module(Parser *ctx) {
     m->token = start;
     m->includes = includes_array_init();
     m->decls = decls_array_init();
+    m->arena = ctx->arena;
 
     Token modname = expect(ctx, TOKENTYPE_IDENT, "Expected module name");
     m->name = modname.value.value;

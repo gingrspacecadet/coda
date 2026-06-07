@@ -447,4 +447,73 @@ struct Module {
     Arena *arena;
 };
 
+INSTANTIATE(char, char, ARRAY_TEMPLATE)
+
+static void append_string_to_char_array(char_array *cs, String s) {
+    for (size_t i = 0; i < s.length; ++i) {
+        char_array_push(cs, s.data[i]);
+    }
+}
+
+static String type_to_string(TypeRef *t) {
+    if (!t) return string_make("(null)"); // keep existing behavior for null
+
+    if (t->type == TYPEREF_NAMED) {
+        if (t->type_symbol) {
+            return t->type_symbol->name;
+        }
+        return t->named.name;
+    }
+
+    char_array cs = char_array_init();
+
+    if (t->type == TYPEREF_POINTER) {
+        String pointee = type_to_string(t->pointer.pointee);
+        append_string_to_char_array(&cs, pointee);
+        if (t->is_mutable) append_string_to_char_array(&cs, string_make(" mut"));
+        char_array_push(&cs, '*');
+        if (t->is_optional) char_array_push(&cs, '?');
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_ARRAY) {
+        String base = type_to_string(t->array.elem);
+        append_string_to_char_array(&cs, base);
+        char_array_push(&cs, '[');
+
+        char buf[32];
+        int n = snprintf(buf, sizeof buf, "%zu", t->array.length);
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) char_array_push(&cs, buf[i]);
+        }
+
+        char_array_push(&cs, ']');
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_FN) {
+        char_array_push(&cs, 'f');
+        char_array_push(&cs, 'n');
+        char_array_push(&cs, ' ');
+
+        String ret = type_to_string(t->fn.ret_type);
+        append_string_to_char_array(&cs, ret);
+
+        char_array_push(&cs, '(');
+        // TODO: append parameters here, using the same pattern
+        char_array_push(&cs, ')');
+
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_SUM) {
+        for (size_t i = 0; i < t->sum.cases.len; ++i) {
+            TypeRef *case_t = t->sum.cases.data[i];
+            String cs_str = type_to_string(case_t);
+            append_string_to_char_array(&cs, cs_str);
+            if (i + 1 < t->sum.cases.len) char_array_push(&cs, '|');
+        }
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+
+    return string_make("Unknown");
+}
+
 #endif

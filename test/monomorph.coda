@@ -1,0 +1,9 @@
+module monomorphisation;
+
+fn int sizeof<T>() {
+    return $sizeof(T);
+}
+
+fn int main() {
+    return sizeof<int>();
+}

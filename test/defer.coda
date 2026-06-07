@@ -1,0 +1,7 @@
+module defer_test;
+
+fn none main() {
+    defer int y = 1;
+    int x = 0;
+    return;
+}

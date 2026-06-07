@@ -231,9 +231,9 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
 
             MirOperand result = make_temp(ctx, hir->resolved_type);
 
-            MirInstr *instr = emit(ctx, MIR_OP_CALL, result, make_symbol(hir->call.callee), null_op());
-            instr->call_args = args;
-            instr->arg_count = hir->call.args.len;
+            // MirInstr *instr = emit(ctx, MIR_OP_CALL, result, make_symbol(hir->call.callee), null_op());
+            // instr->call_args = args;
+            // instr->arg_count = hir->call.args.len;
 
             return result;
         }

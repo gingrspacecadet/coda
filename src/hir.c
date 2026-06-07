@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "error.h"
 #include "hir.h"
 
 HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
@@ -33,7 +34,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
         }
         case EXPR_CALL: {
             hir->type = HIR_EXPR_CALL;
-            hir->call.callee = ast_expr->call.callee->symbol;
+            hir->call.callee = lower_expr(ctx, ast_expr->call.callee);
             hir->call.args = hirexprs_array_init();
             for (size_t i = 0; i < ast_expr->call.args.len; i++) {
                 hirexprs_array_push(&hir->call.args, lower_expr(ctx, ast_expr->call.args.data[i]));
@@ -168,6 +169,11 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             hir->_while.body = ast_stmt->_while.body ? lower_stmt(ctx, ast_stmt->_while.body) : NULL;
             break;
         }
+        case STMT_DEFER: {
+            hir->type = HIR_STMT_DEFER;
+            hir->defer.stmt = lower_stmt(ctx, ast_stmt->defer.deferred);
+            break;
+        }
     }
 
     return hir;
@@ -212,6 +218,10 @@ static void collect_locals(syms_array *locals, syms_array *params, HirStmt *stmt
         }
         case HIR_STMT_WHILE: {
             collect_locals(locals, params, stmt->_while.body);
+            break;
+        }
+        case HIR_STMT_DEFER: {
+            collect_locals(locals, params, stmt->defer.stmt);
             break;
         }
         default:
@@ -263,6 +273,10 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
             }
             break;
         }
+        case STMT_DEFER: {
+            collect_ast_locals(locals, params, stmt->defer.deferred);
+            break;
+        }
         default:
             break;
     }
@@ -274,6 +288,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     for (size_t i = 0; i < ast_mod->decls.len; i++) {
         Decl *d = ast_mod->decls.data[i];
         if (d->type != DECL_FN) continue;
+        if (d->fn->generic_params.len > 0) continue;
 
         HirFnDecl *fndecl = arena_calloc(ctx->arena, sizeof(HirFnDecl));
         fndecl->symbol = d->symbol;
@@ -299,6 +314,271 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     }
 
     return hir;
+}
+
+static void hir_resolve_defers_stmt(Analyser *ctx, HirStmt *stmt);
+
+static void hir_resolve_defers_block(Analyser *ctx, HirStmt *block) {
+    hirstmts_array active_defers = hirstmts_array_init();
+    hirstmts_array new_stmts = hirstmts_array_init();
+
+    for (size_t i = 0; i < block->block.stmts.len; i++) {
+        HirStmt *s = block->block.stmts.data[i];
+
+        if (s->type == HIR_STMT_DEFER) {
+            hir_resolve_defers_stmt(ctx, s->defer.stmt);
+            hirstmts_array_push(&active_defers, s->defer.stmt);
+        }
+        else if (s->type == HIR_STMT_RETURN) {
+            for (int j = (int)active_defers.len - 1; j >= 0; j--) {
+                hirstmts_array_push(&new_stmts, active_defers.data[j]);
+            }
+            hirstmts_array_push(&new_stmts, s);
+            break;  // basic dead-code elimination
+        }
+        else {
+            hir_resolve_defers_stmt(ctx, s);
+            hirstmts_array_push(&new_stmts, s);
+        }
+    }
+
+    if (new_stmts.len == 0 || new_stmts.data[new_stmts.len - 1]->type != HIR_STMT_RETURN) {
+        for (int j = (int)active_defers.len - 1; j >= 0; j--) {
+            hirstmts_array_push(&new_stmts, active_defers.data[j]);
+        }
+    }
+
+    block->block.stmts = new_stmts;
+}
+
+static void hir_resolve_defers_stmt(Analyser *ctx, HirStmt *stmt) {
+    if (!stmt) return;
+
+    switch (stmt->type) {
+        case HIR_STMT_BLOCK: {
+            hir_resolve_defers_block(ctx, stmt);
+            break;
+        }
+        case HIR_STMT_IF: {
+            hir_resolve_defers_stmt(ctx, stmt->_if.then_block);
+            hir_resolve_defers_stmt(ctx, stmt->_if.else_block);
+            break;
+        }
+        case HIR_STMT_WHILE: {
+            hir_resolve_defers_stmt(ctx, stmt->_while.body);
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+}
+
+void hir_pass_resolve_defers(Analyser *ctx, HirModule *mod) {
+    for (size_t i = 0; i < mod->functions.len; i++) {
+        hir_resolve_defers_stmt(ctx, mod->functions.data[i]->body);
+    }
+}
+
+static HirFnDecl *get_hir_fn_by_symbol(HirModule *mod, Symbol *sym) {
+    for (size_t i = 0; i < mod->functions.len; i++) {
+        if (mod->functions.data[i]->symbol == sym) {
+            return mod->functions.data[i];
+        }
+    }
+    return NULL;
+}
+
+static HirFnDecl *lookup_monomorphized_fn(HirModule *mod, String name) {
+    for (size_t i = 0; i < mod->functions.len; i++) {
+        if (string_eq(mod->functions.data[i]->symbol->name, name)) {
+            return mod->functions.data[i];
+        }
+    }
+    return NULL;
+}
+
+static Symbol *create_symbol(Analyser *ctx, String name) {
+    Symbol *sym = arena_calloc(ctx->arena, sizeof(Symbol));
+    sym->name = name;
+    return sym;
+}
+
+static TypeRef *instantiate_type(Analyser *ctx, TypeRef *generic_type, String placeholder_name, TypeRef *concrete) {
+    if (!generic_type) return NULL;
+
+    if (generic_type->type == TYPEREF_NAMED && string_eq(generic_type->named.name, placeholder_name)) {
+        return concrete;
+    }
+
+    TypeRef *new_t = arena_calloc(ctx->arena, sizeof(TypeRef));
+    *new_t = *generic_type;
+
+    if (new_t->type == TYPEREF_POINTER) {
+        new_t->pointer.pointee = instantiate_type(ctx, generic_type->pointer.pointee, placeholder_name, concrete);
+    } else if (new_t->type == TYPEREF_ARRAY) {
+        new_t->array.elem = instantiate_type(ctx, generic_type->array.elem, placeholder_name, concrete);
+    }
+
+    return new_t;
+}
+
+static HirExpr *clone_hir_expr(Analyser *ctx, HirExpr *src, String placeholder_name, TypeRef *concrete) {
+    if (!src) return NULL;
+
+    HirExpr *dst = arena_calloc(ctx->arena, sizeof(HirExpr));
+    dst->type = src->type;
+    dst->resolved_type = instantiate_type(ctx, src->resolved_type, placeholder_name, concrete);
+
+    switch (src->type) {
+        case HIR_EXPR_LIT:
+            dst->literal = src->literal;
+            break;
+            
+        case HIR_EXPR_VAR:
+            dst->var.symbol = src->var.symbol;
+            break;
+            
+        case HIR_EXPR_UNARY:
+            dst->unary.op = src->unary.op;
+            dst->unary.operand = clone_hir_expr(ctx, src->unary.operand, placeholder_name, concrete);
+            break;
+            
+        case HIR_EXPR_BINARY:
+            dst->binary.op = src->binary.op;
+            dst->binary.left = clone_hir_expr(ctx, src->binary.left, placeholder_name, concrete);
+            dst->binary.right = clone_hir_expr(ctx, src->binary.right, placeholder_name, concrete);
+            break;
+            
+        case HIR_EXPR_CALL:
+            dst->call.callee = clone_hir_expr(ctx, src->call.callee, placeholder_name, concrete);
+            dst->call.args = hirexprs_array_init();
+            for (size_t i = 0; i < src->call.args.len; i++) {
+                hirexprs_array_push(&dst->call.args, 
+                    clone_hir_expr(ctx, src->call.args.data[i], placeholder_name, concrete));
+            }
+            break;
+            
+        case HIR_EXPR_FIELD_OFFSET:
+            dst->field_offset.base = clone_hir_expr(ctx, src->field_offset.base, placeholder_name, concrete);
+            dst->field_offset.byte_offset = src->field_offset.byte_offset;
+            break;
+            
+        case HIR_EXPR_ARRAY_INDEX:
+            dst->array_index.base = clone_hir_expr(ctx, src->array_index.base, placeholder_name, concrete);
+            dst->array_index.index = clone_hir_expr(ctx, src->array_index.index, placeholder_name, concrete);
+            dst->array_index.elem_size = src->array_index.elem_size; // Note: recalculate size if it depended on T
+            break;
+            
+        case HIR_EXPR_CAST:
+            dst->cast.to_type = instantiate_type(ctx, src->cast.to_type, placeholder_name, concrete);
+            dst->cast.expr = clone_hir_expr(ctx, src->cast.expr, placeholder_name, concrete);
+            break;
+    }
+
+    return dst;
+}
+
+static HirStmt *clone_hir_stmt(Analyser *ctx, HirStmt *src, String placeholder_name, TypeRef *concrete) {
+    if (!src) return NULL;
+
+    HirStmt *dst = arena_calloc(ctx->arena, sizeof(HirStmt));
+    dst->type = src->type;
+
+    switch (src->type) {
+        case HIR_STMT_EXPR:
+            dst->expr = clone_hir_expr(ctx, src->expr, placeholder_name, concrete);
+            break;
+            
+        case HIR_STMT_BLOCK:
+            dst->block.stmts = hirstmts_array_init();
+            for (size_t i = 0; i < src->block.stmts.len; i++) {
+                hirstmts_array_push(&dst->block.stmts, 
+                    clone_hir_stmt(ctx, src->block.stmts.data[i], placeholder_name, concrete));
+            }
+            break;
+            
+        case HIR_STMT_RETURN:
+            dst->_return.value = clone_hir_expr(ctx, src->_return.value, placeholder_name, concrete);
+            break;
+            
+        case HIR_STMT_IF:
+            dst->_if.cond = clone_hir_expr(ctx, src->_if.cond, placeholder_name, concrete);
+            dst->_if.then_block = clone_hir_stmt(ctx, src->_if.then_block, placeholder_name, concrete);
+            dst->_if.else_block = clone_hir_stmt(ctx, src->_if.else_block, placeholder_name, concrete);
+            break;
+            
+        case HIR_STMT_WHILE:
+            dst->_while.cond = clone_hir_expr(ctx, src->_while.cond, placeholder_name, concrete);
+            dst->_while.body = clone_hir_stmt(ctx, src->_while.body, placeholder_name, concrete);
+            break;
+            
+        case HIR_STMT_ASSIGN:
+            dst->assign.target = clone_hir_expr(ctx, src->assign.target, placeholder_name, concrete);
+            dst->assign.value = clone_hir_expr(ctx, src->assign.value, placeholder_name, concrete);
+            break;
+            
+        case HIR_STMT_DEFER:
+            dst->defer.stmt = clone_hir_stmt(ctx, src->defer.stmt, placeholder_name, concrete);
+            break;
+    }
+
+    return dst;
+}
+
+static void hir_scan_for_generics_expr(Analyser *ctx, HirModule *mod, HirExpr *expr) {
+    if (!expr) return;
+    
+    if (expr->type == HIR_EXPR_CALL) {
+        HirExpr *callee_expr = expr->call.callee;
+        
+        if (callee_expr && callee_expr->type == HIR_EXPR_VAR) {
+            Symbol *func_sym = callee_expr->var.symbol;
+            HirFnDecl *callee_fn = get_hir_fn_by_symbol(mod, func_sym);
+            
+            if (callee_fn && func_sym->decl && func_sym->decl->type == DECL_FN) {
+                FnDecl *ast_fn = func_sym->decl->fn;
+                
+                if (ast_fn->generic_params.len > 0) { 
+                    TypeRef *concrete_type = expr->call.args.data[0]->resolved_type;
+                    
+                    String placeholder_name = ast_fn->generic_params.data[0].name; 
+                    
+                    String mangled_name = string_make(format("%s_%s", 
+                        callee_fn->symbol->name.data, 
+                        type_to_string(concrete_type).data));
+                    
+                    HirFnDecl *instantiated_fn = lookup_monomorphized_fn(mod, mangled_name);
+                    
+                    if (!instantiated_fn) {
+                        instantiated_fn = arena_calloc(ctx->arena, sizeof(HirFnDecl));
+                        instantiated_fn->symbol = create_symbol(ctx, mangled_name);
+                        instantiated_fn->symbol->decl = func_sym->decl;
+                        instantiated_fn->ret_type = instantiate_type(ctx, callee_fn->ret_type, placeholder_name, concrete_type);
+                        
+                        instantiated_fn->body = clone_hir_stmt(ctx, callee_fn->body, placeholder_name, concrete_type);
+                        
+                        hirfndecls_array_push(&mod->functions, instantiated_fn);
+                    }
+                    
+                    callee_expr->var.symbol = instantiated_fn->symbol;
+                }
+            }
+        }
+        
+        for (size_t i = 0; i < expr->call.args.len; i++) {
+            hir_scan_for_generics_expr(ctx, mod, expr->call.args.data[i]);
+        }
+    }
+}
+
+void hir_pass_monomorphise(Analyser *ctx, HirModule *mod) {
+    for (size_t i = 0; i < mod->functions.len; i++) {
+        HirFnDecl *fn = mod->functions.data[i];
+        if (fn->body) {
+            hir_scan_for_generics_expr(ctx, mod, fn->body->expr); 
+        }
+    }
 }
 
 static void print_indent(int indent) {
@@ -425,7 +705,8 @@ static void print_hir_expr(HirExpr *expr) {
             printf(")");
             break;
         case HIR_EXPR_CALL:
-            printf("%.*s(", string_fmt(expr->call.callee->name));
+            print_hir_expr(expr->call.callee); 
+            printf("(");
             for (size_t i = 0; i < expr->call.args.len; i++) {
                 if (i > 0) printf(", ");
                 print_hir_expr(expr->call.args.data[i]);
