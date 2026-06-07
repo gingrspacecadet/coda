@@ -6,9 +6,17 @@
 
 typedef struct HirExpr HirExpr;
 typedef struct HirStmt HirStmt;
+typedef struct HirInitField HirInitField;
+
+struct HirInitField {
+    string_optional field_name;
+    HirExpr *value;
+    Token token;
+};
 
 INSTANTIATE(HirExpr*, hirexprs, ARRAY_TEMPLATE)
 INSTANTIATE(HirStmt*, hirstmts, ARRAY_TEMPLATE)
+INSTANTIATE(HirInitField, hirinitfields, ARRAY_TEMPLATE)
 
 struct HirExpr {
     enum {
@@ -20,6 +28,7 @@ struct HirExpr {
         HIR_EXPR_FIELD_OFFSET,
         HIR_EXPR_ARRAY_INDEX,
         HIR_EXPR_CAST,
+        HIR_EXPR_INIT,
     } type;
 
     TypeRef *resolved_type;
@@ -62,6 +71,10 @@ struct HirExpr {
             TypeRef *to_type;
             HirExpr *expr;
         } cast;
+
+        struct {
+            hirinitfields_array fields;
+        } init_list;
     };
 };
 

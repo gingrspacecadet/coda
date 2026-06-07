@@ -72,6 +72,20 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->field_offset.byte_offset = offset;
             break;
         }
+        case EXPR_INIT: {
+            hir->type = HIR_EXPR_INIT;
+            hir->init_list.fields = hirinitfields_array_init();
+
+            for (size_t i = 0; i < ast_expr->init_list.fields.len; i++) {
+                InitField *ast_field = &ast_expr->init_list.fields.data[i];
+                HirInitField field = {0};
+                field.field_name = ast_field->field_name;
+                field.token = ast_field->token;
+                field.value = lower_expr(ctx, ast_field->value);
+                hirinitfields_array_push(&hir->init_list.fields, field);
+            }
+            break;
+        }
         case EXPR_CAST: {
             hir->type = HIR_EXPR_CAST;
             hir->cast.expr = lower_expr(ctx, ast_expr->cast.expr);
@@ -463,13 +477,25 @@ static HirExpr *clone_hir_expr(Analyser *ctx, HirExpr *src, String placeholder_n
             dst->field_offset.base = clone_hir_expr(ctx, src->field_offset.base, placeholder_name, concrete);
             dst->field_offset.byte_offset = src->field_offset.byte_offset;
             break;
-            
+        
         case HIR_EXPR_ARRAY_INDEX:
             dst->array_index.base = clone_hir_expr(ctx, src->array_index.base, placeholder_name, concrete);
             dst->array_index.index = clone_hir_expr(ctx, src->array_index.index, placeholder_name, concrete);
             dst->array_index.elem_size = src->array_index.elem_size; // Note: recalculate size if it depended on T
             break;
-            
+        
+        case HIR_EXPR_INIT:
+            dst->init_list.fields = hirinitfields_array_init();
+            for (size_t i = 0; i < src->init_list.fields.len; i++) {
+                HirInitField src_field = src->init_list.fields.data[i];
+                HirInitField dst_field = {0};
+                dst_field.field_name = src_field.field_name;
+                dst_field.token = src_field.token;
+                dst_field.value = clone_hir_expr(ctx, src_field.value, placeholder_name, concrete);
+                hirinitfields_array_push(&dst->init_list.fields, dst_field);
+            }
+            break;
+        
         case HIR_EXPR_CAST:
             dst->cast.to_type = instantiate_type(ctx, src->cast.to_type, placeholder_name, concrete);
             dst->cast.expr = clone_hir_expr(ctx, src->cast.expr, placeholder_name, concrete);
@@ -660,7 +686,7 @@ static const char *binary_op_name(BinaryOp op) {
 static void print_literal(Literal lit) {
     switch (lit.type) {
         case LITERAL_INT:
-            printf("%lld", lit._int);
+            printf("%ld", lit._int);
             break;
         case LITERAL_FLOAT:
             printf("%g", lit._float);
@@ -722,6 +748,18 @@ static void print_hir_expr(HirExpr *expr) {
             printf("[");
             print_hir_expr(expr->array_index.index);
             printf("]");
+            break;
+        case HIR_EXPR_INIT:
+            printf("{");
+            for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+                if (i > 0) printf(", ");
+                HirInitField *field = &expr->init_list.fields.data[i];
+                if (field->field_name.has_value) {
+                    printf("%.*s: ", string_fmt(field->field_name.value));
+                }
+                print_hir_expr(field->value);
+            }
+            printf("}");
             break;
         case HIR_EXPR_CAST:
             printf("(");

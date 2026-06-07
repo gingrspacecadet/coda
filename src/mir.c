@@ -128,6 +128,9 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
 
             return element_addr;
         }
+        default: {
+            return (MirOperand){0};
+        }
     }
 }
 
@@ -237,6 +240,112 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
 
             return result;
         }
+
+        case HIR_EXPR_INIT: {
+            // TODO
+            break;
+        }
+    }
+
+    return (MirOperand){0};
+}
+
+static TypeRef *get_init_field_type(TypeRef *target_type, size_t index, string_optional name) {
+    if (!target_type) return NULL;
+
+    if (target_type->type == TYPEREF_ARRAY) {
+        return target_type->array.elem;
+    }
+
+    if (target_type->type == TYPEREF_NAMED && target_type->type_symbol && target_type->type_symbol->decl) {
+        if (target_type->type_symbol->decl->type == DECL_STRUCT) {
+            StructDecl *str = target_type->type_symbol->decl->_struct;
+            if (name.has_value) {
+                for (size_t i = 0; i < str->members.len; i++) {
+                    if (string_eq(str->members.data[i]->name, name.value)) {
+                        return str->members.data[i]->type;
+                    }
+                }
+            }
+            if (index < str->members.len) {
+                return str->members.data[index]->type;
+            }
+        }
+        if (target_type->type_symbol->decl->type == DECL_UNION) {
+            UnionDecl *un = target_type->type_symbol->decl->_union;
+            if (name.has_value) {
+                for (size_t i = 0; i < un->members.len; i++) {
+                    if (string_eq(un->members.data[i]->name, name.value)) {
+                        return un->members.data[i]->type;
+                    }
+                }
+            }
+            if (index < un->members.len) {
+                return un->members.data[index]->type;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static size_t get_init_field_offset(TypeRef *target_type, size_t index, string_optional name) {
+    if (!target_type) return 0;
+
+    if (target_type->type == TYPEREF_ARRAY) {
+        return get_type_size(target_type->array.elem) * index;
+    }
+
+    if (target_type->type == TYPEREF_NAMED && target_type->type_symbol && target_type->type_symbol->decl) {
+        if (target_type->type_symbol->decl->type == DECL_STRUCT) {
+            StructDecl *str = target_type->type_symbol->decl->_struct;
+            if (name.has_value) {
+                for (size_t i = 0; i < str->members.len; i++) {
+                    if (string_eq(str->members.data[i]->name, name.value)) {
+                        return str->field_offsets.data[i];
+                    }
+                }
+            }
+            if (index < str->members.len) {
+                return str->field_offsets.data[index];
+            }
+        }
+        if (target_type->type_symbol->decl->type == DECL_UNION) {
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+static MirOperand make_init_field_addr(MirBuilder *ctx, MirOperand base, TypeRef *target_type, size_t index, string_optional name) {
+    size_t offset = get_init_field_offset(target_type, index, name);
+    Literal offset_lit = {.type = LITERAL_INT, ._int = offset};
+    MirOperand offset_op = make_literal(offset_lit, lookup_symbol(ctx, string_make("int"))->type);
+    TypeRef *field_type = get_init_field_type(target_type, index, name);
+    MirOperand addr = make_temp(ctx, field_type);
+    emit(ctx, MIR_OP_ADD, addr, base, offset_op);
+    return addr;
+}
+
+static void mir_lower_init_expr(MirBuilder *ctx, HirExpr *expr, MirOperand target, TypeRef *target_type) {
+    if (!expr || expr->type != HIR_EXPR_INIT) return;
+
+    for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+        HirInitField *field = &expr->init_list.fields.data[i];
+        TypeRef *field_type = get_init_field_type(target_type, i, field->field_name);
+        MirOperand field_target = make_init_field_addr(ctx, target, target_type, i, field->field_name);
+
+        if (field->value && field->value->type == HIR_EXPR_INIT) {
+            mir_lower_init_expr(ctx, field->value, field_target, field_type);
+        } else {
+            MirOperand value = mir_lower_expr(ctx, field->value);
+            if (field_target.type == MIR_VAL_SYMBOL) {
+                emit(ctx, MIR_OP_COPY, field_target, value, null_op());
+            } else {
+                emit(ctx, MIR_OP_STORE, field_target, value, null_op());
+            }
+        }
     }
 }
 
@@ -244,8 +353,13 @@ void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
     switch(hir->type) {
         case HIR_STMT_ASSIGN: {
             MirOperand target = mir_lower_lvalue(ctx, hir->assign.target);
-            MirOperand value = mir_lower_expr(ctx, hir->assign.value);
 
+            if (hir->assign.value && hir->assign.value->type == HIR_EXPR_INIT) {
+                mir_lower_init_expr(ctx, hir->assign.value, target, hir->assign.target->resolved_type);
+                break;
+            }
+
+            MirOperand value = mir_lower_expr(ctx, hir->assign.value);
             if (target.type == MIR_VAL_SYMBOL) {
                 emit(ctx, MIR_OP_COPY, target, value, null_op());
             } else {
@@ -333,6 +447,10 @@ void mir_lower_stmt(MirBuilder *ctx, HirStmt *hir) {
                 mir_lower_stmt(ctx, hir->block.stmts.data[i]);
             }
             break;
+        }
+
+        default: {
+            return;
         }
     }
 }
@@ -438,6 +556,9 @@ static void print_operand(MirOperand op) {
         case MIR_VAL_LABEL:
             printf("L%d", op.label_id);
             break;
+        case MIR_VAL_NONE: {
+            break;
+        }
     }
 }
 
