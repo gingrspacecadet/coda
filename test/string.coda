@@ -1,0 +1,6 @@
+module strings;
+
+fn int main() {
+    string s = "Hello, world!";
+    return s.len;
+}

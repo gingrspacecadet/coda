@@ -58,9 +58,17 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->type = HIR_EXPR_FIELD_OFFSET;
             hir->field_offset.base = lower_expr(ctx, ast_expr->member.base);
 
-            Symbol *type_sym = ast_expr->member.base->resolved_type->type_symbol;
+            TypeRef *base_type = ast_expr->member.base->resolved_type;
+            Symbol *type_sym = base_type->type_symbol;
             size_t offset = 0;
-            if (type_sym && type_sym->decl && type_sym->decl->type == DECL_STRUCT) {
+            
+            if (base_type->type == TYPEREF_ARRAY || (base_type->type == TYPEREF_NAMED && type_sym && string_eq(type_sym->name, string_make("string")))) {
+                if (string_eq(ast_expr->member.member, string_make("ptr"))) {
+                    offset = 0;
+                } else if (string_eq(ast_expr->member.member, string_make("len"))) {
+                    offset = 8;
+                }
+            } else if (type_sym && type_sym->decl && type_sym->decl->type == DECL_STRUCT) {
                 StructDecl *str = type_sym->decl->_struct;
                 for (size_t i = 0; i < str->members.len; i++) {
                     if (string_eq(str->members.data[i]->name, ast_expr->member.member)) {
@@ -255,9 +263,6 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
             }
             if (!is_param && !symbol_in_array(locals, sym)) {
                 syms_array_push(locals, sym);
-            }
-            if (stmt->var->init) {
-                // No need to traverse the initializer for locals, but keep the structure consistent.
             }
             break;
         }
