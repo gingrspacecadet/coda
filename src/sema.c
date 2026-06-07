@@ -203,6 +203,12 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
             case DECL_UNION: {
                 break;
             }
+            case DECL_VAR: {
+                break;
+            }
+            case DECL_ENUM: {
+                break;
+            }
         }
         if (found) continue;
         
@@ -321,6 +327,13 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
             }
             break;
         }
+        case TYPEREF_FN: {
+            resolve_typeref(ctx, type->fn.ret_type);
+            for (size_t i = 0; i < type->fn.params.len; i++) {
+                resolve_typeref(ctx, type->fn.params.data[i].type);
+            }
+            break;
+        }
     }
 }
 
@@ -328,6 +341,7 @@ size_t get_type_size(TypeRef *type) {
     if (!type) return 0;
 
     switch (type->type) {
+        case TYPEREF_FN:
         case TYPEREF_POINTER: {
             return 8;   // TODO: architecture-dependant
         }
@@ -365,15 +379,27 @@ size_t get_type_size(TypeRef *type) {
 
             return 0;
         }
+        case TYPEREF_SUM: {
+            size_t highest = 0;
+            for (size_t i = 0; i < type->sum.cases.len; i++) {
+                if (get_type_size(type->sum.cases.data[i]) > highest) {
+                    highest = get_type_size(type->sum.cases.data[i]);
+                }
+            }
+            return highest;
+        }
 
         return 0;
     }
+
+    return 0;
 }
 
 static size_t get_type_align(TypeRef *type) {
     if (!type) return 0;
 
     switch (type->type) {
+        case TYPEREF_FN:
         case TYPEREF_POINTER: {
             return 8;   // TODO: architecture-dependant
         }
@@ -410,9 +436,20 @@ static size_t get_type_align(TypeRef *type) {
 
             return 1;
         }
+        case TYPEREF_SUM: {
+            size_t highest = 1;
+            for (size_t i = 0; i < type->sum.cases.len; i++) {
+                if (get_type_align(type->sum.cases.data[i]) > highest) {
+                    highest = get_type_align(type->sum.cases.data[i]);
+                }
+            }
+            return highest;
+        }
         
         return 1;
     }
+
+    return 0;
 }
 
 static void calculate_struct_layout(StructDecl *str) {
@@ -547,8 +584,12 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 d->symbol->type = d->_type->alias;
                 break;
             }
+            case DECL_ENUM: {
+                resolve_typeref(ctx, d->_enum->type);
+                break;
+            }
             case DECL_VAR: {
-                error(d->token, "Global variables are not allowed %d");
+                error(d->token, "Global variables are not allowed");
             }
         }
     }
@@ -560,6 +601,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
     stmt->scope = ctx->current_scope;
 
     switch (stmt->type) {
+        case STMT_UNSAFE:
         case STMT_BLOCK: {
             enter_scope(ctx, NULL);
             for (size_t i = 0; i < stmt->block.stmts.len; i++) {
@@ -671,6 +713,12 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             check_stmt(ctx, stmt->defer.deferred);
             break;
         }
+        case STMT_MATCH: {
+            for (size_t i = 0; i < stmt->match.cases.len; i++) {
+                check_stmt(ctx, stmt->match.cases.data[i].body);
+            }
+            break;
+        }
     }
 }
 
@@ -762,6 +810,14 @@ static String type_name(TypeRef *type) {
         case TYPEREF_ARRAY: {
             return string_make(format("%.*s[%d]", string_fmt(type_name(type->array.elem)), type->array.length));
         }
+
+        case TYPEREF_FN: {
+            return string_make(format("fn %.*s(<params>)", string_fmt(type_name(type->fn.ret_type))));
+        }
+
+        case TYPEREF_SUM: {
+            return string_make(format("%.*s|%.*s|<more>", string_fmt(type_name(type->sum.cases.data[0])), string_fmt(type_name(type->sum.cases.data[1]))));
+        }
     }
     return string_make("<unknown>");
 }
@@ -780,6 +836,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 case LITERAL_STRING: type_name = string_make("string"); break;
                 case LITERAL_CHAR: type_name = string_make("char"); break;
                 case LITERAL_NULL: type_name = string_make("$null"); break;
+                case LITERAL_FLOAT: type_name = string_make("float"); break;
             }
             Symbol *type_sym = lookup_symbol(ctx, type_name);
             result_type = type_sym ? type_sym->type : NULL;
@@ -921,10 +978,6 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     actual_struct_type = actual_struct_type->pointer.pointee;
                 }
 
-                if (actual_struct_type->type == TYPEREF_GENERIC) {
-                    actual_struct_type = actual_struct_type->generic.base_type;
-                }
-
                 Symbol *type_sym = actual_struct_type->type_symbol;
                 if (!type_sym) {
                     error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(type_to_string(base_type))));
@@ -994,29 +1047,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     error(expr->token, "Unknown member");
                 }
     
-                if (base_type->type == TYPEREF_GENERIC) {
-                    TypeRef *member_type = found_member->type;
-
-                    if (member_type->type == TYPEREF_NAMED && member_type->type_symbol->flags & SYMFLAG_GENERIC) {
-                        int param_idx = -1;
-                        for (size_t k = 0; k < (str ? str->generic_params.len : unn->generic_params.len); k++) {
-                            if (string_eq(str ? str->generic_params.data[k].name : unn->generic_params.data[k].name, member_type->named.name)) {
-                                param_idx = k;
-                                break;
-                            }
-                        }
-
-                        if (param_idx != -1) {
-                            result_type = base_type->generic.arg_types.data[param_idx];
-                        } else {
-                            result_type = member_type;
-                        }
-                    } else {
-                        result_type = member_type;
-                    }
-                } else {
-                    result_type = found_member->type;
-                }
+                result_type = found_member->type;
                 goto check_expr_finished;
             }
         }
@@ -1057,6 +1088,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     error(operand_type->token, "Cannot dereference non-pointer");
                 }
             }
+            break;
         }
         case EXPR_INDEX: {
             TypeRef *base_type = check_expr(ctx, expr->index.base);

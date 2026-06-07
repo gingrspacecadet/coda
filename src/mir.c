@@ -409,7 +409,7 @@ static void print_operand(MirOperand op) {
     switch (op.type) {
         case MIR_VAL_LIT:
             if (op.lit.type == LITERAL_INT) {
-                printf("%lld", op.lit._int);
+                printf("%ld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
                 printf("\"%.*s\"", string_fmt(op.lit.string));
             } else if (op.lit.type == LITERAL_NULL) {
@@ -430,9 +430,9 @@ static void print_operand(MirOperand op) {
             break;
         case MIR_VAL_MEM:
             if (op.base_symbol) {
-                printf("mem(sym=%.*s, off=%lld)", string_fmt(op.base_symbol->name), op.offset);
+                printf("mem(sym=%.*s, off=%ld)", string_fmt(op.base_symbol->name), op.offset);
             } else {
-                printf("mem(tmp=t%d, off=%lld)", op.base_temp, op.offset);
+                printf("mem(tmp=t%d, off=%ld)", op.base_temp, op.offset);
             }
             break;
         case MIR_VAL_LABEL:

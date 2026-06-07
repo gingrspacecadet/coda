@@ -281,7 +281,6 @@ struct TypeRef {
         TYPEREF_ARRAY,
         TYPEREF_FN,
         TYPEREF_SUM,
-        TYPEREF_GENERIC,
     } type;
     union {
         struct {
@@ -378,6 +377,7 @@ struct EnumDecl {
     enumvar_array variants;
     Symbol *symbol;
     Token token;
+    TypeRef *type;
 };
 
 struct StructDecl {

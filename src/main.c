@@ -32,7 +32,7 @@ char *read_file(char *path) {
 
     if (fseek(f, 0, SEEK_END) != 0) goto err;
 
-    size_t fsize = ftell(f);
+    ssize_t fsize = ftell(f);
     if (fsize < 0) goto err;
     if (fseek(f, 0, SEEK_SET) != 0) goto err;
 

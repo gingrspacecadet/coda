@@ -1127,6 +1127,11 @@ EnumDecl *parse_enum_decl(Parser *ctx) {
     en->token = consume(ctx);
     en->name = expect(ctx, TOKENTYPE_IDENT, "Expected enum name").value.value;
 
+    if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_COLON) {
+        consume(ctx);
+        en->type = parse_type(ctx);
+    }
+
     expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
 
     token_optional t = peek(ctx);
