@@ -6,31 +6,73 @@
 
 INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
 
-static token_optional peek(Parser *ctx) {
-    if (ctx->index >= ctx->tokens.len) return (token_optional){};
-    return (token_optional){true, ctx->tokens.data[ctx->index]};
+typedef struct {
+    size_t lexer_index;
+    size_t lexer_line;
+    size_t lexer_col;
+
+    Token current;
+    Token next;
+} ParserCheckpoint;
+
+static ParserCheckpoint get_checkpoint(Parser *ctx) {
+    return (ParserCheckpoint){
+        .lexer_index = ctx->lexer->source.index,
+        .lexer_line  = ctx->lexer->line,
+        .lexer_col   = ctx->lexer->col,
+        .current     = ctx->current,
+        .next        = ctx->next
+    };
 }
-static token_optional ahead(Parser *ctx, size_t ahead) {
-    if (ctx->index + ahead >= ctx->tokens.len) return (token_optional){};
-    return (token_optional){true, ctx->tokens.data[ctx->index + ahead]};
+
+static void restore_checkpoint(Parser *ctx, ParserCheckpoint cp) {
+    ctx->lexer->source.index = cp.lexer_index;
+    ctx->lexer->line         = cp.lexer_line;
+    ctx->lexer->col          = cp.lexer_col;
+    ctx->current             = cp.current;
+    ctx->next                = cp.next;
+}
+
+static token_optional peek(Parser *ctx) {
+    if (ctx->current.type == TOKENTYPE_EOF) {
+        return (token_optional){false};
+    }
+    return (token_optional){true, ctx->current};
+}
+
+static token_optional ahead(Parser *ctx, size_t ahead_amt) {
+    if (ahead_amt == 0) {
+        if (ctx->current.type == TOKENTYPE_EOF) return (token_optional){false};
+        return (token_optional){true, ctx->current};
+    }
+    if (ahead_amt == 1) {
+        if (ctx->next.type == TOKENTYPE_EOF) return (token_optional){false};
+        return (token_optional){true, ctx->next};
+    }
+    
+    printf("Internal error: parser requested lookahead %zu (max 1).\n", ahead_amt);
+    exit(1);
 }
 
 static Token consume(Parser *ctx) {
-    return ctx->tokens.data[ctx->index++];
+    Token old_current = ctx->current;
+
+    ctx->current = ctx->next;
+    
+    if (ctx->next.type != TOKENTYPE_EOF) {
+        ctx->next = lex_next_token(ctx->lexer);
+    }
+
+    return old_current;
 }
 
 static Token expect(Parser *ctx, TokenType type, char *msg) {
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != type) {
-        error(ctx, msg);
+        error(ctx->current, msg);
     }
 
     return consume(ctx);
-}
-
-static void backtrack(Parser *ctx, size_t num) {
-    if (ctx->index < num) ctx->index = 0;
-    else ctx->index -= num;
 }
 
 Include *parse_include(Parser *ctx) {
@@ -108,13 +150,15 @@ void collect_attributes(Parser *ctx, attr_array *out) {
 }
 
 bool looks_like_type(Parser *ctx, token_optional *after) {
+    ParserCheckpoint check = get_checkpoint(ctx);
+
     token_optional first = peek(ctx);
     bool is_mut = false;
     size_t stepped = 0;
 
     token_optional t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_MUT) {
-        consume(ctx); stepped++;
+        consume(ctx);
         is_mut = true;
     }
 
@@ -123,11 +167,11 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
         goto failed;
     }
 
-    String type_name = consume(ctx).value.value; stepped++;
+    String type_name = consume(ctx).value.value;
 
     t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_LT) {
-        consume(ctx); stepped++;
+        consume(ctx);
         int lt_depth = 1;
 
         while (lt_depth > 0) {
@@ -142,7 +186,7 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
                 lt_depth--;
             }
 
-            consume(ctx); stepped++;
+            consume(ctx);
         }
     }
 
@@ -152,36 +196,36 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_MUT) {
-            consume(ctx); stepped++;
+            consume(ctx);
         }
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_STAR) {
-            Token star_tok = consume(ctx); stepped++;
+            Token star_tok = consume(ctx);
 
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
-                Token q = consume(ctx); stepped++;
+                Token q = consume(ctx);
             }
             continue;
         }
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_LBRACK) {
-            Token lb = consume(ctx); stepped++;
+            Token lb = consume(ctx);
             t = peek(ctx);
             if (t.has_value && (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT)) {
-                consume(ctx); stepped++;
+                consume(ctx);
             }
             t = peek(ctx);
             if (t.has_value && t.value.type != TOKENTYPE_RBRACK) {
                 goto failed;
             }
-            Token rb = consume(ctx); stepped++;
+            Token rb = consume(ctx);
 
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
-                consume(ctx); stepped++;
+                consume(ctx);
             }
             continue;
         }
@@ -191,11 +235,11 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
 
 passed:
     if (after) *after = peek(ctx);
-    backtrack(ctx, stepped);
+    restore_checkpoint(ctx, check);
     return true;
 failed:
     if (after) *after = peek(ctx);
-    backtrack(ctx, stepped);
+    restore_checkpoint(ctx, check);
     return false;
 }
 
@@ -518,20 +562,30 @@ Expr *expr_new_ident(Parser *ctx, Token t) {
 }
 
 bool is_generic_call_lookahead(Parser *ctx) {
-    size_t i = 1;
+    ParserCheckpoint checkpoint = get_checkpoint(ctx);
+    bool is_generic_call = false;
+
     while (true) {
-        token_optional t = ahead(ctx, i); 
+        token_optional t = peek(ctx); 
         
         if (!t.has_value || t.value.type == TOKENTYPE_SEMICOLON) {
-            return false;
+            is_generic_call = false;
+            break;
         }
         
         if (t.value.type == TOKENTYPE_GT) {
-            token_optional next = ahead(ctx, i + 1);
-            return next.has_value || next.value.type == TOKENTYPE_LPAREN;
+            token_optional next = ahead(ctx, 1);
+            
+            is_generic_call = (next.has_value && next.value.type == TOKENTYPE_LPAREN);
+            break;
         }
-        i++;
+        
+        consume(ctx);
     }
+
+    restore_checkpoint(ctx, checkpoint);
+
+    return is_generic_call;
 }
 
 Expr *parse_expr_prefix(Parser *ctx) {

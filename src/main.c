@@ -107,12 +107,11 @@ int main(int argc, char **argv) {
     };
     error_set_source(lexer.source);
 
-    token_array tokens = lex(&lexer);
-
     Parser parser = {
         .arena = lexer.arena,
-        .index = 0,
-        .tokens = tokens,
+        .lexer = &lexer,
+        .current = lex_next_token(&lexer),
+        .next = lex_next_token(&lexer)
     };
 
     Module *module = parse_module(&parser);

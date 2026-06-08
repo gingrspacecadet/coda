@@ -107,6 +107,6 @@ typedef struct {
     Arena *arena;
 } Lexer;
 
-token_array lex(Lexer *lexer);
+Token lex_next_token(Lexer *ctx);
 
 #endif

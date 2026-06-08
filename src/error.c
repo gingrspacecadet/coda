@@ -2,13 +2,10 @@
 #include "lexer.h"
 #include "parser.h"
 
-INSTANTIATE(Token, token, OPTIONAL_TEMPLATE)
-
 static Source err_source = {0};
 
-static token_optional peek(Parser *ctx) {
-    if (ctx->index >= ctx->tokens.len) return (token_optional){};
-    return (token_optional){true, ctx->tokens.data[ctx->index]};
+static Token peek(Parser *ctx) {
+    return ctx->current;
 }
 
 #define BOLD_WHITE "\e[1;37m"
@@ -20,9 +17,9 @@ void error_set_source(Source source) {
 }
 
 __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
-    token_optional t = peek(ctx);
+    Token t = peek(ctx);
 
-    if (!t.has_value) {
+    if (t.type == TOKENTYPE_EOF) {
         printf(BOLD_WHITE "%.*s:0:0: " RED "error: " RESET "%s\n" 
                RED "error: " RESET "at end of file\n", 
                string_fmt(err_source.path), msg);
@@ -30,8 +27,8 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     }
 
     String file_view = err_source.contents;
-    size_t span_start = t.value.span.start;
-    size_t span_len = t.value.span.length;
+    size_t span_start = t.span.start;
+    size_t span_len = t.span.length;
 
     size_t line_start = span_start;
     while (line_start > 0 && file_view.data[line_start - 1] != '\n') --line_start;
@@ -43,7 +40,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
         .length = line_end - line_start
     };
 
-    size_t col = t.value.col ? t.value.col : (span_start - line_start + 1);
+    size_t col = t.col ? t.col : (span_start - line_start + 1);
 
     char_array printable_line = char_array_init();
     char_array_resize(&printable_line, line_view.length);
@@ -73,11 +70,11 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
         caret_len = cols > 1 ? cols : 1;
     }
 
-    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", string_fmt(err_source.path), t.value.line, col, msg);
+    printf(BOLD_WHITE "%.*s:%ld:%ld: " RED "error: " RESET "%s\n", string_fmt(err_source.path), t.line, col, msg);
 
-    printf("%ld | %s\n", t.value.line, printable_line.data);
+    printf("%ld | %s\n", t.line, printable_line.data);
 
-    size_t line_num_len = snprintf(NULL, 0, "%ld", t.value.line);
+    size_t line_num_len = snprintf(NULL, 0, "%ld", t.line);
 
     char_array underline = char_array_init();
     char_array_append(&underline, line_num_len, ' ');

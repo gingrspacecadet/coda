@@ -5,8 +5,9 @@
 #include "lexer.h"
 
 typedef struct {
-    token_array tokens;
-    size_t index;
+    Lexer *lexer;
+    Token current;
+    Token next;
     
     Arena *arena;
 } Parser;

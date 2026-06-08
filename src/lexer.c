@@ -87,32 +87,25 @@ static char decode_esc(Lexer *ctx) {
     }
 }
 
-token_array lex(Lexer *ctx) {
-    if (!ctx) return token_array_empty;
-    if (!ctx->source.contents.data) return token_array_empty;
-    if (!ctx->arena) return token_array_empty;
+Token lex_next_token(Lexer *ctx) {
+    if (!ctx || !ctx->source.contents.data) {
+        return (Token){ .type = TOKENTYPE_EOF };
+    }
 
-    token_array tokens = token_array_init();
     char_array buffer = char_array_init();
 
-    char_optional p = peek(ctx);
-
-    while (p.has_value) {
-        char_array_clear(&buffer);
-
-        bool comment = false;
+    while (true) {
+        char_optional p = peek(ctx);
         
+        if (!p.has_value) {
+            return (Token){ .type = TOKENTYPE_EOF, .span = {ctx->source.index, 0}, .line = ctx->line, .col = ctx->col };
+        }
+
         if (isspace((unsigned char)p.value)) {
             consume(ctx);
-            p = peek(ctx);
-            while (p.has_value && isspace((unsigned char)p.value)) {
-                consume(ctx);
-                p = peek(ctx);
-            }
-            
             continue;
         }
-        
+
         size_t start = ctx->source.index;
 
         if (isalpha((unsigned char)p.value)) {
@@ -122,12 +115,16 @@ token_array lex(Lexer *ctx) {
                 char_array_push(&buffer, consume(ctx));
                 p = peek(ctx);
             }
-
             char_array_push(&buffer, '\0');
 
-            token_array_push(&tokens, decode_ident(ctx, &buffer));
+            Token t = decode_ident(ctx, &buffer);
+            t.span = (Span){ .start = start, .length = ctx->source.index - start };
+            t.line = ctx->line;
+            t.col = ctx->col;
+            return t;
         }
-        else if (isdigit((unsigned char)p.value)) {
+
+        if (isdigit((unsigned char)p.value)) {
             char_array_push(&buffer, consume(ctx));
             p = peek(ctx);
             while (p.has_value && isdigit((unsigned char)p.value)) {
@@ -140,230 +137,123 @@ token_array lex(Lexer *ctx) {
                 consume(ctx);
                 is_unsigned = true;
             }
-            
             char_array_push(&buffer, '\0');
 
             char *num_str = arena_strdup(ctx->arena, buffer.data);
             String num_string = { .data = num_str, .length = strlen(num_str) };
-            token_array_push(&tokens, (Token){ .type = is_unsigned ? TOKENTYPE_UINT_LIT : TOKENTYPE_INT_LIT , .value = (string_optional){true, num_string} });
+            
+            Token t = { 
+                .type = is_unsigned ? TOKENTYPE_UINT_LIT : TOKENTYPE_INT_LIT, 
+                .value = (string_optional){true, num_string} 
+            };
+            t.span = (Span){ .start = start, .length = ctx->source.index - start };
+            t.line = ctx->line;
+            t.col = ctx->col;
+            return t;
         }
-        else {
-            char c = consume(ctx);
-            switch (c) {
-                case '@': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_AT });
-                    break;
+
+        char c = consume(ctx);
+        Token t = { .line = ctx->line, .col = ctx->col };
+
+        switch (c) {
+            case '@': t.type = TOKENTYPE_AT; break;
+            case '$': t.type = TOKENTYPE_DOLLAR; break;
+            case '"': {
+                while (peek(ctx).has_value && peek(ctx).value != '"') {
+                    char_array_push(&buffer, decode_esc(ctx));
                 }
-                case '$': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_DOLLAR });
-                    break;
-                }
-                case '\'': {
-                    char c = decode_esc(ctx);
-                    if (!peek(ctx).has_value || peek(ctx).value != '\'') {
-                        Token t = {
-                            .line = ctx->line,
-                            .col = ctx->col,
-                            .span = (Span){.start = start, .length = ctx->source.index - start},
-                        };
-                        error(t, "Unterminated character literal");
-                        exit(1);
-                    }
-                    consume(ctx);
-                    char *char_str = arena_strdup(ctx->arena, (char[]){c, '\0'});
-                    String char_string = { .data = char_str, .length = 1 };
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_CHAR_LIT, .value = (string_optional){true, char_string}});
-                    break;
-                }
-                case '"': {
-                    while (peek(ctx).has_value && peek(ctx).value != '"') {
-                        char_array_push(&buffer, decode_esc(ctx));
-                    }
-                    char_array_push(&buffer, '\0');
-                    consume(ctx);
-                    char *str = arena_strdup(ctx->arena, buffer.data);
-                    String str_string = { .data = str, .length = strlen(str) };
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_STR_LIT, .value = (string_optional){true, str_string}});
-                    char_array_clear(&buffer);
-                    break;
-                }
-                case '/': {
-                    if (peek(ctx).has_value && peek(ctx).value == '/') {
-                        consume(ctx);
-                        comment = true;
-                        while (peek(ctx).has_value && peek(ctx).value != '\n') {
-                            consume(ctx);
-                        }
-                    } else {
-                        if (peek(ctx).has_value && peek(ctx).value == '=') {
-                            consume(ctx);
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SLASHEQ });
-                        } else {
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SLASH });
-                        }
-                    }
-                    break;
-                }
-                case ':': {
-                    if (peek(ctx).has_value && peek(ctx).value == ':') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_DOUBLECOLON });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_COLON });
-                    }
-                    break;
-                }
-                case '(': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_LPAREN });
-                    break;
-                }
-                case ')': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_RPAREN });
-                    break;
-                }
-                case '{': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_LBRACE });
-                    break;
-                }
-                case '}': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_RBRACE });
-                    break;
-                }
-                case '[': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_LBRACK });
-                    break;
-                }
-                case ']': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_RBRACK });
-                    break;
-                }
-                case ';': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_SEMICOLON });
-                    break;
-                }
-                case '&': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_AMP });
-                    break;
-                }
-                case '%': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_PERCENT });
-                    break;
-                }
-                case '+': {
-                    if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_PLUSEQ });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_PLUS });
-                    }
-                    break;
-                }
-                case '!': {
-                    if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_NEQ });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_NOT });
-                    }
-                    break;
-                }
-                case '-': {
-                    if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_MINUSEQ });
-                    } else if (peek(ctx).has_value && peek(ctx).value == '>') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_RARROW });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_MINUS });
-                    }
-                    break;
-                }
-                case '*': {
-                    if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_STAREQ });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_STAR });
-                    }
-                    break;
-                }
-                case '<': {
-                    if (peek(ctx).has_value && peek(ctx).value == '<') {
-                        consume(ctx);
-                        if (peek(ctx).has_value && peek(ctx).value == '=') {
-                            consume(ctx);
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SHLEQ });
-                        } else {
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SHL });
-                        }
-                    } else if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_LE });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_LT });
-                    }
-                    break;
-                }
-                case '>': {
-                    if (peek(ctx).has_value && peek(ctx).value == '>') {
-                        consume(ctx);
-                        if (peek(ctx).has_value && peek(ctx).value == '=') {
-                            consume(ctx);
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SHREQ });
-                        } else {
-                            token_array_push(&tokens, (Token){ .type = TOKENTYPE_SHR });
-                        }
-                    } else if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_GE });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_GT });
-                    }
-                    break;
-                }
-                case '=': {
-                    if (peek(ctx).has_value && peek(ctx).value == '=') {
-                        consume(ctx);
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_EQEQ });
-                    } else {
-                        token_array_push(&tokens, (Token){ .type = TOKENTYPE_EQ });
-                    }
-                    break;
-                }
-                case ',': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_COMMA });
-                    break;
-                }
-                case '.': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_DOT });
-                    break;
-                }
-                case '?': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_QUESTION });
-                    break;
-                }
-                case '|': {
-                    token_array_push(&tokens, (Token){ .type = TOKENTYPE_PIPE });
-                    break;
-                }
-                default: {
-                    printf("Unknown character %c\n", c);
+                char_array_push(&buffer, '\0');
+                consume(ctx);
+                char *str = arena_strdup(ctx->arena, buffer.data);
+                String str_string = { .data = str, .length = strlen(str) };
+                t.type = TOKENTYPE_STR_LIT;
+                t.value = (string_optional){true, str_string};
+                char_array_clear(&buffer);
+                break;
+            }
+            case '\'': {
+                char esc_c = decode_esc(ctx);
+                if (!peek(ctx).has_value || peek(ctx).value != '\'') {
+                    t.span = (Span){.start = start, .length = ctx->source.index - start};
+                    error(t, "Unterminated character literal");
                     exit(1);
                 }
+                consume(ctx);
+                char *char_str = arena_strdup(ctx->arena, (char[]){esc_c, '\0'});
+                String char_string = { .data = char_str, .length = 1 };
+                t.type = TOKENTYPE_CHAR_LIT;
+                t.value = (string_optional){true, char_string};
+                break;
             }
+            case '/': {
+                if (peek(ctx).has_value && peek(ctx).value == '/') {
+                    consume(ctx);
+                    while (peek(ctx).has_value && peek(ctx).value != '\n') {
+                        consume(ctx);
+                    }
+                    continue;
+                } else if (peek(ctx).has_value && peek(ctx).value == '=') {
+                    consume(ctx);
+                    t.type = TOKENTYPE_SLASHEQ;
+                } else {
+                    t.type = TOKENTYPE_SLASH;
+                }
+                break;
+            }
+            case ':':
+                if (peek(ctx).has_value && peek(ctx).value == ':') { consume(ctx); t.type = TOKENTYPE_DOUBLECOLON; } 
+                else t.type = TOKENTYPE_COLON;
+                break;
+            case '(': t.type = TOKENTYPE_LPAREN; break;
+            case ')': t.type = TOKENTYPE_RPAREN; break;
+            case '{': t.type = TOKENTYPE_LBRACE; break;
+            case '}': t.type = TOKENTYPE_RBRACE; break;
+            case '[': t.type = TOKENTYPE_LBRACK; break;
+            case ']': t.type = TOKENTYPE_RBRACK; break;
+            case ';': t.type = TOKENTYPE_SEMICOLON; break;
+            case '&': t.type = TOKENTYPE_AMP; break;
+            case '%': t.type = TOKENTYPE_PERCENT; break;
+            case '+':
+                if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_PLUSEQ; }
+                else t.type = TOKENTYPE_PLUS;
+                break;
+            case '!':
+                if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_NEQ; }
+                else t.type = TOKENTYPE_NOT;
+                break;
+            case '-':
+                if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_MINUSEQ; }
+                else if (peek(ctx).has_value && peek(ctx).value == '>') { consume(ctx); t.type == TOKENTYPE_RARROW; }
+                else t.type = TOKENTYPE_MINUS;
+                break;
+            case '*':
+                if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_STAREQ; }
+                else t.type = TOKENTYPE_STAR;
+                break;
+            case '<':
+                if (peek(ctx).has_value && peek(ctx).value == '<') { consume(ctx); if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_SHLEQ; } else t.type = TOKENTYPE_SHL; }
+                else if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_LE; }
+                else t.type = TOKENTYPE_LT;
+                break;
+            case '>':
+                if (peek(ctx).has_value && peek(ctx).value == '>') { consume(ctx); if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_SHREQ; } else t.type = TOKENTYPE_SHR; }
+                else if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_GE; }
+                else t.type = TOKENTYPE_GT;
+                break;
+            case '=':
+                if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_EQEQ; }
+                else t.type = TOKENTYPE_EQ;
+                break;
+            case ',': t.type = TOKENTYPE_COMMA; break;
+            case '.': t.type = TOKENTYPE_DOT; break;
+            case '?': t.type = TOKENTYPE_QUESTION; break;
+            case '|': t.type = TOKENTYPE_PIPE; break;
+            default:
+                printf("Unknown character %c\n", c);
+                exit(1);
         }
 
-        if (!comment) {
-            Token *last = tokens.data + tokens.len - 1;
-            last->span = (Span){ .start = start, .length = ctx->source.index - start };
-            last->line = ctx->line;
-            last->col = ctx->col;
-        }
-
-        p = peek(ctx);
+        t.span = (Span){ .start = start, .length = ctx->source.index - start };
+        return t;
     }
-
-    ctx->source.index = 0;
-    return tokens;
 }
