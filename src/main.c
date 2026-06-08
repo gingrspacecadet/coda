@@ -58,7 +58,7 @@ Source setup_source(char *path) {
 }
 
 int main(int argc, char **argv) {
-    const char *backend_path = "./build/backends/orion.so";
+    const char *backend_path = "./build/backends/x86_64.so";
     const char *source_path = NULL;
     const char *output_file = "a.s";
 
