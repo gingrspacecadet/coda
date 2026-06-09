@@ -26,37 +26,6 @@
     #define close_lib dlclose
 #endif
 
-char *read_file(char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f) goto err;
-
-    if (fseek(f, 0, SEEK_END) != 0) goto err;
-
-    ssize_t fsize = ftell(f);
-    if (fsize < 0) goto err;
-    if (fseek(f, 0, SEEK_SET) != 0) goto err;
-
-    char *data = malloc(fsize + 1);
-    if (!data) goto err;
-    if (fread(data, fsize, 1, f) != 1) goto err;
-    if (fclose(f) != 0) goto err;
-    data[fsize] = 0;
-    return data;
-
-err:
-    fprintf(stderr, "read_file failed\n");
-    exit(1);
-}
-
-Source setup_source(char *path) {
-    Source source;
-    source.path = string_make(path);
-    source.index = 0;
-    source.contents = string_make(read_file(path));
-
-    return source;
-}
-
 int main(int argc, char **argv) {
     const char *backend_path = "./build/backends/x86_64.so";
     const char *source_path = NULL;
@@ -99,25 +68,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Lexer lexer = {
-        .arena = arena_create(),
-        .source = setup_source((char*)source_path),
-        .line = 1,
-        .col = 1,
-    };
-    error_set_source(lexer.source);
-
-    Parser parser = {
-        .arena = lexer.arena,
-        .lexer = &lexer,
-        .current = lex_next_token(&lexer),
-        .next = lex_next_token(&lexer)
-    };
-
-    Module *module = parse_module(&parser);
+    Parser parser;
+    Module *module = parse_file((char*)source_path, &parser);
     ast_pass_monomorphise(module);
+    
+    Analyser analyser = analyser_init(module, module->arena);
+    // pre-scan include dirs
+    // TODO: -I flag
+    scan_dir(&analyser, "."); // TODO: extract stdlib path from target
+    resolve_includes(&analyser, module);
 
-    Analyser analyser = analyser_init(module, lexer.arena);
+    populate_module_namespaces(&analyser, module);
+    for (size_t i = 0; i < analyser.module_map.len; i++) {
+        if (analyser.module_map.data[i].is_parsed) {
+            populate_module_namespaces(&analyser, analyser.module_map.data[i].ast);
+        }
+    }
+    
+    error_set_source(parser.lexer->source);
+
     analyse(&analyser);
 
     HirModule *hir = hir_lower_module(&analyser, module);
@@ -126,7 +95,7 @@ int main(int argc, char **argv) {
     // hir_pretty_print(hir);
 
     MirBuilder mirbuilder = {
-        .arena = lexer.arena,
+        .arena = module->arena,
         .global_scope = analyser.global_scope,
     };
     MirModule *mir = mir_lower_module(&mirbuilder, hir);

@@ -1,0 +1,7 @@
+module main;
+
+include test;
+
+fn int main() {
+    return test::tester();
+}

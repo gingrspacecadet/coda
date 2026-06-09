@@ -31,4 +31,20 @@ FnDecl *parse_fn_decl(Parser *ctx);
 Decl *parse_decl(Parser *ctx);
 Module *parse_module(Parser *ctx);
 
+extern void error_set_source(Source);
+
+static Module *parse_file(char *path, Parser *out) {
+    Lexer *l = malloc(sizeof(Lexer));
+    *l = lexer_init_from_file(path);
+    error_set_source(l->source);
+    Parser p = {
+        .arena = l->arena,
+        .lexer = l,
+        .current = lex_next_token(l),
+        .next = lex_next_token(l)
+    };
+    if (out) *out = p;
+    return parse_module(&p);
+}
+
 #endif

@@ -109,4 +109,56 @@ typedef struct {
 
 Token lex_next_token(Lexer *ctx);
 
+static void lexer_free(Lexer *l) {
+    arena_destroy(l->arena);
+}
+
+static char *read_file(char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) goto err;
+
+    if (fseek(f, 0, SEEK_END) != 0) goto err;
+
+    ssize_t fsize = ftell(f);
+    if (fsize < 0) goto err;
+    if (fseek(f, 0, SEEK_SET) != 0) goto err;
+
+    char *data = malloc(fsize + 1);
+    if (!data) goto err;
+    if (fread(data, fsize, 1, f) != 1) goto err;
+    if (fclose(f) != 0) goto err;
+    data[fsize] = 0;
+    return data;
+
+err:
+    fprintf(stderr, "read_file failed\n");
+    exit(1);
+}
+
+static Lexer lexer_init_from_file(char *path) {
+    return (Lexer){
+        .arena = arena_create(),
+        .source = {
+            .path = string_make(path),
+            .contents = string_make(read_file(path)),
+            .index = 0,
+        },
+        .line = 1,
+        .col = 1,
+    };
+}
+
+static Lexer lexer_init_from_string(char *path) {
+    return (Lexer){
+        .arena = arena_create(),
+        .source = {
+            .path = {0},
+            .contents = string_make(path),
+            .index = 0,
+        },
+        .line = 1,
+        .col = 1,
+    };
+}
+
 #endif

@@ -1,3 +1,5 @@
+#include <dirent.h>
+#include <sys/stat.h>
 #include "sema.h"
 #include "error.h"
 
@@ -80,12 +82,14 @@ Scope *scope_init(Arena *a) {
 }
 
 Analyser analyser_init(Module *m, Arena *a) {
+    m->scope = scope_init(a);
     Analyser an;
     an.arena = a;
     an.current_function = NULL;
-    an.global_scope = scope_init(a);
+    an.global_scope = m->scope;
     an.current_scope = an.global_scope;
     an.module = m;
+    an.module_map = modentry_array_init();
 
     inject_builtin_types(&an);
 
@@ -97,6 +101,14 @@ void analyse(Analyser *ctx) {
 
     register_globals(ctx, ctx->module);
     resolve_types(ctx, ctx->module);
+
+    for (size_t i = 0; i < ctx->module_map.len; i++) {
+        if (ctx->module_map.data[i].is_parsed) {
+            register_globals(ctx, ctx->module_map.data[i].ast);
+            resolve_types(ctx, ctx->module_map.data[i].ast);
+        }
+    }
+
     check_bodies(ctx, ctx->module);
 }
 
@@ -122,9 +134,9 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
         Symbol *sym = ctx->current_scope->symbols.data[i];
         if (string_eq(sym->name, name)) {
             if (sym->decl) {
-                error(sym->decl->token, format("Redeclaration of symbol %.*s", string_fmt(sym->name)));
+                error(sym->decl->token, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             } else {
-                error((Token){}, format("Redeclaration of symbol %.*s", string_fmt(sym->name)));
+                error((Token){}, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             }
         }
     }
@@ -212,12 +224,12 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
         }
         if (found) continue;
         
-        error(a->token, format("Unknown attribute %.*s", string_fmt(a->name)));
+        error(a->token, format("Unknown attribute '%.*s'", string_fmt(a->name)));
     }
 }
 
 void register_globals(Analyser *ctx, Module *mod) {
-    ctx->current_scope = ctx->global_scope;
+    ctx->current_scope = mod->scope;
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
@@ -510,7 +522,7 @@ static void calculate_union_layout(UnionDecl *unn) {
 }
 
 void resolve_types(Analyser *ctx, Module *mod) {
-    ctx->current_scope = ctx->global_scope;
+    ctx->current_scope = mod->scope;
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
@@ -624,7 +636,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
                 if (!types_compatible(init_type, var->type)) {
                     if (init_type->type_symbol && var->type->type_symbol) {
-                        error(var->token, format("Cannot assign value of type %.*s to variable of type %.*s", string_fmt(init_type->type_symbol->name), string_fmt(var->type->type_symbol->name)));
+                        error(var->token, format("Cannot assign value of type '%.*s' to variable of type '%.*s'", string_fmt(init_type->type_symbol->name), string_fmt(var->type->type_symbol->name)));
                     } else {
                         error(var->token, "Cannot assign variables of differing types");
                     }
@@ -644,7 +656,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
                 if (!types_compatible(ret_type, ctx->current_function->ret_type)) {
-                    error(stmt->_return.value->token, format("Cannot return %.*s in function expecting %.*s", string_fmt(type_to_string(ret_type)), string_fmt(type_to_string(ctx->current_function->ret_type))));
+                    error(stmt->_return.value->token, format("Cannot return '%.*s' in function expecting '%.*s'", string_fmt(type_to_string(ret_type)), string_fmt(type_to_string(ctx->current_function->ret_type))));
                 }
             } else {
                 if (ctx->current_function->ret_type
@@ -769,7 +781,7 @@ void check_bodies(Analyser *ctx, Module *mod) {
         Decl *d = mod->decls.data[i];
         if (d->type == DECL_FN) {
             if (d->fn->body && d->fn->is_extern) {
-                error(d->fn->token, format("Extern function %.*s cannot have a body definition", string_fmt(d->fn->name)));
+                error(d->fn->token, format("Extern function '%.*s' cannot have a body definition", string_fmt(d->fn->name)));
             }
             check_fn_body(ctx, d->fn);
         }
@@ -804,19 +816,19 @@ static String type_name(TypeRef *type) {
         }
         
         case TYPEREF_POINTER: {
-            return string_make(format("*%.*s", string_fmt(type_name(type->pointer.pointee)))); // NOTE: this is godawful, but it only runs on errors so it's fiiiiiine
+            return string_make(format("*'%.*s'", string_fmt(type_name(type->pointer.pointee)))); // NOTE: this is godawful, but it only runs on errors so it's fiiiiiine
         }
 
         case TYPEREF_ARRAY: {
-            return string_make(format("%.*s[%d]", string_fmt(type_name(type->array.elem)), type->array.length));
+            return string_make(format("'%.*s'[%d]", string_fmt(type_name(type->array.elem)), type->array.length));
         }
 
         case TYPEREF_FN: {
-            return string_make(format("fn %.*s(<params>)", string_fmt(type_name(type->fn.ret_type))));
+            return string_make(format("fn '%.*s'(<params>)", string_fmt(type_name(type->fn.ret_type))));
         }
 
         case TYPEREF_SUM: {
-            return string_make(format("%.*s|%.*s|<more>", string_fmt(type_name(type->sum.cases.data[0])), string_fmt(type_name(type->sum.cases.data[1]))));
+            return string_make(format("'%.*s'|'%.*s'|<more>", string_fmt(type_name(type->sum.cases.data[0])), string_fmt(type_name(type->sum.cases.data[1]))));
         }
     }
     return string_make("<unknown>");
@@ -856,7 +868,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *right_t = check_expr(ctx, expr->binary.right);
 
             if (!types_compatible(left_t, right_t)) {
-                error(expr->token, format("Cannot operate between incompatible types %.*s and %.*s", string_fmt(type_to_string(left_t)), string_fmt(type_to_string(right_t))));
+                error(expr->token, format("Cannot operate between incompatible types '%.*s' and '%.*s'", string_fmt(type_to_string(left_t)), string_fmt(type_to_string(right_t))));
             }
 
             if (expr->binary.op == BINOP_EQ || 
@@ -939,7 +951,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
 
                 if (!types_compatible(arg_type, param_type)) {
-                    error(expr->token, format("Cannot pass argument of type %.*s to parameter expecting type %.*s", 
+                    error(expr->token, format("Cannot pass argument of type '%.*s' to parameter expecting type '%.*s'", 
                         string_fmt(type_to_string(arg_type)), string_fmt(type_to_string(param_type))));
                 }
             }
@@ -969,7 +981,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     result_type = uint64_sym->type;
                     goto check_expr_finished;
                 } else {
-                    error(expr->member.base->token, format("Unknown array member %.*s", string_fmt(expr->member.member)));
+                    error(expr->member.base->token, format("Unknown array member '%.*s'", string_fmt(expr->member.member)));
                 }
             } else {
                 TypeRef *actual_struct_type = base_type;
@@ -980,7 +992,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 Symbol *type_sym = actual_struct_type->type_symbol;
                 if (!type_sym) {
-                    error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(type_to_string(base_type))));
+                    error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
                 }
 
                 if (!type_sym->decl) {
@@ -1011,15 +1023,15 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                             }
                         }
 
-                        error(expr->token, format("Generic parameter %.*s has no method named %.*s", string_fmt(type_sym->name), string_fmt(expr->member.member)));
+                        error(expr->token, format("Generic parameter '%.*s' has no method named '%.*s'", string_fmt(type_sym->name), string_fmt(expr->member.member)));
                     }
 
                     // TODO: ensure constraints allow this, otherwise error
-                    error(expr->token, format("Type placeholder %.*s does not have member elements", string_fmt(type_sym->name)));
+                    error(expr->token, format("Type placeholder '%.*s' does not have member elements", string_fmt(type_sym->name)));
                 }
 
                 if (!(type_sym->flags & SYMFLAG_TYPE)) {
-                    error(expr->member.base->token, format("Unknown base type %.*s", string_fmt(type_to_string(base_type))));
+                    error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
                 }
     
                 StructDecl *str = NULL;
@@ -1130,11 +1142,11 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             if (p->is_arg_type) {
                 resolve_typeref(ctx, p->type);
                 if (!p->type->type_symbol) {
-                    error(expr->token, format("Unknown type %.*s", string_fmt(type_to_string(p->type))));
+                    error(expr->token, format("Unknown type '%.*s'", string_fmt(type_to_string(p->type))));
                 }
                 if (string_eq(p->name, string_make("sizeof"))) {
                     size_t sz = get_type_size(p->type);
-                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type %.*s", string_fmt(type_to_string(p->type))));
+                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(p->type))));
                     result_type = lookup_symbol(ctx, string_make("int"))->type;
                     expr->type = EXPR_LIT;
                     expr->literal.type = LITERAL_INT;
@@ -1148,7 +1160,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 TypeRef *t = check_expr(ctx, p->expr);
                 if (string_eq(p->name, string_make("sizeof"))) {
                     size_t sz = get_type_size(t);
-                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type %.*s", string_fmt(type_to_string(t))));
+                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(t))));
                     result_type = lookup_symbol(ctx, string_make("int"))->type;
                     expr->type = EXPR_LIT;
                     expr->literal.type = LITERAL_INT;
@@ -1169,17 +1181,17 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             String base_name = expr->path.components.data[0];
             Symbol *current_sym = lookup_symbol(ctx, base_name);
             if (!current_sym) {
-                error(expr->token, format("Unknown identifier %.*s", string_fmt(base_name)));
+                error(expr->token, format("Unknown identifier '%.*s'", string_fmt(base_name)));
             }
 
             for (size_t i = 1; i < components_len - 1; i++) {
                 String next_name = expr->path.components.data[i];
 
                 if (!current_sym->decl || current_sym->decl->type != DECL_NAMESPACE) {
-                    error(expr->token, format("%.*s is not a namespace container", string_fmt(current_sym->name)));
+                    error(expr->token, format("'%.*s' is not a namespace container", string_fmt(current_sym->name)));
                 }
 
-                Module *mod = current_sym->decl->namespace_module;
+                Module *mod = current_sym->decl->namespace;
                 Scope *mod_scope = mod->scope;
                 Symbol *found_next = NULL;
 
@@ -1187,7 +1199,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     Symbol *candidate = mod_scope->symbols.data[j];
                     if (string_eq(candidate->name, next_name)) {
                         if (!(candidate->flags & SYMFLAG_EXPORT)) {
-                            error(expr->token, format("Namespace %.*s is private to module %.*s", 
+                            error(expr->token, format("Namespace '%.*s' is private to module '%.*s'", 
                                 string_fmt(candidate->name), string_fmt(mod->name)));
                         }
                         found_next = candidate;
@@ -1196,7 +1208,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
 
                 if (!found_next) {
-                    error(expr->token, format("No nested namespace %.*s found in module %.*s", 
+                    error(expr->token, format("No nested namespace '%.*s' found in module '%.*s'", 
                         string_fmt(next_name), string_fmt(mod->name)));
                 }
 
@@ -1211,7 +1223,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             switch (current_sym->decl->type) {
                 case DECL_NAMESPACE: {
-                    Module *mod = current_sym->decl->namespace_module;
+                    Module *mod = current_sym->decl->namespace;
                     Scope *mod_scope = mod->scope;
                     Symbol *target_sym = NULL;
 
@@ -1219,7 +1231,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                         Symbol *candidate = mod_scope->symbols.data[i];
                         if (string_eq(candidate->name, target_name)) {
                             if (!(candidate->flags & SYMFLAG_EXPORT)) {
-                                error(expr->token, format("Symbol %.*s is private to module %.*s", 
+                                error(expr->token, format("Symbol '%.*s' is private to module '%.*s'", 
                                     string_fmt(candidate->name), string_fmt(mod->name)));
                             }
                             target_sym = candidate;
@@ -1228,7 +1240,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     }
 
                     if (!target_sym) {
-                        error(expr->token, format("No symbol %.*s found in namespace %.*s", 
+                        error(expr->token, format("No symbol '%.*s' found in namespace '%.*s'", 
                             string_fmt(target_name), string_fmt(mod->name)));
                     }
 
@@ -1251,7 +1263,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     }
 
                     if (!found) {
-                        error(expr->token, format("Enum %.*s has no variant %.*s", 
+                        error(expr->token, format("Enum '%.*s' has no variant '%.*s'", 
                             string_fmt(current_sym->name), string_fmt(target_name)));
                     }
                     break;
@@ -1271,14 +1283,14 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     }
 
                     if (!found) {
-                        error(expr->token, format("Union %.*s has no constructor variant %.*s", 
+                        error(expr->token, format("Union '%.*s' has no constructor variant '%.*s'", 
                             string_fmt(current_sym->name), string_fmt(target_name)));
                     }
                     break;
                 }
 
                 default: {
-                    error(expr->token, format("Path resolution is not supported out of container type: %.*s", 
+                    error(expr->token, format("Path resolution is not supported out of container type: '%.*s'", 
                         string_fmt(current_sym->name)));
                 }
             }
@@ -1293,7 +1305,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
 
             if (inner_t->type != TYPEREF_SUM) {
-                error(expr->token, format("Cannot use '?' on non-sum type %.*s", string_fmt(type_to_string(inner_t))));
+                error(expr->token, format("Cannot use '?' on non-sum type '%.*s'", string_fmt(type_to_string(inner_t))));
             }
 
             if (inner_t->sum.cases.len == 0) {
@@ -1923,5 +1935,187 @@ void ast_pass_monomorphise(Module *mod) {
         if (decl->type == DECL_FN && decl->fn->generic_params.len == 0) {
             scan_stmt(mod, decl->fn->body);
         }
+    }
+}
+
+// include res!
+
+static bool peek_module_decl(char *filepath, string_array *out) {
+    Lexer l = lexer_init_from_file(filepath);
+    if (lex_next_token(&l).type != TOKENTYPE_MODULE) {
+        lexer_free(&l);
+        return false;
+    }
+    *out = string_array_init();
+
+    while (true) {
+        Token t = lex_next_token(&l);
+        if (t.type != TOKENTYPE_IDENT) {
+            string_array_free(out);
+            lexer_free(&l);
+            return false;
+        }
+        string_array_push(out, t.value.value);
+        Token s = lex_next_token(&l);
+        if (s.type == TOKENTYPE_DOUBLECOLON) continue;
+        
+        if (s.type == TOKENTYPE_SEMICOLON) break;
+
+        string_array_free(out);
+        lexer_free(&l);
+        return false;
+    }
+
+    return true;
+}
+
+void scan_dir(Analyser *ctx, char *dir_path) {
+    DIR *dir = opendir(dir_path);
+    if (!dir) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+
+        struct stat st;
+        if (stat(full_path, &st) != 0) continue;
+
+        if (S_ISDIR(st.st_mode)) {
+            scan_dir(ctx, full_path);
+            continue;
+        }
+
+        const char *ext = strrchr(entry->d_name, '.');
+        if (ext && strcmp(ext, ".coda") == 0) {
+            string_array modname = string_array_init();
+            if (!peek_module_decl(full_path, &modname)) continue;
+
+            modentry_array_push(&ctx->module_map, (ModuleEntry){
+                .path = string_copy(string_make(full_path)),
+                .name = modname,
+                .mtime = (uint64_t)st.st_mtime,
+                .hash = 0,
+                .is_parsed = false,
+                .ast = NULL,
+            });
+        }
+    }
+
+    closedir(dir);
+}
+
+static bool string_array_eq(string_array *a, string_array *b) {
+    if (a->len != b->len) return false;
+    for (size_t i = 0; i < a->len; i++) {
+        if (!string_eq(a->data[i], b->data[i])) return false;
+    }
+    return true;
+}
+
+void resolve_includes(Analyser *ctx, Module *mod) {
+    for (size_t i = 0; i < mod->includes.len; i++) {
+        Include *inc = mod->includes.data[i];
+        ModuleEntry *entry = NULL;
+
+        for (size_t j = 0; j < ctx->module_map.len; j++) {
+            if (string_array_eq(&ctx->module_map.data[j].name, &inc->path)) {
+                entry = &ctx->module_map.data[j];
+                break;
+            }
+        }
+
+        if (!entry) {
+            error(inc->token, "Module not found in include paths");
+        }
+
+        if (!entry->is_parsed) {
+            entry->ast = parse_file(string_unmake(entry->path), NULL);
+
+            entry->ast->scope = scope_init(ctx->arena);
+            entry->ast->scope->parent = mod->scope;
+
+            entry->is_parsed = true;
+            resolve_includes(ctx, entry->ast);
+        }
+
+        inc->resolved = entry->ast;
+    }
+}
+
+void populate_module_namespaces(Analyser *ctx, Module *mod) {
+    if (!mod || !mod->scope) return;
+
+    for (size_t i = 0; i < mod->includes.len; i++) {
+        Include *inc = mod->includes.data[i];
+        if (!inc->resolved) continue;
+
+        string_array *target_path = &inc->path;
+        if (inc->alias.len > 0) {
+            target_path = &inc->alias;
+        }
+
+        if (target_path->len == 0) continue;
+
+        Scope *current_scope = mod->scope;
+
+        for (size_t j = 0; j < target_path->len - 1; j++) {
+            String part = target_path->data[j];
+            Symbol *existing_sym = NULL;
+
+            for (size_t k = 0; k < current_scope->symbols.len; k++) {
+                if (string_eq(current_scope->symbols.data[k]->name, part)) {
+                    existing_sym = current_scope->symbols.data[k];
+                    break;
+                }
+            }
+
+            if (existing_sym) {
+                if (existing_sym->decl && existing_sym->decl->type == DECL_NAMESPACE) {
+                    current_scope = existing_sym->decl->namespace->scope;
+                } else {
+                    fprintf(stderr, "\e[1;37merror:\e[0m Namespace ''%.*s'' is already defined.\n", string_fmt(part));
+                    exit(1);
+                }
+            } else {
+                Module *synth_mod = arena_calloc(ctx->arena, sizeof(Module));
+                synth_mod->name = part;
+                synth_mod->scope = scope_init(ctx->arena);
+                synth_mod->scope->parent = current_scope;
+
+                Decl *synth_decl = arena_calloc(ctx->arena, sizeof(Decl));
+                synth_decl->type = DECL_NAMESPACE;
+                synth_decl->namespace = synth_mod;
+
+                Symbol *synth_sym = arena_calloc(ctx->arena, sizeof(Symbol));
+                synth_sym->name = part;
+                synth_sym->decl = synth_decl;
+                synth_sym->flags = SYMFLAG_NAMESPACE;
+                synth_sym->defined_in = current_scope;
+                synth_decl->symbol = synth_sym;
+
+                syms_array_push(&current_scope->symbols, synth_sym);
+
+                current_scope = synth_mod->scope;
+            }
+        }
+
+        String leaf_name = target_path->data[target_path->len - 1];
+
+        Decl *leaf_decl = arena_calloc(ctx->arena, sizeof(Decl));
+        leaf_decl->type = DECL_NAMESPACE;
+        leaf_decl->namespace = inc->resolved;
+        leaf_decl->token = inc->token;
+
+        Symbol *leaf_sym = arena_calloc(ctx->arena, sizeof(Symbol));
+        leaf_sym->name = leaf_name;
+        leaf_sym->decl = leaf_decl;
+        leaf_sym->flags = SYMFLAG_NAMESPACE | SYMFLAG_EXPORT;
+        leaf_sym->defined_in = current_scope;
+        leaf_decl->symbol = leaf_sym;
+
+        syms_array_push(&current_scope->symbols, leaf_sym);
     }
 }

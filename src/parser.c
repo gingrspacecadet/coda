@@ -99,10 +99,21 @@ Include *parse_include(Parser *ctx) {
     if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_EQ) {
         consume(ctx);
         
-        inc->alias = (string_optional){
-            .has_value = true,
-            .value = expect(ctx, TOKENTYPE_IDENT, "Expected module alias name").value.value
-        };
+        while (true) {
+            token_optional t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
+                error(ctx, "Expected include alias");
+            }
+
+            string_array_push(&inc->alias, consume(ctx).value.value);
+
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_DOUBLECOLON) {
+                consume(ctx);
+                continue;
+            }
+            break;
+        }
     }
 
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected semicolon after include");
