@@ -68,6 +68,7 @@ typedef enum {
     SYMFLAG_EXTERN = 1 << 4,
     SYMFLAG_MUT = 1 << 5,
     SYMFLAG_GENERIC = 1 << 6,
+    SYMFLAG_NAMESPACE = 1 << 7,
 } SymbolFlags;
 
 struct Literal {
@@ -346,6 +347,7 @@ struct Decl {
         DECL_UNION,
         DECL_TYPE,
         DECL_ENUM,
+        DECL_NAMESPACE,
     } type;
     union {
         FnDecl *fn;
@@ -354,6 +356,7 @@ struct Decl {
         UnionDecl *_union;
         TypeDecl *_type;
         EnumDecl *_enum;
+        Module *namespace;
     };
     attr_array attributes;
     Symbol *symbol;
@@ -413,7 +416,7 @@ INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 struct Include {
     string_array path;
-    string_optional alias;
+    string_array alias;
     Module *resolved;
     Token token;
 };

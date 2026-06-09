@@ -1161,54 +1161,126 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             break;
         }
         case EXPR_PATH: {
-            if (expr->path.components.len < 2) {
-                error(expr->token, "Invalid path expression"); // shouldn't be possible but just in case
+            size_t components_len = expr->path.components.len;
+            if (components_len < 2) {
+                error(expr->token, "Invalid path expression");
             }
 
             String base_name = expr->path.components.data[0];
-            Symbol *parent_sym = lookup_symbol(ctx, base_name);
-            if (!parent_sym) {
-                error(expr->token, format("Unknown namespace %.*s", string_fmt(base_name)));
+            Symbol *current_sym = lookup_symbol(ctx, base_name);
+            if (!current_sym) {
+                error(expr->token, format("Unknown identifier %.*s", string_fmt(base_name)));
             }
 
-            String target_name = expr->path.components.data[1];
+            for (size_t i = 1; i < components_len - 1; i++) {
+                String next_name = expr->path.components.data[i];
 
-            if (parent_sym->decl && parent_sym->decl->type == DECL_ENUM) {
-                EnumDecl *en = parent_sym->decl->_enum;
-                bool found = false;
+                if (!current_sym->decl || current_sym->decl->type != DECL_NAMESPACE) {
+                    error(expr->token, format("%.*s is not a namespace container", string_fmt(current_sym->name)));
+                }
 
-                for (size_t i = 0; i < en->variants.len; i++) {
-                    if (string_eq(en->variants.data[i].name, target_name)) {
-                        result_type = parent_sym->type;
-                        expr->symbol = parent_sym;
-                        found = true;
+                Module *mod = current_sym->decl->namespace_module;
+                Scope *mod_scope = mod->scope;
+                Symbol *found_next = NULL;
+
+                for (size_t j = 0; j < mod_scope->symbols.len; j++) {
+                    Symbol *candidate = mod_scope->symbols.data[j];
+                    if (string_eq(candidate->name, next_name)) {
+                        if (!(candidate->flags & SYMFLAG_EXPORT)) {
+                            error(expr->token, format("Namespace %.*s is private to module %.*s", 
+                                string_fmt(candidate->name), string_fmt(mod->name)));
+                        }
+                        found_next = candidate;
                         break;
                     }
                 }
 
-                if (!found) {
-                    error(expr->token, format("Enum %.*s has no variant %.*s", string_fmt(parent_sym->name), string_fmt(target_name)));
+                if (!found_next) {
+                    error(expr->token, format("No nested namespace %.*s found in module %.*s", 
+                        string_fmt(next_name), string_fmt(mod->name)));
                 }
+
+                current_sym = found_next;
             }
-            else if (parent_sym->decl && parent_sym->decl->type == DECL_UNION) {
-                UnionDecl *unn = parent_sym->decl->_union;
-                bool found = false;
 
-                for (size_t i = 0; i < unn->members.len; i++) {
-                    if (string_eq(unn->members.data[i]->name, target_name)) {
-                        result_type = parent_sym->type;
-                        expr->symbol = parent_sym;
-                        found = true;
-                        break;
+            String target_name = expr->path.components.data[components_len - 1];
+
+            if (!current_sym->decl) {
+                error(expr->token, "Invalid path resolution state");
+            }
+
+            switch (current_sym->decl->type) {
+                case DECL_NAMESPACE: {
+                    Module *mod = current_sym->decl->namespace_module;
+                    Scope *mod_scope = mod->scope;
+                    Symbol *target_sym = NULL;
+
+                    for (size_t i = 0; i < mod_scope->symbols.len; i++) {
+                        Symbol *candidate = mod_scope->symbols.data[i];
+                        if (string_eq(candidate->name, target_name)) {
+                            if (!(candidate->flags & SYMFLAG_EXPORT)) {
+                                error(expr->token, format("Symbol %.*s is private to module %.*s", 
+                                    string_fmt(candidate->name), string_fmt(mod->name)));
+                            }
+                            target_sym = candidate;
+                            break;
+                        }
                     }
+
+                    if (!target_sym) {
+                        error(expr->token, format("No symbol %.*s found in namespace %.*s", 
+                            string_fmt(target_name), string_fmt(mod->name)));
+                    }
+
+                    result_type = target_sym->type;
+                    expr->symbol = target_sym;
+                    break;
                 }
 
-                if (!found) {
-                    error(expr->token, format("Union %.*s has no constructor variant %.*s", string_fmt(parent_sym->name), string_fmt(target_name)));
+                case DECL_ENUM: {
+                    EnumDecl *en = current_sym->decl->_enum;
+                    bool found = false;
+
+                    for (size_t i = 0; i < en->variants.len; i++) {
+                        if (string_eq(en->variants.data[i].name, target_name)) {
+                            result_type = current_sym->type;
+                            expr->symbol = current_sym;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        error(expr->token, format("Enum %.*s has no variant %.*s", 
+                            string_fmt(current_sym->name), string_fmt(target_name)));
+                    }
+                    break;
                 }
-            } 
-            else {
-                error(expr->token, "Path resolution is only supported on Enums and Unions currently");
+
+                case DECL_UNION: {
+                    UnionDecl *unn = current_sym->decl->_union;
+                    bool found = false;
+
+                    for (size_t i = 0; i < unn->members.len; i++) {
+                        if (string_eq(unn->members.data[i]->name, target_name)) {
+                            result_type = current_sym->type;
+                            expr->symbol = current_sym;
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        error(expr->token, format("Union %.*s has no constructor variant %.*s", 
+                            string_fmt(current_sym->name), string_fmt(target_name)));
+                    }
+                    break;
+                }
+
+                default: {
+                    error(expr->token, format("Path resolution is not supported out of container type: %.*s", 
+                        string_fmt(current_sym->name)));
+                }
             }
 
             goto check_expr_finished;
