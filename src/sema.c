@@ -936,12 +936,27 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             size_t provided_args = expr->call.args.len;
             size_t virtual_args_len = is_method_call ? (provided_args + 1) : provided_args;
 
-            if (virtual_args_len != expected_params) {
-                if (callee_sym && callee_sym->decl) {
-                    error(callee_sym->decl->token, format("Function expects %ld arguments", expected_params));
-                } else {
-                    error(expr->call.callee->token, format("Function expects %ld arguments, got %ld", expected_params, provided_args));
+            if (virtual_args_len < expected_params) {
+                size_t missing_count = expected_params - virtual_args_len;
+
+                for (size_t i = virtual_args_len; i < expected_params; i++) {
+                    if (!callee_type->fn.params.data[i].default_value) {
+                        Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : expr->call.callee->token;
+                        error(err_token, format("Missing argument for parameter %ld which has no default value", i + 1));
+                    }
                 }
+
+                for (size_t i = virtual_args_len; i < expected_params; i++) {
+                    exprs_array_push(&expr->call.args, callee_type->fn.params.data[i].default_value);
+                }
+
+                provided_args = expr->call.args.len;
+                virtual_args_len = is_method_call ? (provided_args + 1) : provided_args;
+            }
+
+            if (virtual_args_len > expected_params) {
+                Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : expr->call.callee->token;
+                error(err_token, format("Function expects %ld arguments, got %ld", expected_params, provided_args));
             }
 
             for (size_t i = 0; i < expected_params; i++) {

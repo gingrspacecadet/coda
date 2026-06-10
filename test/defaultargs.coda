@@ -1,0 +1,10 @@
+module defaultargs;
+
+fn int test(int a = 1) {
+    return a;
+}
+
+@export
+fn int main() {
+    return test();
+}
