@@ -13,6 +13,26 @@ typedef struct {
     int64_t offset;
 } SymbolOffset;
 
+static void emit_escaped_string(FILE *out, String str) {
+    for (size_t i = 0; i < str.length; i++) {
+        char c = str.data[i];
+        switch (c) {
+            case '\n': fprintf(out, "\\n"); break;
+            case '\r': fprintf(out, "\\r"); break;
+            case '\t': fprintf(out, "\\t"); break;
+            case '\\': fprintf(out, "\\\\"); break;
+            case '\"': fprintf(out, "\\\""); break;
+            default:
+                if (c >= 32 && c <= 126) {
+                    fputc(c, out);
+                } else {
+                    fprintf(out, "\\%03o", (unsigned char)c);
+                }
+                break;
+        }
+    }
+}
+
 static int64_t compute_stack_layout(MirFunction *fn, SymbolOffset *sym_offsets, size_t *out_total_size) {
     int64_t current_offset = 0;
     size_t index = 0;
@@ -404,7 +424,9 @@ void backend(FILE *out, MirBuilder *builder, MirModule *mod) {
         String str = mod->strings.data[i];
 
         fprintf(out, ".Lstr_bytes_%zu:\n", i);
-        fprintf(out, "    .string \"%.*s\"\n", string_fmt(str));
+        fprintf(out, "    .string \"");
+        emit_escaped_string(out, str);
+        fprintf(out, "\"\n", string_fmt(str));
 
     }
 
