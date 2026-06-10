@@ -79,6 +79,7 @@ Include *parse_include(Parser *ctx) {
     Include *inc = arena_calloc(ctx->arena, sizeof(Include));
     inc->token = consume(ctx);
     inc->path = string_array_init();
+    inc->alias = string_array_init();
 
     while (true) {
         token_optional t = peek(ctx);

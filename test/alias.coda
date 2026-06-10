@@ -1,0 +1,9 @@
+module alias;
+
+include std::io = io;
+
+@export
+fn int main() {
+    io::printn("Hello, world!");
+    return 0;
+}
