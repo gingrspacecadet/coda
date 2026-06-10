@@ -495,6 +495,7 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     mir_fn->params = hir_fn->params;
     mir_fn->locals = hir_fn->locals;
     mir_fn->symbol = hir_fn->symbol;
+    mir_fn->is_export = hir_fn->is_export;
     ctx->temp_counter = 0;
 
     MirBlock *entry = new_block(ctx);

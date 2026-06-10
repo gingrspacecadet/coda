@@ -75,6 +75,7 @@ typedef struct {
     uint32_t temp_count;
     syms_array params;
     syms_array locals;
+    bool is_export;
 } MirFunction;
 
 INSTANTIATE(MirFunction *, mirfns, ARRAY_TEMPLATE)

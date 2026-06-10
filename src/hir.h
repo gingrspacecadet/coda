@@ -128,6 +128,7 @@ typedef struct {
     syms_array params;
     syms_array locals;
     bool is_extern;
+    bool is_export;
     HirStmt *body;
 } HirFnDecl;
 

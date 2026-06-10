@@ -3,6 +3,7 @@
 #include "sema.h"
 #include "error.h"
 
+static String generate_mangled_name(Analyser *ctx, Module *mod, String sym_name, Token err_tok);
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags);
 Symbol *lookup_symbol(Analyser *ctx, String name);
 void register_globals(Analyser *ctx, Module *mod);
@@ -242,6 +243,8 @@ void register_globals(Analyser *ctx, Module *mod) {
                 if (d->fn->is_extern) flags |= SYMFLAG_EXTERN;
 
                 Symbol *sym = declare_symbol(ctx, d->fn->name, flags);
+                if (d->is_export) sym->mangled = generate_mangled_name(ctx, mod, d->fn->name, d->token);
+                else sym->mangled = sym->name;
                 TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
                 fn_type->type = TYPEREF_FN;
                 fn_type->fn.ret_type = d->fn->ret_type;
@@ -1507,7 +1510,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
             if (template_str) {
                 Symbol *concrete_sym = monomorphise_struct(mod, template_str, substituted_args);
 
-                TypeRef *rewritten = arena_alloc(mod->arena, sizeof(TypeRef));
+                TypeRef *rewritten = arena_calloc(mod->arena, sizeof(TypeRef));
                 rewritten->type = TYPEREF_NAMED;
                 rewritten->named.name = concrete_sym->name;
                 rewritten->named.generic_args = typerefs_array_init();
@@ -1520,7 +1523,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
         return src; 
     }
 
-    TypeRef *dst = arena_alloc(mod->arena, sizeof(TypeRef));
+    TypeRef *dst = arena_calloc(mod->arena, sizeof(TypeRef));
     *dst = *src;
 
     switch (dst->type) {
@@ -1562,7 +1565,7 @@ static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_a
         }
     }
 
-    StructDecl *concrete_struct = arena_alloc(mod->arena, sizeof(StructDecl));
+    StructDecl *concrete_struct = arena_calloc(mod->arena, sizeof(StructDecl));
     concrete_struct->name = mangled_name;
     concrete_struct->generic_params = (genparam_array){0};
     concrete_struct->members = vardecls_array_init();
@@ -1570,23 +1573,23 @@ static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_a
 
     for (size_t i = 0; i < template->members.len; i++) {
         VarDecl *src_member = template->members.data[i];
-        VarDecl *dst_member = arena_alloc(mod->arena, sizeof(VarDecl));
+        VarDecl *dst_member = arena_calloc(mod->arena, sizeof(VarDecl));
         *dst_member = *src_member;
         
         dst_member->type = ast_substitute_type(mod, src_member->type, template->generic_params, concrete_args);
         vardecls_array_push(&concrete_struct->members, dst_member);
     }
 
-    Decl *new_decl = arena_alloc(mod->arena, sizeof(Decl));
+    Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
     new_decl->type = DECL_STRUCT;
     new_decl->_struct = concrete_struct;
     
-    Symbol *sym = arena_alloc(mod->arena, sizeof(Symbol));
+    Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
     sym->name = mangled_name;
     sym->decl = new_decl;
     sym->flags = SYMFLAG_TYPE;
     
-    TypeRef *struct_type = arena_alloc(mod->arena, sizeof(TypeRef));
+    TypeRef *struct_type = arena_calloc(mod->arena, sizeof(TypeRef));
     struct_type->type = TYPEREF_NAMED;
     struct_type->named.name = mangled_name;
     struct_type->type_symbol = sym;
@@ -1605,7 +1608,7 @@ static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_a
 static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typerefs_array args) {
     if (!src) return NULL;
 
-    Expr *dst = arena_alloc(mod->arena, sizeof(Expr));
+    Expr *dst = arena_calloc(mod->arena, sizeof(Expr));
     *dst = *src;
     
     dst->resolved_type = ast_substitute_type(mod, src->resolved_type, params, args);
@@ -1669,7 +1672,7 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
 static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typerefs_array args) {
     if (!src) return NULL;
 
-    Stmt *dst = arena_alloc(mod->arena, sizeof(Stmt));
+    Stmt *dst = arena_calloc(mod->arena, sizeof(Stmt));
     *dst = *src;
 
     switch (src->type) {
@@ -1713,7 +1716,7 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
 
         case STMT_VAR:
             // Fix pointer alias bug: allocate a new VarDecl container
-            dst->var = arena_alloc(mod->arena, sizeof(VarDecl));
+            dst->var = arena_calloc(mod->arena, sizeof(VarDecl));
             *dst->var = *src->var;
             dst->var->init = clone_ast_expr(mod, src->var->init, params, args);
             dst->var->type = ast_substitute_type(mod, src->var->type, params, args);
@@ -1729,7 +1732,7 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
                 
                 dc.body = clone_ast_stmt(mod, sc.body, params, args);
                 if (sc.var) {
-                    dc.var = arena_alloc(mod->arena, sizeof(VarDecl));
+                    dc.var = arena_calloc(mod->arena, sizeof(VarDecl));
                     *dc.var = *sc.var;
                     dc.var->init = clone_ast_expr(mod, sc.var->init, params, args);
                     dc.var->type = ast_substitute_type(mod, sc.var->type, params, args);
@@ -1790,7 +1793,7 @@ static void scan_expr(Module *mod, Expr *expr) {
                         break;
                     }
 
-                    FnDecl *concrete_fn = arena_alloc(mod->arena, sizeof(FnDecl));
+                    FnDecl *concrete_fn = arena_calloc(mod->arena, sizeof(FnDecl));
                     *concrete_fn = *template;
                     
                     concrete_fn->name = mangled_name;
@@ -1806,17 +1809,17 @@ static void scan_expr(Module *mod, Expr *expr) {
                         param_array_push(&concrete_fn->params, p);
                     }
 
-                    Decl *new_decl = arena_alloc(mod->arena, sizeof(Decl));
+                    Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
                     new_decl->type = DECL_FN;
                     new_decl->fn = concrete_fn;
                     new_decl->token = template->token;
                     
-                    Symbol *sym = arena_alloc(mod->arena, sizeof(Symbol));
+                    Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
                     sym->name = mangled_name;
                     sym->decl = new_decl;
                     sym->flags = SYMFLAG_FN;
                     
-                    TypeRef *fn_type = arena_alloc(mod->arena, sizeof(TypeRef));
+                    TypeRef *fn_type = arena_calloc(mod->arena, sizeof(TypeRef));
                     fn_type->type = TYPEREF_FN;
                     fn_type->fn.ret_type = concrete_fn->ret_type;
                     fn_type->fn.params = concrete_fn->params;
@@ -2118,4 +2121,30 @@ void populate_module_namespaces(Analyser *ctx, Module *mod) {
 
         syms_array_push(&current_scope->symbols, leaf_sym);
     }
+}
+
+static String generate_mangled_name(Analyser *ctx, Module *mod, String sym_name, Token err_tok) {
+    if (sym_name.length >= 2 && sym_name.data[0] == '_' && sym_name.data[1] == 'C') {
+        error(err_tok, "Identifiers starting with '_C' are reserved for the compiler");
+    }
+
+    if (string_eq(sym_name, string_make("main"))) return sym_name;
+
+    char buffer[512];
+    int written = 0;
+
+    written += snprintf(buffer + written, sizeof(buffer) - written, "_C");
+
+    if (mod && mod->name.length > 0) {
+        written += snprintf(buffer + written, sizeof(buffer) - written, "%zu%.*s", mod->name.length, string_fmt(mod->name));
+    }
+
+    written += snprintf(buffer + written, sizeof(buffer) - written, "%zu%.*s", sym_name.length, string_fmt(sym_name));
+
+    String mangled;
+    mangled.length = written;
+    mangled.data = arena_calloc(ctx->arena, mangled.length);
+    memcpy(mangled.data, buffer, mangled.length);
+
+    return mangled;
 }

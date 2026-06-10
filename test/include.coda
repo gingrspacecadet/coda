@@ -2,6 +2,7 @@ module main;
 
 include test;
 
+@export
 fn int main() {
     return test::tester();
 }

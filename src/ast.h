@@ -423,6 +423,7 @@ struct Include {
 
 struct Symbol {
     String name;
+    String mangled;
     Decl *decl;
     TypeRef *type;
     uint32_t flags;

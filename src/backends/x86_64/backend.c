@@ -319,7 +319,7 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
             }
             
             if (inst->lhs.type == MIR_VAL_SYMBOL) {
-                fprintf(out, "    call %s\n", inst->lhs.symbol->name.data);
+                fprintf(out, "    call %.*s\n", string_fmt(inst->lhs.symbol->mangled));
             } else {
                 emit_load(out, "rax", fn, offsets, temp_start, inst->lhs);
                 fprintf(out, "    call rax\n");
@@ -358,8 +358,8 @@ void backend(FILE *out, MirBuilder *builder, MirModule *mod) {
     for (size_t f = 0; f < mod->functions.len; f++) {
         MirFunction *fn = mod->functions.data[f];
         
-        fprintf(out, ".global %s\n", fn->symbol->name.data);
-        fprintf(out, "%s:\n", fn->symbol->name.data);
+        if (fn->is_export) fprintf(out, ".global %.*s\n", string_fmt(fn->symbol->mangled));
+        fprintf(out, "%.*s:\n", string_fmt(fn->symbol->mangled));
 
         SymbolOffset *offsets = malloc(sizeof(SymbolOffset) * (fn->params.len + fn->locals.len));
         size_t total_stack_size = 0;
