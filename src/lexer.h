@@ -131,7 +131,7 @@ static char *read_file(char *path) {
     return data;
 
 err:
-    fprintf(stderr, "read_file failed\n");
+    perror(path);
     exit(1);
 }
 

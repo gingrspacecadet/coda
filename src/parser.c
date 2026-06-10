@@ -1454,9 +1454,20 @@ Module *parse_module(Parser *ctx) {
     m->includes = includes_array_init();
     m->decls = decls_array_init();
     m->arena = ctx->arena;
+    m->name = string_array_init();
 
     Token modname = expect(ctx, TOKENTYPE_IDENT, "Expected module name");
-    m->name = modname.value.value;
+    string_array_push(&m->name, modname.value.value);
+
+    token_optional next = peek(ctx);
+    while (next.has_value && next.value.type == TOKENTYPE_DOUBLECOLON) {
+        consume(ctx);
+
+        Token ident = expect(ctx, TOKENTYPE_IDENT, "Expected identifier after '::'");
+        string_array_push(&m->name, ident.value.value);
+
+        next = peek(ctx);
+    }
 
     expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
 

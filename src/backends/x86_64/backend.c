@@ -344,7 +344,7 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
             fprintf(out, "    je .Lblock_%d\n", inst->label_id);
             break;
 
-        case MIR_OP_CALL:
+        case MIR_OP_CALL: {
             size_t reg_idx = 0;
             for (size_t i = 0; i < inst->arg_count && reg_idx < 6; i++) {
                 MirOperand arg = inst->call_args[i];
@@ -353,15 +353,10 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
                 sz = (sz + 7) & ~7;
 
                 if (sz > 8) {
-                    char op_str[128];
-                    resolve_operand_string(fn, offsets, temp_start, arg, op_str, sizeof(op_str));
-                    fprintf(out, "    mov %s, %s\n", ABI_ARG_REGS[reg_idx++], op_str);
+                    emit_operand_addr(out, "rax", fn, offsets, temp_start, arg);
 
-                    if (arg.type == MIR_VAL_SYMBOL || arg.type == MIR_VAL_TEMP) {
-                        int64_t off = (arg.type == MIR_VAL_SYMBOL) 
-                            ? lookup_symbol_offset(fn, offsets, arg.symbol)
-                            : temp_start - ((arg.temp + 1) * 8);
-                        fprintf(out, "    mov %s, QWORD PTR [rbp%s%ld]\n", ABI_ARG_REGS[reg_idx++], (off + 8) >= 0 ? "+" : "", off + 8);
+                    for (size_t offset = 0; offset < sz && reg_idx < 6; offset += 8) {
+                        fprintf(out, "    mov %s, QWORD PTR [rax+%zu]\n", ABI_ARG_REGS[reg_idx++], offset);
                     }
                 } else {
                     emit_load(out, ABI_ARG_REGS[reg_idx++], fn, offsets, temp_start, arg);
@@ -377,6 +372,7 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
             
             emit_store(out, inst->result, "rax", fn, offsets, temp_start);
             break;
+        }
 
         case MIR_OP_RET: {
             MirOperand ret_val = null_op();

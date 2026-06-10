@@ -21,7 +21,7 @@
     #define HOST_OS "windows"
     #define SO_EXT ".dll"
     #define PATH_SEP "\\"
-    #define DEFAULT_ROOT "C:\\ProgramData\\coda"
+    #define ROOT "C:\\ProgramData\\coda"
 #else
     #include <dlfcn.h>
     #define lib_handle void*
@@ -31,7 +31,7 @@
     #define HOST_OS "linux"
     #define SO_EXT ".so"
     #define PATH_SEP "/"
-    #define DEFAULT_ROOT "/usr/share/coda"
+    #define ROOT "/usr/share/coda"
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
@@ -89,23 +89,25 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // optionally override the root dir
-    const char *root = getenv("CODA_ROOT");
-    if (!root) {
-        root = DEFAULT_ROOT;
-    }
-
     // construct backend shared library path dynamically
     // e.g., /usr/share/coda/x86_64/backend.so
+    const char *backend_path_override = getenv("CODA_BACKEND");
     char backend_path[512];
-    snprintf(backend_path, sizeof(backend_path), "%s" PATH_SEP "%s" PATH_SEP "backend%s",
-             root, target_arch, SO_EXT);
+    if (backend_path_override) {
+        snprintf(backend_path, sizeof(backend_path), "%s", backend_path_override);
+    } else {
+        snprintf(backend_path, sizeof(backend_path), ROOT PATH_SEP "%s" PATH_SEP "backend" SO_EXT, target_arch);
+    }
 
     // construct the target standard library directory path
     // e.g., /usr/share/coda/x86_64/linux/lib/
+    const char *stdlib_path_override = getenv("CODA_STDLIB");
     char stdlib_path[512];
-    snprintf(stdlib_path, sizeof(stdlib_path), "%s" PATH_SEP "%s" PATH_SEP "%s" PATH_SEP "lib" PATH_SEP,
-             root, target_arch, target_os);
+    if (stdlib_path_override) {
+        snprintf(stdlib_path, sizeof(stdlib_path), "%s", stdlib_path_override);
+    } else {
+        snprintf(stdlib_path, sizeof(stdlib_path), ROOT PATH_SEP "%s" PATH_SEP "%s" PATH_SEP "lib" PATH_SEP, target_arch, target_os);
+    }
 
     Parser parser;
     Module *module = parse_file((char*)source_path, &parser);

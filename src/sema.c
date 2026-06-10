@@ -1207,7 +1207,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     if (string_eq(candidate->name, next_name)) {
                         if (!(candidate->flags & SYMFLAG_EXPORT)) {
                             error(expr->token, format("Namespace '%.*s' is private to module '%.*s'", 
-                                string_fmt(candidate->name), string_fmt(mod->name)));
+                                string_fmt(candidate->name), string_fmt(module_name_to_string(&mod->name))));
                         }
                         found_next = candidate;
                         break;
@@ -1216,7 +1216,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 if (!found_next) {
                     error(expr->token, format("No nested namespace '%.*s' found in module '%.*s'", 
-                        string_fmt(next_name), string_fmt(mod->name)));
+                        string_fmt(next_name), string_fmt(module_name_to_string(&mod->name))));
                 }
 
                 current_sym = found_next;
@@ -1239,7 +1239,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                         if (string_eq(candidate->name, target_name)) {
                             if (!(candidate->flags & SYMFLAG_EXPORT)) {
                                 error(expr->token, format("Symbol '%.*s' is private to module '%.*s'", 
-                                    string_fmt(candidate->name), string_fmt(mod->name)));
+                                    string_fmt(candidate->name), string_fmt(module_name_to_string(&mod->name))));
                             }
                             target_sym = candidate;
                             break;
@@ -1248,7 +1248,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                     if (!target_sym) {
                         error(expr->token, format("No symbol '%.*s' found in namespace '%.*s'", 
-                            string_fmt(target_name), string_fmt(mod->name)));
+                            string_fmt(target_name), string_fmt(module_name_to_string(&mod->name))));
                     }
 
                     result_type = target_sym->type;
@@ -2088,7 +2088,12 @@ void populate_module_namespaces(Analyser *ctx, Module *mod) {
                 }
             } else {
                 Module *synth_mod = arena_calloc(ctx->arena, sizeof(Module));
-                synth_mod->name = part;
+                
+                // --- FIX: Initialize the string array and push the component ---
+                synth_mod->name = string_array_init();
+                string_array_push(&synth_mod->name, part);
+                // ---------------------------------------------------------------
+                
                 synth_mod->scope = scope_init(ctx->arena);
                 synth_mod->scope->parent = current_scope;
 
@@ -2139,8 +2144,12 @@ static String generate_mangled_name(Analyser *ctx, Module *mod, String sym_name,
 
     written += snprintf(buffer + written, sizeof(buffer) - written, "_C");
 
-    if (mod && mod->name.length > 0) {
-        written += snprintf(buffer + written, sizeof(buffer) - written, "%zu%.*s", mod->name.length, string_fmt(mod->name));
+    if (mod && mod->name.len > 0) {
+        for (size_t i = 0; i < mod->name.len; i++) {
+            String part = mod->name.data[i];
+            written += snprintf(buffer + written, sizeof(buffer) - written, "%zu%.*s", 
+                                part.length, string_fmt(part));
+        }
     }
 
     written += snprintf(buffer + written, sizeof(buffer) - written, "%zu%.*s", sym_name.length, string_fmt(sym_name));
