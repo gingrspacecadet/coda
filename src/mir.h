@@ -80,9 +80,35 @@ typedef struct {
 
 INSTANTIATE(MirFunction *, mirfns, ARRAY_TEMPLATE)
 
+typedef enum {
+    MIR_INIT_INT,
+    MIR_INIT_SYMBOL,
+    MIR_INIT_ZERO
+} MirInitType;
+
+typedef struct {
+    MirInitType type;
+    union {
+        int64_t int_val;
+        Symbol *symbol_val;
+    };
+} MirInitVal;
+
+INSTANTIATE(MirInitVal, mirinitvals, ARRAY_TEMPLATE)
+
+typedef struct {
+    Symbol *symbol;
+    TypeRef *type;
+    bool is_export;
+    mirinitvals_array init_vals; 
+} MirVarDecl;
+
+INSTANTIATE(MirVarDecl *, mirvardecls, ARRAY_TEMPLATE)
+
 typedef struct {
     mirfns_array functions;
     string_array strings;
+    mirvardecls_array globals;
 } MirModule;
 
 typedef struct {

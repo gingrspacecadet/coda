@@ -111,14 +111,13 @@ int main(int argc, char **argv) {
 
     Parser parser;
     Module *module = parse_file((char*)source_path, &parser);
-    ast_pass_monomorphise(module);
     
     Analyser analyser = analyser_init(module, module->arena);
     
     scan_dir(&analyser, stdlib_path);
     scan_dir(&analyser, ".");
     resolve_includes(&analyser, module);
-
+    
     populate_module_namespaces(&analyser, module);
     for (size_t i = 0; i < analyser.module_map.len; i++) {
         if (analyser.module_map.data[i].is_parsed) {
@@ -127,6 +126,7 @@ int main(int argc, char **argv) {
     }
     
     error_set_source(parser.lexer->source);
+    ast_pass_monomorphise(module);
     analyse(&analyser);
 
     HirModule *hir = hir_lower_module(&analyser, module);

@@ -440,6 +440,32 @@ void backend(FILE *out, MirBuilder *builder, MirModule *mod) {
         fprintf(out, "    .quad .Lstr_bytes_%zu\n", i);
     }
 
+    for (size_t i = 0; i < mod->globals.len; i++) {
+        MirVarDecl *g = mod->globals.data[i];
+
+        fprintf(out, "    .align 8\n");
+        if (g->is_export) {
+            fprintf(out, ".global %.*s\n", string_fmt(g->symbol->name));
+        }
+        fprintf(out, "%.*s:\n", string_fmt(g->symbol->name));
+
+        if (g->init_vals.len > 0) {
+            for (size_t j = 0; j < g->init_vals.len; j++) {
+                MirInitVal *val = &g->init_vals.data[j];
+
+                if (val->type == MIR_INIT_SYMBOL) {
+                    fprintf(out, "    .quad %.*s\n", string_fmt(val->symbol_val->name));
+                } else if (val->type == MIR_INIT_INT) {
+                    fprintf(out, "    .quad %lld\n", val->int_val);
+                } else if (val->type == MIR_INIT_ZERO) {
+                    fprintf(out, "    .quad 0\n");
+                }
+            }
+        } else {
+            fprintf(out, "    .quad 0\n");
+        }
+    }
+
     fprintf(out, "\n.section .text\n");
     fprintf(out, ".intel_syntax noprefix\n");
 

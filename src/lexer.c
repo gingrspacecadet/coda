@@ -223,7 +223,7 @@ Token lex_next_token(Lexer *ctx) {
                 break;
             case '-':
                 if (peek(ctx).has_value && peek(ctx).value == '=') { consume(ctx); t.type = TOKENTYPE_MINUSEQ; }
-                else if (peek(ctx).has_value && peek(ctx).value == '>') { consume(ctx); t.type == TOKENTYPE_RARROW; }
+                else if (peek(ctx).has_value && peek(ctx).value == '>') { consume(ctx); t.type = TOKENTYPE_RARROW; }
                 else t.type = TOKENTYPE_MINUS;
                 break;
             case '*':

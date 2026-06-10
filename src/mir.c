@@ -532,9 +532,53 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     return mir_fn;
 }
 
+static void mir_lower_global(MirBuilder *builder, MirModule *mir_mod, HirVarDecl *hir_var) {
+    MirVarDecl *mir_var = arena_calloc(builder->arena, sizeof(MirVarDecl));
+    mir_var->symbol = hir_var->symbol;
+    mir_var->type = hir_var->type;
+    mir_var->is_export = hir_var->is_export;
+    mir_var->init_vals = mirinitvals_array_init();
+
+    if (hir_var->init) {
+        if (hir_var->init->type == HIR_EXPR_INIT) {
+            for (size_t i = 0; i < hir_var->init->init_list.fields.len; i++) {
+                HirExpr *val = hir_var->init->init_list.fields.data[i].value;
+                MirInitVal init_val = {0};
+
+                if (val->type == HIR_EXPR_VAR) {
+                    init_val.type = MIR_INIT_SYMBOL;
+                    init_val.symbol_val = val->var.symbol;
+                } else if (val->type == HIR_EXPR_LIT) {
+                    if (val->resolved_type->type == TYPEREF_NAMED && 
+                        string_eq(val->resolved_type->type_symbol->name, string_make("$null"))) {
+                        init_val.type = MIR_INIT_ZERO;
+                    } else {
+                        init_val.type = MIR_INIT_INT;
+                        init_val.int_val = val->literal._int;
+                    }
+                }
+                mirinitvals_array_push(&mir_var->init_vals, init_val);
+            }
+        } else if (hir_var->init->type == HIR_EXPR_LIT) {
+            MirInitVal init_val = {
+                .type = MIR_INIT_INT,
+                .int_val = hir_var->init->literal._int
+            };
+            mirinitvals_array_push(&mir_var->init_vals, init_val);
+        }
+    }
+
+    mirvardecls_array_push(&mir_mod->globals, mir_var);
+}
+
 MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     MirModule *mod = arena_calloc(ctx->arena, sizeof(MirModule));
     mod->functions = mirfns_array_init();
+    mod->globals = mirvardecls_array_init();
+
+    for (size_t i = 0; i < hir->globals.len; i++) {
+        mir_lower_global(ctx, mod, hir->globals.data[i]);
+    }
 
     for (size_t i = 0; i < hir->functions.len; i++) {
         if (hir->functions.data[i]->is_extern) continue;

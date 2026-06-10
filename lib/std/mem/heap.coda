@@ -1,0 +1,44 @@
+module std::mem;
+
+include std::system;
+
+@export
+struct Allocator {
+    fn uint8 mut *? (Allocator mut *self, uint64 size) allocate;
+    fn none (Allocator mut *self, uint8 mut *ptr, uint64 size) free;
+    uint8 mut *? context;
+}
+
+fn uint8 mut *? system_alloc_pages(uint64 size) {
+    uint8 mut *ptr = (uint8 mut *)std::system::syscall(9, 0u, size, 3u, 34u, 18446744073709551615u, 0u);
+
+    if ((int64)ptr < 0) {
+        return null;
+    }
+    return ptr;
+}
+
+fn none system_free_pages(uint8 mut *ptr, uint64 size) {
+    std::system::syscall(11, (uint64)ptr, size);
+}
+
+fn uint8 mut *? default_allocate_impl(Allocator mut *self, uint64 size) {
+    return system_alloc_pages(size);
+}
+
+fn none default_free_impl(Allocator mut *self, uint8 mut *ptr, uint64 size) {
+    system_free_pages(ptr, size);
+}
+
+@export
+Allocator default_heap = {
+    .allocate = default_allocate_impl,
+    .free = default_free_impl,
+    .context = null
+};
+
+@export
+fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &default_heap) {
+    uint64 total_size = count * $sizeof(T);
+    return (T mut *)alloc->allocate(alloc, total_size);
+}

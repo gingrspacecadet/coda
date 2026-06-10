@@ -289,6 +289,7 @@ TypeRef *parse_type_single(Parser *ctx) {
             Token name;
             if (t.has_value) {
                 name = t.value;
+                consume(ctx);
             }
 
             Param p = (Param){
@@ -1409,12 +1410,12 @@ Decl *parse_decl(Parser *ctx) {
     }
 
     switch (t.value.type) {
-        case TOKENTYPE_FN: {
-            d->type = DECL_FN;
-            d->fn = parse_fn_decl(ctx);
-            d->token = d->fn->token;
-            break;
-        }
+        // case TOKENTYPE_FN: {
+        //     d->type = DECL_FN;
+        //     d->fn = parse_fn_decl(ctx);
+        //     d->token = d->fn->token;
+        //     break;
+        // }
         case TOKENTYPE_STRUCT: {
             d->type = DECL_STRUCT;
             d->_struct = parse_struct_decl(ctx);
@@ -1440,6 +1441,25 @@ Decl *parse_decl(Parser *ctx) {
             break;
         }
         default: {
+            if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_FN) {
+                ParserCheckpoint ch = get_checkpoint(ctx);
+                consume(ctx);
+                token_optional t;
+                if (looks_like_type(ctx, &t) && t.has_value && t.value.type == TOKENTYPE_IDENT) {
+                    restore_checkpoint(ctx, ch);
+                    d->type = DECL_FN;
+                    d->fn = parse_fn_decl(ctx);
+                    d->token = d->fn->token;
+                    break;
+                } else {
+                    restore_checkpoint(ctx, ch);
+                }
+            } else {
+                d->type = DECL_VAR;
+                d->var = parse_var_stmt(ctx)->var;
+                d->token = d->var->token;
+                break;
+            }
             error(ctx, "Expected declaration");
         }
     }

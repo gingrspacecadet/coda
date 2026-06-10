@@ -132,10 +132,19 @@ typedef struct {
     HirStmt *body;
 } HirFnDecl;
 
+typedef struct {
+    Symbol *symbol;
+    TypeRef *type;
+    bool is_export;
+    HirExpr *init;
+} HirVarDecl;
+
 INSTANTIATE(HirFnDecl *, hirfndecls, ARRAY_TEMPLATE)
+INSTANTIATE(HirVarDecl *, hirvardecls, ARRAY_TEMPLATE)
 
 typedef struct {
     hirfndecls_array functions;
+    hirvardecls_array globals;
 } HirModule;
 
 HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod);

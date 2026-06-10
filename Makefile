@@ -43,6 +43,7 @@ STDLIB_TARGET_DIR = build/$(HOST_ARCH)/$(HOST_OS)/lib
 STDLIB_SO         = $(STDLIB_TARGET_DIR)/libcoda.$(SOEXT)
 
 .PHONY: all clean backends stdlib
+.SECONDARY: $(STDLIB_GEN_ASM)
 
 all: $(TARGET) backends stdlib
 
@@ -90,7 +91,7 @@ build/lib/%.o: build/lib/%.s
 
 build/lib/%.s: lib/%.coda $(TARGET) backends
 	@mkdir -p $(dir $@)
-	CODA_ROOT=$(PWD)/build/ ./$(TARGET) -o $@ $<
+	./$(TARGET) -o $@ $<
 
 build/lib/%.s: lib/%.s
 	@mkdir -p $(dir $@)

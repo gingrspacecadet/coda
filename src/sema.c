@@ -290,7 +290,20 @@ void register_globals(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_VAR: {
-                error(d->token, "Global variables are not allowed");
+                uint32_t flags = SYMFLAG_VAR;
+                if (d->is_export) flags |= SYMFLAG_EXPORT;
+
+                Symbol *sym = declare_symbol(ctx, d->var->name, flags);
+
+                if (d->is_export) {
+                    sym->mangled = generate_mangled_name(ctx, mod, d->var->name, d->token);
+                } else {
+                    sym->mangled = sym->name;
+                }
+
+                sym->decl = d;
+                d->symbol = sym;
+                break;
             }
         }
     }
@@ -303,7 +316,11 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
         case TYPEREF_NAMED: {
             Symbol *sym = lookup_symbol(ctx, type->named.name);
             if (!sym || !(sym->flags & SYMFLAG_TYPE)) {
-                error(type->token, "Unknown type");
+                if (sym) {
+                    error(type->token, format("Unknown type %.*s", string_fmt(sym->name)));
+                } else {
+                    error(type->token, format("Unknown type '%.*s'", string_fmt(type->token.value.value)));
+                }
             }
 
             type->type_symbol = sym;
@@ -528,6 +545,54 @@ static void calculate_union_layout(UnionDecl *unn) {
     unn->align = max_align;
 }
 
+static TypeRef *check_expr_with_target(Analyser *ctx, Expr *expr, TypeRef *target_type) {
+    if (expr->type == EXPR_INIT) {
+        if (target_type->type != TYPEREF_NAMED || target_type->type_symbol->decl->type != DECL_STRUCT) {
+            error(expr->token, "Initializer list can only be inferred to a struct type");
+        }
+        
+        StructDecl *str = target_type->type_symbol->decl->_struct;
+        expr->resolved_type = target_type;
+
+        for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+            InitField *f = &expr->init_list.fields.data[i];
+            
+            if (f->field_name.has_value) {
+                VarDecl *member;
+
+                for (size_t i = 0; i < str->members.len; i++) {
+                    if (string_eq(str->members.data[i]->name, f->field_name.value)) {
+                        member = str->members.data[i];
+                        break;
+                    }
+                }
+
+                if (!member) {
+                    error(f->token, format("Struct '%.*s' has no member named '%.*s'", 
+                        string_fmt(str->name), string_fmt(f->field_name.value)));
+                }
+                
+                TypeRef *field_expr_type = check_expr(ctx, f->value);
+                if (!types_compatible(field_expr_type, member->type)) {
+                    error(f->token, format("Cannot assign to member of type '%.*s' object of type '%.*s'", string_fmt(type_to_string(member->type)), string_fmt(type_to_string(field_expr_type))));
+                }
+            } else {
+                if (i >= str->members.len) {
+                    error(f->token, "Too many elements in structural initialiser list");
+                }
+                VarDecl *member = str->members.data[i];
+                TypeRef *field_expr_type = check_expr(ctx, f->value);
+                if (!types_compatible(member->type, field_expr_type)) {
+                    error(f->token, "Type mismatch for positional initialiser field");
+                }
+            }
+        }
+        return target_type;
+    }
+
+    return check_expr(ctx, expr);
+}
+
 void resolve_types(Analyser *ctx, Module *mod) {
     ctx->current_scope = mod->scope;
 
@@ -608,7 +673,24 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 break;
             }
             case DECL_VAR: {
-                error(d->token, "Global variables are not allowed");
+                VarDecl *v = d->var;
+
+                resolve_typeref(ctx, v->type);
+
+                d->symbol->type = v->type;
+
+                if (v->init) {
+                    TypeRef *init_type;
+                    if (v->init->type == EXPR_INIT) {
+                        init_type = check_expr_with_target(ctx, v->init, v->type);
+                    } else {
+                        init_type = check_expr(ctx, v->init);
+                    }
+
+                    if (!types_compatible(v->type, init_type)) {
+                        error(v->token, format("Cannot assign variable of type '%.*s' object of type '%.*s'", string_fmt(type_to_string(v->type)), string_fmt(type_to_string(init_type))));
+                    }
+                }
             }
         }
     }
@@ -905,30 +987,34 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             goto check_expr_finished;
         }
         case EXPR_CALL: {
-            check_expr(ctx, expr->call.callee);
+            Expr *callee = expr->call.callee;
 
-            Symbol *callee_sym = expr->call.callee->symbol;
-            TypeRef *callee_type = expr->call.callee->resolved_type;
+            if (callee->type == EXPR_SPECIALISE) {
+                callee = callee->specialise.expr;
+            }
+
+            check_expr(ctx, callee);
+
+            Symbol *callee_sym = callee->symbol;
+            TypeRef *callee_type = callee->resolved_type;
+            
             if (!callee_type) {
-                if (callee_sym && callee_sym->decl) {
-                    error(callee_sym->decl->token, "Unknown function");
-                }
-                error(expr->call.callee->token, "Unknown function");
+                error(callee->token, format("Unknown function '%.*s'", string_fmt(callee->token.value.value)));
             }
 
             if (callee_type->type != TYPEREF_FN) {
                 if (callee_sym && callee_sym->decl) {
                     error(callee_sym->decl->token, "Cannot call non-function");
                 } else {
-                    error(expr->call.callee->token, "Cannot call non-function");
+                    error(callee->token, "Cannot call non-function");
                 }
             }
 
             bool is_method_call = false;
             Expr *method_base = NULL;
 
-            if (expr->call.callee->type == EXPR_MEMBER) {
-                method_base = expr->call.callee->member.base;
+            if (callee->type == EXPR_MEMBER) {
+                method_base = callee->member.base;
                 is_method_call = true;
             }
 
@@ -941,7 +1027,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 for (size_t i = virtual_args_len; i < expected_params; i++) {
                     if (!callee_type->fn.params.data[i].default_value) {
-                        Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : expr->call.callee->token;
+                        Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : callee->token;
                         error(err_token, format("Missing argument for parameter %ld which has no default value", i + 1));
                     }
                 }
@@ -955,7 +1041,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
 
             if (virtual_args_len > expected_params) {
-                Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : expr->call.callee->token;
+                Token err_token = (callee_sym && callee_sym->decl) ? callee_sym->decl->token : callee->token;
                 error(err_token, format("Function expects %ld arguments, got %ld", expected_params, provided_args));
             }
 
@@ -977,6 +1063,9 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                         string_fmt(type_to_string(arg_type)), string_fmt(type_to_string(param_type))));
                 }
             }
+
+            expr->call.callee->resolved_type = callee_type;
+            expr->call.callee->symbol = callee_sym;
 
             result_type = callee_type->fn.ret_type;
             break;
@@ -1404,13 +1493,12 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
         return false;
     }
 
-    if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
-        // `null` may only be assigned to optional types.
+    if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null")) && dst->type == TYPEREF_POINTER) {
         return dst->is_optional;
     }
-
-    if (src->is_optional != dst->is_optional) return false;
-
+    
+    if (!dst->is_optional && src->is_optional) return false;
+    
     if (src->type != dst->type) return false;
 
     if (src->type == TYPEREF_NAMED) {

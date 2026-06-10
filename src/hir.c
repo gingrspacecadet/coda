@@ -304,33 +304,50 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
 HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     HirModule *hir = arena_calloc(ctx->arena, sizeof(HirModule));
     hir->functions = hirfndecls_array_init();
+    hir->globals = hirvardecls_array_init();
     for (size_t i = 0; i < ast_mod->decls.len; i++) {
         Decl *d = ast_mod->decls.data[i];
-        if (d->type != DECL_FN) continue;
-        if (d->fn->generic_params.len > 0) continue;
+        if (d->type == DECL_FN) {
 
-        HirFnDecl *fndecl = arena_calloc(ctx->arena, sizeof(HirFnDecl));
-        fndecl->symbol = d->symbol;
-        fndecl->is_extern = d->fn->is_extern;
-        fndecl->is_export = d->is_export;
-
-        fndecl->params = syms_array_init();
-        for (size_t j = 0; j < d->fn->params.len; j++) {
-            syms_array_push(&fndecl->params, d->fn->params.data[j].symbol);
+            if (d->fn->generic_params.len > 0) continue;
+    
+            HirFnDecl *fndecl = arena_calloc(ctx->arena, sizeof(HirFnDecl));
+            fndecl->symbol = d->symbol;
+            fndecl->is_extern = d->fn->is_extern;
+            fndecl->is_export = d->is_export;
+    
+            fndecl->params = syms_array_init();
+            for (size_t j = 0; j < d->fn->params.len; j++) {
+                syms_array_push(&fndecl->params, d->fn->params.data[j].symbol);
+            }
+    
+            if (d->fn->body) {
+                fndecl->body = lower_stmt(ctx, d->fn->body);
+            } else {
+                fndecl->body = NULL;
+            }
+            fndecl->ret_type = d->fn->ret_type;
+    
+            fndecl->locals = syms_array_init();
+            collect_locals(&fndecl->locals, &fndecl->params, fndecl->body);
+            collect_ast_locals(&fndecl->locals, &fndecl->params, d->fn->body);
+    
+            hirfndecls_array_push(&hir->functions, fndecl);
         }
+        else if (d->type == DECL_VAR) {
+            VarDecl *v = d->var;
+            HirVarDecl *global = arena_calloc(ctx->arena, sizeof(HirVarDecl));
 
-        if (d->fn->body) {
-            fndecl->body = lower_stmt(ctx, d->fn->body);
-        } else {
-            fndecl->body = NULL;
+            global->symbol = d->symbol;
+            global->type = d->symbol->type;
+            global->is_export = d->is_export;
+
+            if (v->init) {
+                global->init = lower_expr(ctx, v->init);
+            }
+
+            hirvardecls_array_push(&hir->globals, global);
         }
-        fndecl->ret_type = d->fn->ret_type;
-
-        fndecl->locals = syms_array_init();
-        collect_locals(&fndecl->locals, &fndecl->params, fndecl->body);
-        collect_ast_locals(&fndecl->locals, &fndecl->params, d->fn->body);
-
-        hirfndecls_array_push(&hir->functions, fndecl);
     }
 
     return hir;
