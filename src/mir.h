@@ -82,6 +82,7 @@ INSTANTIATE(MirFunction *, mirfns, ARRAY_TEMPLATE)
 
 typedef struct {
     mirfns_array functions;
+    string_array strings;
 } MirModule;
 
 typedef struct {
@@ -90,6 +91,7 @@ typedef struct {
     uint32_t block_counter;
     MirBlock *current_block;
     MirFunction *current_fn;
+    string_array strings;
 
     Arena *arena;
     Scope *global_scope;

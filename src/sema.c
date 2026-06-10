@@ -361,7 +361,11 @@ size_t get_type_size(TypeRef *type) {
             return 8;   // TODO: architecture-dependant
         }
         case TYPEREF_ARRAY: {
-            return get_type_size(type->array.elem) * type->array.length;
+            if (type->array.length > 0) {
+                return 8 + get_type_size(type->array.elem) * type->array.length;
+            } else {
+                return 16;
+            }
         }
         case TYPEREF_NAMED: {
             Symbol *sym = type->type_symbol;
@@ -971,7 +975,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             if (base_type->type == TYPEREF_ARRAY) {
                 if (string_eq(expr->member.member, string_make("ptr"))) {
-                    // Construct a pointer to the array's underlying element type
+                    // construct a pointer to the array's underlying element type
                     TypeRef *ptr_type = arena_calloc(ctx->arena, sizeof(TypeRef));
                     ptr_type->type = TYPEREF_POINTER;
                     ptr_type->pointer.pointee = base_type->array.elem;

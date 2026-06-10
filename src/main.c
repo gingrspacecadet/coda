@@ -97,6 +97,7 @@ int main(int argc, char **argv) {
     MirBuilder mirbuilder = {
         .arena = module->arena,
         .global_scope = analyser.global_scope,
+        .strings = string_array_init(),
     };
     MirModule *mir = mir_lower_module(&mirbuilder, hir);
     for (size_t i = 0; i < mir->functions.len; i++) {

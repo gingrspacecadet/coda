@@ -89,6 +89,7 @@ struct Literal {
         bool _bool;
         char _char;
     };
+    size_t str_id;
     Token token;
 };
 

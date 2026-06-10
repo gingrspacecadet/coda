@@ -4,4 +4,4 @@ coda
 build/
 out*
 a.out
-a.s
+*.s

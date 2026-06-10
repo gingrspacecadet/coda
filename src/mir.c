@@ -2,6 +2,18 @@
 #include "mir.h"
 #include <stdio.h>
 
+static size_t intern_string(MirBuilder *ctx, String str) {
+    for (size_t i = 0; i < ctx->strings.len; i++) {
+        if (string_eq(ctx->strings.data[i], str)) {
+            return i;
+        }
+    }
+
+    size_t id = ctx->strings.len;
+    string_array_push(&ctx->strings, str);
+    return id;
+}
+
 static Symbol *lookup_symbol(MirBuilder *ctx, String name) {
     Scope *scope = ctx->global_scope;
 
@@ -146,8 +158,15 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
 MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
     if (!hir) return (MirOperand){};
     switch (hir->type) {
-        case HIR_EXPR_LIT:
-            return make_literal(hir->literal, hir->resolved_type);
+        case HIR_EXPR_LIT: {
+            MirOperand op = make_literal(hir->literal, hir->resolved_type);
+            
+            if (op.lit.type == LITERAL_STRING) {
+                op.lit.str_id = intern_string(ctx, op.lit.string);
+            }
+
+            return op;
+        }
 
         case HIR_EXPR_UNARY: {
             if (hir->unary.op == UOP_ADDR) {
@@ -516,10 +535,13 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
 MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     MirModule *mod = arena_calloc(ctx->arena, sizeof(MirModule));
     mod->functions = mirfns_array_init();
+
     for (size_t i = 0; i < hir->functions.len; i++) {
         if (hir->functions.data[i]->is_extern) continue;
         mirfns_array_push(&mod->functions, mir_lower_fn(ctx, hir->functions.data[i]));
     }
+    
+    mod->strings = ctx->strings;
 
     return mod;
 }
@@ -565,7 +587,7 @@ static void print_operand(MirOperand op) {
             if (op.lit.type == LITERAL_INT) {
                 printf("%ld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
-                printf("\"%.*s\"", string_fmt(op.lit.string));
+                printf("\"%.*s (id:%zu)\"", string_fmt(op.lit.string), op.lit.str_id);
             } else if (op.lit.type == LITERAL_NULL) {
                 printf("null");
             } else if (op.lit.type == LITERAL_BOOL) {
