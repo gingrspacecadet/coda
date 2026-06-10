@@ -1,0 +1,15 @@
+module std::io;
+
+include std::system;
+
+@export
+fn int print(string s) {
+    return std::system::syscall(1, 1u, (uint64)s.ptr, (uint64)s.len);
+}
+
+@export
+fn int printn(string s) {
+    print(s);
+    print("\n");
+    return 0;
+}

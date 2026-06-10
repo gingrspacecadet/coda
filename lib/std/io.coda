@@ -1,9 +1,0 @@
-module std::io;
-
-@extern
-fn none write(int fd, char *data, uint64 length);
-
-@export
-fn none print(string s) {
-    write(1, s.ptr, s.len);
-}
