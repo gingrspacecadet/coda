@@ -1,7 +1,12 @@
 module defer_test;
 
+fn int e() { return 1; }
+
 fn int main() {
-    defer int y = 74;
+    defer e();
+    defer e() + e();
     int x = 1;
-    return y + x;
+    char c = 'e';
+    string s = "sldkjabsldkjabslkdjbalsjd";
+    return x;
 }

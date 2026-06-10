@@ -1,11 +1,7 @@
 module strings;
 
-@extern
-fn none write(string s);
-
 @export
 fn int main() {
     string s = "Hello, world!";
-    write(s);
     return s.len;
 }
