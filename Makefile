@@ -71,7 +71,6 @@ $(foreach d,$(BACKEND_DIRS), \
 )
 
 backends: $(BACKENDS_SO)
-	@# Distribute backends into the arch-level layout so local execution works
 	@for b in $(BACKEND_DIRS); do \
 		if [ -f build/backends/$$b.$(SOEXT) ]; then \
 			mkdir -p build/$$b; \
