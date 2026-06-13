@@ -1,0 +1,4 @@
+Coda
+    extension coda
+    3rd_gen_scale 1.0
+    filter remove_matches ^\s*//.*$
