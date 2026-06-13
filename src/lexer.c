@@ -92,20 +92,22 @@ Token lex_next_token(Lexer *ctx) {
         return (Token){ .type = TOKENTYPE_EOF };
     }
 
+    
     char_array buffer = char_array_init();
-
+    
     while (true) {
         char_optional p = peek(ctx);
         
         if (!p.has_value) {
             return (Token){ .type = TOKENTYPE_EOF, .span = {ctx->source.index, 0}, .line = ctx->line, .col = ctx->col };
         }
-
+        
         if (isspace((unsigned char)p.value)) {
             consume(ctx);
             continue;
         }
-
+        
+        size_t start_col = ctx->col, start_line = ctx->line;
         size_t start = ctx->source.index;
 
         if (isalpha((unsigned char)p.value)) {
@@ -120,8 +122,8 @@ Token lex_next_token(Lexer *ctx) {
             Token t = decode_ident(ctx, &buffer);
             t.span = (Span){ .start = start, .length = ctx->source.index - start };
             t.source = &ctx->source;
-            t.line = ctx->line;
-            t.col = ctx->col;
+            t.line = start_line;
+            t.col = start_col;
             return t;
         }
 
@@ -149,13 +151,13 @@ Token lex_next_token(Lexer *ctx) {
             };
             t.span = (Span){ .start = start, .length = ctx->source.index - start };
             t.source = &ctx->source;
-            t.line = ctx->line;
-            t.col = ctx->col;
+            t.line = start_line;
+            t.col = start_col;
             return t;
         }
 
         char c = consume(ctx);
-        Token t = { .line = ctx->line, .col = ctx->col };
+        Token t = { .line = start_line, .col = start_col };
 
         switch (c) {
             case '@': t.type = TOKENTYPE_AT; break;
