@@ -36,7 +36,6 @@ extern void error_set_source(Source);
 static Module *parse_file(char *path, Parser *out) {
     Lexer *l = malloc(sizeof(Lexer));
     *l = lexer_init_from_file(path);
-    error_set_source(l->source);
     Parser p = {
         .arena = l->arena,
         .lexer = l,

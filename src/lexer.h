@@ -85,20 +85,21 @@ typedef struct {
 INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 typedef struct {
+    String path;
+    String contents;
+    size_t index;
+} Source;
+
+typedef struct {
     TokenType type;
     string_optional value;
     Span span;
+    Source *source;
     size_t line, col;
 } Token;
 
 INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 INSTANTIATE(Token, token, ARRAY_TEMPLATE)
-
-typedef struct {
-    String path;
-    String contents;
-    size_t index;
-} Source;
 
 typedef struct {
     Source source;

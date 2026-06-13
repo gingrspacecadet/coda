@@ -12,12 +12,10 @@ static Token peek(Parser *ctx) {
 #define RED "\e[1;31m"
 #define RESET "\e[0m"
 
-void error_set_source(Source source) {
-    err_source = source;
-}
-
 __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     Token t = peek(ctx);
+
+    err_source = *t.source;
 
     if (t.type == TOKENTYPE_EOF) {
         printf(BOLD_WHITE "%.*s:0:0: " RED "error: " RESET "%s\n" 
@@ -99,6 +97,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
 }
 
 __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
+    err_source = *t.source;
     String file_view = err_source.contents;
     size_t span_start = t.span.start;
     size_t span_len = t.span.length;

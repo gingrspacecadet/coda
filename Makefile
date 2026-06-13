@@ -100,4 +100,8 @@ clean:
 	@rm -rf build
 	@rm -f $(TARGET)
 
+.PHONY: locs
+locs:
+	cloc --read-lang-def=coda.lang --vcs=git .
+
 -include $(patsubst %.o,%.d,$(OBJS) $(BACKEND_OBJS))

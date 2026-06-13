@@ -125,7 +125,6 @@ int main(int argc, char **argv) {
         }
     }
     
-    error_set_source(parser.lexer->source);
     ast_pass_monomorphise(module);
     analyse(&analyser);
 

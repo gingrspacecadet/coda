@@ -119,6 +119,7 @@ Token lex_next_token(Lexer *ctx) {
 
             Token t = decode_ident(ctx, &buffer);
             t.span = (Span){ .start = start, .length = ctx->source.index - start };
+            t.source = &ctx->source;
             t.line = ctx->line;
             t.col = ctx->col;
             return t;
@@ -147,6 +148,7 @@ Token lex_next_token(Lexer *ctx) {
                 .value = (string_optional){true, num_string} 
             };
             t.span = (Span){ .start = start, .length = ctx->source.index - start };
+            t.source = &ctx->source;
             t.line = ctx->line;
             t.col = ctx->col;
             return t;
@@ -254,6 +256,7 @@ Token lex_next_token(Lexer *ctx) {
         }
 
         t.span = (Span){ .start = start, .length = ctx->source.index - start };
+        t.source = &ctx->source;
         return t;
     }
 }

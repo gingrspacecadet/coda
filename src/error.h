@@ -11,8 +11,6 @@
     Token: error_sema \
 )(T, msg)
 
-void error_set_source(Source source);
-
 static char *format(char *msg, ...) {
     char *buf;
     va_list args;
