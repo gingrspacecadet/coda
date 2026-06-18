@@ -136,8 +136,10 @@ fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &std::mem::default_he
 fn none test_alloc() {
     int mut *buffer = std::mem::allocate<int>(100);
     defer std::mem::default_heap.free(buffer);
+
     Arena my_arena = std::mem::Arena.init();
     defer my_arena.destroy();
+    
     int mut *fast_buffset = std::mem::allocate<int>(100, &my_arena);
     defer std::mem::Arena.free(fast_buffset);
 }
