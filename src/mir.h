@@ -20,7 +20,8 @@ typedef enum {
     MIR_OP_BRANCH, MIR_OP_BRANCH_FALSE,
     MIR_OP_CALL,
     MIR_OP_RET,
-    MIR_OP_LABEL
+    MIR_OP_LABEL,
+    MIR_OP_ADDR,
 } MirOp;
 
 typedef struct {
@@ -76,6 +77,7 @@ typedef struct {
     syms_array params;
     syms_array locals;
     bool is_export;
+    TypeRef *ret_type;
 } MirFunction;
 
 INSTANTIATE(MirFunction *, mirfns, ARRAY_TEMPLATE)

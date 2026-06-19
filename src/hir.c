@@ -34,8 +34,25 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
         }
         case EXPR_CALL: {
             hir->type = HIR_EXPR_CALL;
-            hir->call.callee = lower_expr(ctx, ast_expr->call.callee);
             hir->call.args = hirexprs_array_init();
+
+            bool is_method = (ast_expr->call.callee->type == EXPR_MEMBER && 
+                              ast_expr->call.callee->symbol && 
+                              ast_expr->call.callee->symbol->decl && 
+                              ast_expr->call.callee->symbol->decl->type == DECL_FN);
+
+            if (is_method) {
+                HirExpr *self_arg = lower_expr(ctx, ast_expr->call.callee->member.base);
+                hirexprs_array_push(&hir->call.args, self_arg);
+
+                hir->call.callee = arena_calloc(ctx->arena, sizeof(HirExpr));
+                hir->call.callee->type = HIR_EXPR_VAR;
+                hir->call.callee->var.symbol = ast_expr->call.callee->symbol;
+                hir->call.callee->resolved_type = ast_expr->call.callee->resolved_type;
+            } else {
+                hir->call.callee = lower_expr(ctx, ast_expr->call.callee);
+            }
+
             for (size_t i = 0; i < ast_expr->call.args.len; i++) {
                 hirexprs_array_push(&hir->call.args, lower_expr(ctx, ast_expr->call.args.data[i]));
             }
@@ -55,10 +72,19 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             break;
         }
         case EXPR_MEMBER: {
+            if (ast_expr->symbol && ast_expr->symbol->decl && ast_expr->symbol->decl->type == DECL_FN) {
+                hir->type = HIR_EXPR_VAR;
+                hir->var.symbol = ast_expr->symbol;
+                break;
+            }
+
             hir->type = HIR_EXPR_FIELD_OFFSET;
             hir->field_offset.base = lower_expr(ctx, ast_expr->member.base);
 
             TypeRef *base_type = ast_expr->member.base->resolved_type;
+            if (base_type->type == TYPEREF_POINTER && ast_expr->member.deref) {
+                base_type = base_type->pointer.pointee;
+            }
             Symbol *type_sym = base_type->type_symbol;
             size_t offset = 0;
             

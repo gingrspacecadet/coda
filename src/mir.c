@@ -103,6 +103,10 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
         case HIR_EXPR_FIELD_OFFSET: {
             MirOperand base_addr = mir_lower_lvalue(ctx, hir->field_offset.base);
 
+            if (base_addr.type == 0) {
+                base_addr = mir_lower_expr(ctx, hir->field_offset.base);
+            }
+
             if (base_addr.type == MIR_VAL_MEM) {
                 base_addr.offset += hir->field_offset.byte_offset;
                 return base_addr;
@@ -155,6 +159,8 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
     }
 }
 
+static void mir_lower_init_expr(MirBuilder *ctx, HirExpr *expr, MirOperand target, TypeRef *target_type);
+
 MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
     if (!hir) return (MirOperand){};
     switch (hir->type) {
@@ -170,7 +176,10 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
 
         case HIR_EXPR_UNARY: {
             if (hir->unary.op == UOP_ADDR) {
-                return mir_lower_lvalue(ctx, hir->unary.operand);
+                MirOperand operand = mir_lower_lvalue(ctx, hir->unary.operand);
+                MirOperand result = make_temp(ctx, hir->resolved_type);
+                emit(ctx, MIR_OP_ADDR, result, operand, null_op());
+                return result;
             }
 
             MirOperand operand = mir_lower_expr(ctx, hir->unary.operand);
@@ -276,8 +285,9 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
         }
 
         case HIR_EXPR_INIT: {
-            // TODO
-            break;
+            MirOperand result = make_temp(ctx, hir->resolved_type);
+            mir_lower_init_expr(ctx, hir, result, hir->resolved_type);
+            return result;
         }
     }
 
@@ -330,18 +340,30 @@ static size_t get_init_field_offset(TypeRef *target_type, size_t index, string_o
         return get_type_size(target_type->array.elem) * index;
     }
 
+    if (target_type->type == TYPEREF_POINTER && target_type->pointer.pointee) {
+        target_type = target_type->pointer.pointee;
+    }
+
     if (target_type->type == TYPEREF_NAMED && target_type->type_symbol && target_type->type_symbol->decl) {
         if (target_type->type_symbol->decl->type == DECL_STRUCT) {
             StructDecl *str = target_type->type_symbol->decl->_struct;
+            
             if (name.has_value) {
                 for (size_t i = 0; i < str->members.len; i++) {
                     if (string_eq(str->members.data[i]->name, name.value)) {
-                        return str->field_offsets.data[i];
+                        if (str->field_offsets.len > i) {
+                            return str->field_offsets.data[i];
+                        }
+                        return i * 8;
                     }
                 }
             }
+            
             if (index < str->members.len) {
-                return str->field_offsets.data[index];
+                if (str->field_offsets.len > index) {
+                    return str->field_offsets.data[index];
+                }
+                return index * 8;
             }
         }
         if (target_type->type_symbol->decl->type == DECL_UNION) {
@@ -360,6 +382,13 @@ static MirOperand make_init_field_addr(MirBuilder *ctx, MirOperand base, TypeRef
         MirOperand field_mem = {0};
         field_mem.type = MIR_VAL_MEM;
         field_mem.base_symbol = base.symbol;
+        field_mem.offset = offset;
+        field_mem.resolved_type = get_init_field_type(target_type, index, name);
+        return field_mem;
+    } else if (base.type == MIR_VAL_TEMP) {
+        MirOperand field_mem = {0};
+        field_mem.type = MIR_VAL_MEM;
+        field_mem.base_temp = base.temp;
         field_mem.offset = offset;
         field_mem.resolved_type = get_init_field_type(target_type, index, name);
         return field_mem;
@@ -515,6 +544,7 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     mir_fn->locals = hir_fn->locals;
     mir_fn->symbol = hir_fn->symbol;
     mir_fn->is_export = hir_fn->is_export;
+    mir_fn->ret_type = hir_fn->ret_type;
     ctx->temp_counter = 0;
 
     MirBlock *entry = new_block(ctx);
@@ -528,6 +558,8 @@ MirFunction *mir_lower_fn(MirBuilder *ctx, HirFnDecl *hir_fn) {
     if (ctx->current_block) {
         emit(ctx, MIR_OP_RET, null_op(), null_op(), null_op());
     }
+
+    mir_fn->temp_count = ctx->temp_counter;
 
     return mir_fn;
 }
@@ -704,6 +736,7 @@ static void print_instr(MirInstr *instr) {
             break;
         case MIR_OP_RET: printf("ret"); if (instr->lhs.type != MIR_VAL_LIT || instr->lhs.lit._int != 0) { printf(" "); print_operand(instr->lhs); } break;
         case MIR_OP_LABEL: printf("L%d:", instr->label_id); break;
+        case MIR_OP_ADDR: printf("&"); print_operand(instr->lhs); break;
         default: printf("<unknown op %d>", instr->op);
     }
     printf("\n");

@@ -1,0 +1,22 @@
+module method;
+
+struct Vec3 {
+    int x; int y; int z;
+}
+
+fn Vec3 Vec3.dot(Vec3 *self, Vec3 *other) {
+    Vec3 t = (Vec3){
+        .x = self->x * other->x,
+        .y = self->y * other->y,
+        .z = self->z * other->z
+    };
+
+    return t;
+}
+
+@export
+fn int main() {
+    Vec3 a = {.x = 1, .y = 2, .z = 3};
+    Vec3 b = {.x = 4, .y = 5, .z = 6};
+    return a.dot(&b).x;
+}

@@ -923,6 +923,23 @@ static String type_name(TypeRef *type) {
     return string_make("<unknown>");
 }
 
+static Symbol *find_struct_method(Analyser *ctx, String struct_name, String method) {
+    Module *mod = ctx->module;
+    if (!mod) return NULL;
+
+    for (size_t i = 0; i < mod->decls.len; i++) {
+        Decl *decl = mod->decls.data[i];
+        if (decl->type == DECL_FN) {
+            FnDecl *fn = decl->fn;
+            if (fn->struct_name.has_value && string_eq(fn->struct_name.value, struct_name)) {
+                if (string_eq(fn->name, method)) return fn->symbol;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 TypeRef *check_expr(Analyser *ctx, Expr *expr) {
     if (!expr) return NULL;
 
@@ -1052,6 +1069,29 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 if (is_method_call && i == 0) {
                     arg_type = check_expr(ctx, method_base);
+                    if (param_type->type == TYPEREF_POINTER && arg_type->type != TYPEREF_POINTER) {
+                        if (types_compatible(arg_type, param_type->pointer.pointee)) {
+                            Expr *implicit_addr = arena_calloc(ctx->arena, sizeof(Expr));
+                            implicit_addr->type = EXPR_UNARY;
+                            implicit_addr->unary.op = UOP_ADDR;
+                            implicit_addr->unary.operand = method_base;
+                            implicit_addr->token = method_base->token;
+
+                            TypeRef *ptr_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                            ptr_type->type = TYPEREF_POINTER;
+                            ptr_type->pointer.pointee = arg_type;
+                            ptr_type->is_mutable = param_type->is_mutable;
+                            implicit_addr->resolved_type = ptr_type;
+
+                            if (expr->call.callee->type == EXPR_MEMBER) {
+                                expr->call.callee->member.base = implicit_addr;
+                            } else if (expr->call.callee->type == EXPR_SPECIALISE && expr->call.callee->specialise.expr->type == EXPR_MEMBER) {
+                                expr->call.callee->specialise.expr->member.base = implicit_addr;
+                            }
+
+                            arg_type = ptr_type;
+                        }
+                    }
                 } else {
                     size_t arg_idx = is_method_call ? (i - 1) : i;
                     Expr *arg = expr->call.args.data[arg_idx];
@@ -1166,12 +1206,20 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     }
                 }
 
-                if (!found_member) {
-                    error(expr->token, "Unknown member");
+                // prioritise members over methods (TODO: error on this?)
+                if (found_member) {
+                    result_type = found_member->type;
+                    goto check_expr_finished;
                 }
-    
-                result_type = found_member->type;
-                goto check_expr_finished;
+
+                Symbol *method_sym = find_struct_method(ctx, type_sym->name, expr->member.member);
+                if (method_sym) {
+                    expr->symbol = method_sym;
+                    result_type = method_sym->type;
+                    goto check_expr_finished;
+                }
+
+                error(expr->token, format("Unknown member or method '%.*s' on type '%.*s'", string_fmt(expr->member.member), string_fmt(type_sym->name)));
             }
         }
         case EXPR_UNARY: {
@@ -1241,9 +1289,13 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             }
         }
         case EXPR_CAST: {
-            check_expr(ctx, expr->cast.expr);
-
             resolve_typeref(ctx, expr->cast.to);
+            
+            if (expr->cast.expr->type == EXPR_INIT) {
+                expr->cast.expr->resolved_type = expr->cast.to;
+            }
+
+            check_expr(ctx, expr->cast.expr);
 
             result_type = expr->cast.to;
             goto check_expr_finished;
@@ -1431,19 +1483,16 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             result_type = success_type;
             goto check_expr_finished;
         }
-        case EXPR_INIT: {
-            if (expr->resolved_type) {
-                result_type = expr->resolved_type;
-                goto check_expr_finished;
-            }
+    case EXPR_INIT: {
+        TypeRef *target = expr->resolved_type;
 
-            for (size_t i = 0; i < expr->init_list.fields.len; i++) {
-                check_expr(ctx, expr->init_list.fields.data[i].value);
-            }
-
-            result_type = NULL;
-            goto check_expr_finished;
+        for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+            check_expr(ctx, expr->init_list.fields.data[i].value);
         }
+
+        result_type = target;
+        goto check_expr_finished;
+    }
         default: {
             result_type = NULL;
             goto check_expr_finished;
@@ -1451,7 +1500,6 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
     }
 
 check_expr_finished:
-
     expr->resolved_type = result_type;
     return result_type;
 }
