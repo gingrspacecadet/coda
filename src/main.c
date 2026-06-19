@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
     HirModule *hir = hir_lower_module(&analyser, module);
     hir_pass_monomorphise(&analyser, hir);
     hir_pass_resolve_defers(&analyser, hir);
-    hir_pretty_print(hir);
+    // hir_pretty_print(hir);
 
     MirBuilder mirbuilder = {
         .arena = module->arena,
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
     for (size_t i = 0; i < mir->functions.len; i++) {
         opt_constant_folding(mir->functions.data[i]);
     }
-    mir_pretty_print(mir);
+    // mir_pretty_print(mir);
 
     // Load backend from structural runtime path
     lib_handle handle = load_lib((char*)backend_path);

@@ -388,6 +388,8 @@ size_t get_type_size(TypeRef *type) {
             Symbol *sym = type->type_symbol;
             if (!sym) return 0;
 
+            if (!sym->decl) return 0;
+
             if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
              || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
                 return 1;
