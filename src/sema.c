@@ -388,10 +388,9 @@ size_t get_type_size(TypeRef *type) {
             Symbol *sym = type->type_symbol;
             if (!sym) return 0;
 
-            if (!sym->decl) return 0;
-
+            
             if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
-             || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
+            || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
                 return 1;
             }
             if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16")) ) {
@@ -401,13 +400,14 @@ size_t get_type_size(TypeRef *type) {
                 return 4;
             }
             if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
-             || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
+            || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
                 return 8;
             }
             if (string_eq(sym->name, string_make("string")) ) {
                 return 16;  // ptr + len
             }
-
+            
+            if (!sym->decl) return 0;
             if (sym->decl->type == DECL_STRUCT) {
                 return sym->decl->_struct->size;
             }
