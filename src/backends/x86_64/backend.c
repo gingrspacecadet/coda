@@ -189,6 +189,11 @@ static void emit_operand_addr(FILE *out, const char *reg, MirFunction *fn, Symbo
 static void emit_load(FILE *out, const char *reg, MirFunction *fn, SymbolOffset *offsets, TempLayout *temps, MirOperand op) {
     char op_str[128];
 
+    if (op.type == MIR_VAL_SYMBOL && op.symbol && (op.symbol->flags & SYMFLAG_FN)) {
+        fprintf(out, "    lea %s, [rip + %.*s]\n", reg, string_fmt(op.symbol->mangled.length ? op.symbol->mangled : op.symbol->name));
+        return;
+    }
+
     if (op.type == MIR_VAL_MEM && op.base_symbol && op.base_symbol->type && op.base_symbol->type->type == TYPEREF_POINTER) {
         int64_t sym_off = lookup_symbol_offset(fn, offsets, op.base_symbol);
         fprintf(out, "    mov rcx, QWORD PTR [rbp%s%ld]\n", sym_off >= 0 ? "+" : "", sym_off);
@@ -445,8 +450,8 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
                 }
             }
 
-            if (inst->lhs.type == MIR_VAL_SYMBOL) {
-                fprintf(out, "    call %.*s\n", string_fmt(inst->lhs.symbol->mangled));
+            if (inst->lhs.type == MIR_VAL_SYMBOL && (inst->lhs.symbol->flags & SYMFLAG_FN)) {
+                fprintf(out, "    call %.*s\n", string_fmt(inst->lhs.symbol->mangled.length ? inst->lhs.symbol->mangled : inst->lhs.symbol->name));
             } else {
                 emit_load(out, "rax", fn, offsets, temps, inst->lhs);
                 fprintf(out, "    call rax\n");

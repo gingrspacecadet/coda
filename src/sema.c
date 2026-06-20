@@ -559,7 +559,7 @@ static void calculate_union_layout(UnionDecl *unn) {
 static TypeRef *check_expr_with_target(Analyser *ctx, Expr *expr, TypeRef *target_type) {
     if (expr->type == EXPR_INIT) {
         if (target_type->type != TYPEREF_NAMED || target_type->type_symbol->decl->type != DECL_STRUCT) {
-            error(expr->token, "Initializer list can only be inferred to a struct type");
+            error(expr->token, "Initialiser list can only be inferred to a struct type");
         }
         
         StructDecl *str = target_type->type_symbol->decl->_struct;
@@ -1494,16 +1494,79 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             result_type = success_type;
             goto check_expr_finished;
         }
-    case EXPR_INIT: {
-        TypeRef *target = expr->resolved_type;
+        case EXPR_INIT: {
+            TypeRef *target = expr->resolved_type;
 
-        for (size_t i = 0; i < expr->init_list.fields.len; i++) {
-            check_expr(ctx, expr->init_list.fields.data[i].value);
+            for (size_t i = 0; i < expr->init_list.fields.len; i++) {
+                check_expr(ctx, expr->init_list.fields.data[i].value);
+            }
+
+            result_type = target;
+            goto check_expr_finished;
         }
+        case EXPR_LAMBDA: {
+            char mangled_str[64];
+            int len = snprintf(mangled_str, sizeof(mangled_str), ".L__lambda_%d", ctx->lambda_count++);
+            char *safe_str = arena_alloc(ctx->arena, len + 1);
+            memcpy(safe_str, mangled_str, len + 1);
+            String mangled = string_make(safe_str);
 
-        result_type = target;
-        goto check_expr_finished;
-    }
+            resolve_typeref(ctx, expr->lambda.ret_type);
+
+            for (size_t i = 0; i < expr->lambda.params.len; i++) {
+                Param param = expr->lambda.params.data[i];
+                resolve_typeref(ctx, param.type);
+            }
+
+            Scope *old_scope = ctx->current_scope;
+            Scope *lambda_scope = scope_init(ctx->arena);
+            lambda_scope->parent = old_scope; 
+            ctx->current_scope = lambda_scope;
+
+            for (size_t i = 0; i < expr->lambda.params.len; i++) {
+                Param param = expr->lambda.params.data[i];
+                Symbol *param_sym = declare_symbol(ctx, param.name, SYMFLAG_VAR);
+                param_sym->type = param.type;
+                param.symbol = param_sym;
+            }
+
+            check_stmt(ctx, expr->lambda.body);
+
+            ctx->current_scope = old_scope;
+
+            FnDecl *fndecl = arena_calloc(ctx->arena, sizeof(FnDecl));
+            fndecl->name = mangled;
+            fndecl->ret_type = expr->lambda.ret_type;
+            fndecl->params = expr->lambda.params;
+            fndecl->body = expr->lambda.body;
+            fndecl->token = expr->token;
+
+            Decl *decl = arena_calloc(ctx->arena, sizeof(Decl));
+            decl->type = DECL_FN;
+            decl->token = expr->token;
+            decl->fn = fndecl;
+
+            Symbol *sym = arena_calloc(ctx->arena, sizeof(Symbol));
+            sym->name = mangled;
+            sym->mangled = mangled;
+            sym->decl = decl;
+            sym->flags = SYMFLAG_FN;
+            
+            TypeRef *type = arena_calloc(ctx->arena, sizeof(TypeRef));
+            type->type = TYPEREF_FN;
+            type->fn.ret_type = expr->lambda.ret_type;
+            type->fn.params = expr->lambda.params;
+            sym->type = type;
+            decl->symbol = sym;
+            fndecl->symbol = sym;
+
+            syms_array_push(&ctx->global_scope->symbols, sym);
+            decls_array_push(&ctx->module->decls, decl);
+
+            expr->lambda.symbol = sym;
+            result_type = type;
+            goto check_expr_finished;
+        }
         default: {
             result_type = NULL;
             goto check_expr_finished;

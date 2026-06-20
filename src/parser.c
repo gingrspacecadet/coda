@@ -768,6 +768,46 @@ Expr *parse_expr_prefix(Parser *ctx) {
         return e;
     }
 
+    if (t.value.type == TOKENTYPE_FN) {
+        Token start = consume(ctx);
+        Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
+        e->type = EXPR_LAMBDA;
+        e->token = start;
+        e->lambda.ret_type = parse_type(ctx);
+        e->lambda.params = param_array_init();
+        expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
+        t = peek(ctx);
+        while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
+            start = t.value;
+            attr_array attrs = attr_array_init();
+            collect_attributes(ctx, &attrs);
+
+            TypeRef *param_type = parse_type_single(ctx);
+            t = peek(ctx);
+            Token name;
+            if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
+                name = t.value;
+                consume(ctx);
+            }
+
+            Param p = (Param) {
+                .type = param_type,
+                .name = name.value.has_value ? name.value.value : (String){},
+                .attributes = attrs,
+                .token = start,
+            };
+
+            param_array_push(&e->lambda.params, p);
+            t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;
+            consume(ctx);
+            t = peek(ctx);
+        }
+        expect(ctx, TOKENTYPE_RPAREN, "Expected ')");
+        e->lambda.body = parse_block_stmt(ctx);
+        return e;
+    }
+
     error(ctx, "Unexpected token in expression");
 }
 

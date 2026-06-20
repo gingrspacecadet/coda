@@ -23,6 +23,7 @@ typedef struct {
     Scope *global_scope;
     Scope *current_scope;
     FnDecl *current_function;
+    size_t lambda_count;
 
     // include resolution!
     string_array include_paths;

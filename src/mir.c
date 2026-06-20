@@ -269,12 +269,7 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
                 args[i] = mir_lower_expr(ctx, hir->call.args.data[i]);
             }
 
-            MirOperand callee = {0};
-            if (hir->call.callee && hir->call.callee->type == HIR_EXPR_VAR) {
-                callee = make_symbol(hir->call.callee->var.symbol);
-            } else {
-                callee = mir_lower_expr(ctx, hir->call.callee);
-            }
+            MirOperand callee = mir_lower_expr(ctx, hir->call.callee);
 
             MirOperand result = make_temp(ctx, hir->resolved_type);
             MirInstr *instr = emit(ctx, MIR_OP_CALL, result, callee, null_op());

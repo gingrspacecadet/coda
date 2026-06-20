@@ -8,8 +8,6 @@
 #include "arena.h"
 #include "lexer.h"
 
-INSTANTIATE(String, string, ARRAY_TEMPLATE)
-
 typedef struct Expr Expr;
 typedef struct Stmt Stmt;
 typedef struct Decl Decl;
@@ -27,6 +25,8 @@ typedef struct Include Include;
 typedef struct Literal Literal;
 typedef struct Param Param;
 
+INSTANTIATE(FnDecl *, fndecls, ARRAY_TEMPLATE)
+INSTANTIATE(String, string, ARRAY_TEMPLATE)
 INSTANTIATE(Expr *, exprs, ARRAY_TEMPLATE)
 
 typedef enum {
@@ -119,6 +119,18 @@ typedef struct {
 
 INSTANTIATE(InitField, initfield, ARRAY_TEMPLATE)
 INSTANTIATE(TypeRef *, typerefs, ARRAY_TEMPLATE)
+INSTANTIATE(Attribute, attr, ARRAY_TEMPLATE);
+
+struct Param {
+    TypeRef *type;
+    String name;
+    attr_array attributes;
+    Expr *default_value;
+    Symbol *symbol;
+    Token token;
+};
+
+INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 
 struct Expr {
     enum {
@@ -135,6 +147,7 @@ struct Expr {
         EXPR_BUBBLE,
         EXPR_INIT,
         EXPR_SPECIALISE,
+        EXPR_LAMBDA,
     } type;
 
     union {
@@ -182,6 +195,12 @@ struct Expr {
             Expr *expr;
             typerefs_array args;
         } specialise;
+        struct {
+            TypeRef *ret_type;
+            param_array params;
+            Stmt *body;
+            Symbol *symbol;
+        } lambda;
     };
 
     TypeRef *resolved_type;
@@ -252,21 +271,6 @@ struct Stmt {
     Scope *scope;
     Token token;
 };
-
-INSTANTIATE(Attribute, attr, ARRAY_TEMPLATE)
-
-struct Param {
-    TypeRef *type;
-    String name;
-    attr_array attributes;
-    Expr *default_value;
-    Symbol *symbol;
-    Token token;
-};
-
-INSTANTIATE(Param, param, ARRAY_TEMPLATE)
-
-INSTANTIATE(FnDecl *, fndecls, ARRAY_TEMPLATE)
 
 typedef struct {
     String name;

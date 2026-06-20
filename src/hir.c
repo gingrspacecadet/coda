@@ -126,6 +126,11 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->cast.to_type = ast_expr->cast.to;
             break;
         }
+        case EXPR_LAMBDA: {
+            hir->type = HIR_EXPR_VAR;
+            hir->var.symbol = ast_expr->lambda.symbol;
+            break;
+        }
     }
 
     return hir;

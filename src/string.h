@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define string_fmt(S) (int)S.length, S.data
+#define string_fmt(S) (int)(S).length, (S).data
 
 typedef struct {
     char *data;

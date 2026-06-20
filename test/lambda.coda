@@ -1,0 +1,12 @@
+module lambda;
+
+fn int test(fn int(int) func) {
+    return func(2);
+}
+
+@export
+fn int main() {
+    return test(fn int (int a) {
+        return a;
+    });
+}
