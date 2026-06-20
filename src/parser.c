@@ -161,79 +161,118 @@ void collect_attributes(Parser *ctx, attr_array *out) {
     }
 }
 
-bool looks_like_type(Parser *ctx, token_optional *after) {
-    ParserCheckpoint check = get_checkpoint(ctx);
+static bool looks_like_type_single_internal(Parser *ctx);
+static bool looks_like_type_internal(Parser *ctx);
 
-    token_optional first = peek(ctx);
-    bool is_mut = false;
-    size_t stepped = 0;
-
+static bool looks_like_type_single_internal(Parser *ctx) {
     token_optional t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_MUT) {
         consume(ctx);
-        is_mut = true;
     }
 
     t = peek(ctx);
-    if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
-        goto failed;
-    }
-
-    String type_name = consume(ctx).value.value;
-
-    t = peek(ctx);
-    if (t.has_value && t.value.type == TOKENTYPE_LT) {
+    if (t.has_value && t.value.type == TOKENTYPE_FN) {
         consume(ctx);
-        int lt_depth = 1;
-
-        while (lt_depth > 0) {
+        
+        if (!looks_like_type_single_internal(ctx)) return false;
+        
+        t = peek(ctx);
+        if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) return false;
+        consume(ctx);
+        
+        t = peek(ctx);
+        while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
+            while (t.has_value && t.value.type == TOKENTYPE_AT) {
+                consume(ctx);
+                t = peek(ctx);
+                if (t.has_value && t.value.type == TOKENTYPE_IDENT) consume(ctx);
+                
+                t = peek(ctx);
+                if (t.has_value && t.value.type == TOKENTYPE_LPAREN) {
+                    consume(ctx);
+                    int depth = 1;
+                    while (depth > 0) {
+                        t = peek(ctx);
+                        if (!t.has_value) return false;
+                        if (t.value.type == TOKENTYPE_LPAREN) depth++;
+                        else if (t.value.type == TOKENTYPE_RPAREN) depth--;
+                        consume(ctx);
+                    }
+                }
+                t = peek(ctx);
+            }
+            
+            if (!looks_like_type_single_internal(ctx)) return false; 
+            
             t = peek(ctx);
-            if (!t.has_value || t.value.type == TOKENTYPE_SEMICOLON) {
-                goto failed;
+            if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
+                consume(ctx);
+                t = peek(ctx);
             }
-
-            if (t.value.type == TOKENTYPE_LT) {
-                lt_depth++;
-            } else if (t.value.type == TOKENTYPE_GT) {
-                lt_depth--;
+            
+            if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;
+            consume(ctx);
+            t = peek(ctx);
+        }
+        
+        t = peek(ctx);
+        if (!t.has_value || t.value.type != TOKENTYPE_RPAREN) return false;
+        consume(ctx);
+    } 
+    else if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
+        consume(ctx);
+        
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_LT) {
+            consume(ctx);
+            while (true) {
+                if (!looks_like_type_single_internal(ctx)) return false;
+                
+                t = peek(ctx);
+                if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
+                    consume(ctx);
+                    continue;
+                }
+                break;
             }
-
+            t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_GT) return false;
             consume(ctx);
         }
+    } 
+    else {
+        return false;
     }
 
     while (true) {
-        token_optional t = peek(ctx);
-        if (t.has_value && t.value.type != TOKENTYPE_MUT && t.value.type != TOKENTYPE_STAR && t.value.type != TOKENTYPE_LBRACK) break;
-
         t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_MUT) {
+        if (!t.has_value) break;
+        if (t.value.type != TOKENTYPE_MUT && t.value.type != TOKENTYPE_STAR && t.value.type != TOKENTYPE_LBRACK) break;
+
+        if (t.value.type == TOKENTYPE_MUT) {
             consume(ctx);
         }
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_STAR) {
-            Token star_tok = consume(ctx);
-
+            consume(ctx);
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
-                Token q = consume(ctx);
+                consume(ctx);
             }
             continue;
         }
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_LBRACK) {
-            Token lb = consume(ctx);
+            consume(ctx);
             t = peek(ctx);
             if (t.has_value && (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT)) {
                 consume(ctx);
             }
             t = peek(ctx);
-            if (t.has_value && t.value.type != TOKENTYPE_RBRACK) {
-                goto failed;
-            }
-            Token rb = consume(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_RBRACK) return false;
+            consume(ctx);
 
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
@@ -245,14 +284,31 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
         break;
     }
 
-passed:
-    if (after) *after = peek(ctx);
-    restore_checkpoint(ctx, check);
     return true;
-failed:
+}
+
+static bool looks_like_type_internal(Parser *ctx) {
+    if (!looks_like_type_single_internal(ctx)) return false;
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type == TOKENTYPE_PIPE) {
+        consume(ctx);
+        if (!looks_like_type_single_internal(ctx)) return false;
+        t = peek(ctx);
+    }
+
+    return true;
+}
+
+bool looks_like_type(Parser *ctx, token_optional *after) {
+    ParserCheckpoint check = get_checkpoint(ctx);
+
+    bool matched = looks_like_type_internal(ctx);
+
     if (after) *after = peek(ctx);
     restore_checkpoint(ctx, check);
-    return false;
+    
+    return matched;
 }
 
 TypeRef *parse_type_single(Parser *ctx) {
@@ -287,7 +343,7 @@ TypeRef *parse_type_single(Parser *ctx) {
             TypeRef *param_type = parse_type_single(ctx);
             t = peek(ctx);
             Token name;
-            if (t.has_value) {
+            if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
                 name = t.value;
                 consume(ctx);
             }
@@ -1451,15 +1507,15 @@ Decl *parse_decl(Parser *ctx) {
                     d->fn = parse_fn_decl(ctx);
                     d->token = d->fn->token;
                     break;
-                } else {
-                    restore_checkpoint(ctx, ch);
                 }
-            } else {
-                d->type = DECL_VAR;
-                d->var = parse_var_stmt(ctx)->var;
-                d->token = d->var->token;
-                break;
+                
+                restore_checkpoint(ctx, ch);
             }
+
+            d->type = DECL_VAR;
+            d->var = parse_var_stmt(ctx)->var;
+            d->token = d->var->token;
+            break;
             error(ctx, "Expected declaration");
         }
     }

@@ -101,11 +101,15 @@ void analyse(Analyser *ctx) {
     ctx->module->scope = ctx->global_scope;
 
     register_globals(ctx, ctx->module);
-    resolve_types(ctx, ctx->module);
-
     for (size_t i = 0; i < ctx->module_map.len; i++) {
         if (ctx->module_map.data[i].is_parsed) {
             register_globals(ctx, ctx->module_map.data[i].ast);
+        }
+    }
+
+    resolve_types(ctx, ctx->module);
+    for (size_t i = 0; i < ctx->module_map.len; i++) {
+        if (ctx->module_map.data[i].is_parsed) {
             resolve_types(ctx, ctx->module_map.data[i].ast);
         }
     }
@@ -137,7 +141,7 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
             if (sym->decl) {
                 error(sym->decl->token, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             } else {
-                error((Token){}, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
+                error(sym->type->token, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             }
         }
     }
@@ -1740,6 +1744,7 @@ static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_a
     Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
     new_decl->type = DECL_STRUCT;
     new_decl->_struct = concrete_struct;
+    new_decl->token = template->token;
     
     Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
     sym->name = mangled_name;

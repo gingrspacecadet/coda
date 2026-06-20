@@ -303,10 +303,6 @@ struct TypeRef {
         struct {
             typerefs_array cases;
         } sum;
-        struct {
-            TypeRef *base_type;
-            typerefs_array arg_types;
-        } generic;
     };
 
     bool is_mutable;

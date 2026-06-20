@@ -97,7 +97,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
 }
 
 __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
-    err_source = *t.source;
+    if (t.source) err_source = *t.source;
     String file_view = err_source.contents;
     size_t span_start = t.span.start;
     size_t span_len = t.span.length;
