@@ -239,6 +239,8 @@ void register_globals(Analyser *ctx, Module *mod) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
 
+        // skip globals that have already been registered
+        // namely, monomorphised decls
         if (d->symbol) continue;
 
         validate_decl_attrs(ctx, d);

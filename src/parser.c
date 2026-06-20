@@ -701,7 +701,8 @@ Expr *parse_expr_prefix(Parser *ctx) {
     if (t.value.type == TOKENTYPE_LPAREN) {
         Token start = consume(ctx);
 
-        if (looks_like_type(ctx, NULL)) {
+        token_optional after;
+        if (looks_like_type(ctx, &after) && after.has_value && after.value.type == TOKENTYPE_RPAREN) {
             TypeRef *to = parse_type(ctx);
             expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after type cast");
             Expr *target = parse_expr(ctx, 80);
