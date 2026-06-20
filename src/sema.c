@@ -238,6 +238,9 @@ void register_globals(Analyser *ctx, Module *mod) {
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
+
+        if (d->symbol) continue;
+
         validate_decl_attrs(ctx, d);
 
         switch (d->type) {
@@ -1924,6 +1927,7 @@ static void scan_stmt(Module *mod, Stmt *stmt);
 
 static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args) {
     char_array cs = char_array_init();
+    char_array_push(&cs, '$');
     append_string_to_char_array(&cs, base_name);
     
     for (size_t i = 0; i < concrete_args.len; i++) {
