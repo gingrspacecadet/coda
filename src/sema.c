@@ -326,9 +326,9 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
             Symbol *sym = lookup_symbol(ctx, type->named.name);
             if (!sym || !(sym->flags & SYMFLAG_TYPE)) {
                 if (sym) {
-                    error(type->token, format("Unknown type %.*s", string_fmt(sym->name)));
+                    error(type->token, format("Unknown type '%.*s'", string_fmt(sym->name)));
                 } else {
-                    error(type->token, format("Unknown type '%.*s'", string_fmt(type->token.value.value)));
+                    error(type->token, format("Unknown type '%.*s'", string_fmt(type_to_string(type))));
                 }
             }
 
@@ -836,11 +836,6 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
 void check_fn_body(Analyser *ctx, FnDecl *fn) {
     if (!fn) return;
-
-    // skip generics for now
-    if (fn->generic_params.len > 0) {
-        return;
-    }
 
     ctx->current_function = fn;
 
