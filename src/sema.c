@@ -619,7 +619,6 @@ void resolve_types(Analyser *ctx, Module *mod) {
                         String param_name = d->fn->generic_params.data[k].name;
 
                         Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
-
                         TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
                         generic_type->type = TYPEREF_NAMED;
                         generic_type->type_symbol = sym;
@@ -627,11 +626,13 @@ void resolve_types(Analyser *ctx, Module *mod) {
                     }
                 }
 
-                resolve_typeref(ctx, d->fn->ret_type);
-
-                for (size_t j = 0; j < d->fn->params.len; j++) {
-                    Param p = d->fn->params.data[j];
-                    resolve_typeref(ctx, p.type);
+                resolve_typeref(ctx, d->symbol->type->fn.ret_type);
+                for (size_t p = 0; p < d->symbol->type->fn.params.len; p++) {
+                    resolve_typeref(ctx, d->symbol->type->fn.params.data[p].type);
+                    
+                    if (d->symbol->type->fn.params.data[p].default_value) {
+                        check_expr(ctx, d->symbol->type->fn.params.data[p].default_value);
+                    }
                 }
 
                 leave_scope(ctx);
@@ -900,35 +901,6 @@ static bool is_integer_type(TypeRef *type) {
            string_eq(sym->name, string_make("uint64"));
 }
 
-static String type_name(TypeRef *type) {
-    if (!type) {
-        return string_make("<unknown>");
-    }
-
-    switch (type->type) {
-        case TYPEREF_NAMED: {
-            return type->named.name;
-        }
-        
-        case TYPEREF_POINTER: {
-            return string_make(format("*'%.*s'", string_fmt(type_name(type->pointer.pointee)))); // NOTE: this is godawful, but it only runs on errors so it's fiiiiiine
-        }
-
-        case TYPEREF_ARRAY: {
-            return string_make(format("'%.*s'[%d]", string_fmt(type_name(type->array.elem)), type->array.length));
-        }
-
-        case TYPEREF_FN: {
-            return string_make(format("fn '%.*s'(<params>)", string_fmt(type_name(type->fn.ret_type))));
-        }
-
-        case TYPEREF_SUM: {
-            return string_make(format("'%.*s'|'%.*s'|<more>", string_fmt(type_name(type->sum.cases.data[0])), string_fmt(type_name(type->sum.cases.data[1]))));
-        }
-    }
-    return string_make("<unknown>");
-}
-
 static Symbol *find_struct_method(Analyser *ctx, String struct_name, String method) {
     Module *mod = ctx->module;
     if (!mod) return NULL;
@@ -969,7 +941,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
         case EXPR_IDENT: {
             Symbol *sym = lookup_symbol(ctx, expr->ident.name);
             if (!sym) {
-                error(expr->token, "Unknown variable");
+                error(expr->token, format("Unknown variable '%.*s'", string_fmt(expr->ident.name)));
             }
             expr->symbol = sym;
             result_type = sym->type;
@@ -979,7 +951,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             TypeRef *left_t = check_expr(ctx, expr->binary.left);
             TypeRef *right_t = check_expr(ctx, expr->binary.right);
 
-            if (!types_compatible(left_t, right_t)) {
+            if (!types_compatible(right_t, left_t)) {
                 error(expr->token, format("Cannot operate between incompatible types '%.*s' and '%.*s'", string_fmt(type_to_string(left_t)), string_fmt(type_to_string(right_t))));
             }
 
@@ -1070,7 +1042,32 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
             for (size_t i = 0; i < expected_params; i++) {
                 TypeRef *param_type = callee_type->fn.params.data[i].type;
+
+                bool pushed_generic_scope = false;
+                if (callee_sym && callee_sym->decl && callee_sym->decl->type == DECL_FN) {
+                    FnDecl *fn = callee_sym->decl->fn;
+                    if (fn->generic_params.len > 0) {
+                        enter_scope(ctx, NULL);
+                        pushed_generic_scope = true;
+                        
+                        for (size_t k = 0; k < fn->generic_params.len; k++) {
+                            String param_name = fn->generic_params.data[k].name;
+                            Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+                            
+                            TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                            generic_type->type = TYPEREF_NAMED;
+                            generic_type->type_symbol = sym;
+                            sym->type = generic_type;
+                        }
+                    }
+                }
+
                 resolve_typeref(ctx, param_type);
+                
+                if (pushed_generic_scope) {
+                    leave_scope(ctx);
+                }
+
                 TypeRef *arg_type = NULL;
 
                 if (is_method_call && i == 0) {
@@ -1101,7 +1098,20 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 } else {
                     size_t arg_idx = is_method_call ? (i - 1) : i;
                     Expr *arg = expr->call.args.data[arg_idx];
+                    
+                    bool is_default_arg = (i >= virtual_args_len);
+                    Scope *old_scope = ctx->current_scope;
+
+                    if (is_default_arg && callee_sym && callee_sym->decl && callee_sym->decl->type == DECL_FN) {
+                        FnDecl *fn = callee_sym->decl->fn;
+                        if (fn->local_scope && fn->local_scope->parent) {
+                            ctx->current_scope = fn->local_scope->parent;
+                        }
+                    }
+
                     arg_type = check_expr(ctx, arg);
+
+                    ctx->current_scope = old_scope;
                 }
 
                 if (!types_compatible(arg_type, param_type)) {
@@ -1307,38 +1317,47 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             goto check_expr_finished;
         }
         case EXPR_INTRINSIC: {
-            Intrinsic *p = &expr->intrinsic;
-            if (p->is_arg_type) {
-                resolve_typeref(ctx, p->type);
-                if (!p->type->type_symbol) {
-                    error(expr->token, format("Unknown type '%.*s'", string_fmt(type_to_string(p->type))));
-                }
-                if (string_eq(p->name, string_make("sizeof"))) {
-                    size_t sz = get_type_size(p->type);
-                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(p->type))));
-                    result_type = lookup_symbol(ctx, string_make("int"))->type;
-                    expr->type = EXPR_LIT;
-                    expr->literal.type = LITERAL_INT;
-                    expr->literal._int = (int64_t)sz;
-                }
-                else {
-                    // TODO: typeid stuff
-                    error(expr->token, "TODO");
-                }
+            // Intrinsic *p = &expr->intrinsic;
+            // if (p->is_arg_type) {
+            //     resolve_typeref(ctx, p->type);
+            //     if (!p->type->type_symbol) {
+            //         error(expr->token, format("Unknown type '%.*s'", string_fmt(type_to_string(p->type))));
+            //     }
+            //     if (string_eq(p->name, string_make("sizeof"))) {
+            //         size_t sz = get_type_size(p->type);
+            //         if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(p->type))));
+            //         result_type = lookup_symbol(ctx, string_make("int"))->type;
+            //         expr->type = EXPR_LIT;
+            //         expr->literal.type = LITERAL_INT;
+            //         expr->literal._int = (int64_t)sz;
+            //     }
+            //     else {
+            //         // TODO: typeid stuff
+            //         error(expr->token, "TODO");
+            //     }
+            // } else {
+            //     TypeRef *t = check_expr(ctx, p->expr);
+            //     if (string_eq(p->name, string_make("sizeof"))) {
+            //         size_t sz = get_type_size(t);
+            //         if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(t))));
+            //         result_type = lookup_symbol(ctx, string_make("int"))->type;
+            //         expr->type = EXPR_LIT;
+            //         expr->literal.type = LITERAL_INT;
+            //         expr->literal._int = (int64_t)sz;
+            //     } else {
+            //         // TODO: typeid stuff
+            //         error(expr->token, "TODO");
+            //     }
+            // }
+
+            if (expr->intrinsic.is_arg_type) {
+                resolve_typeref(ctx, expr->intrinsic.type);
             } else {
-                TypeRef *t = check_expr(ctx, p->expr);
-                if (string_eq(p->name, string_make("sizeof"))) {
-                    size_t sz = get_type_size(t);
-                    if (sz == 0) error(expr->token, format("Cannot take sizeof of incomplete type '%.*s'", string_fmt(type_to_string(t))));
-                    result_type = lookup_symbol(ctx, string_make("int"))->type;
-                    expr->type = EXPR_LIT;
-                    expr->literal.type = LITERAL_INT;
-                    expr->literal._int = (int64_t)sz;
-                } else {
-                    // TODO: typeid stuff
-                    error(expr->token, "TODO");
-                }
+                check_expr(ctx, expr->intrinsic.expr);
             }
+            // TODO: different intrinsics might return different types...
+            result_type = lookup_symbol(ctx, string_make("uint"))->type;
+            goto check_expr_finished;
             break;
         }
         case EXPR_PATH: {
