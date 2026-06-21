@@ -22,8 +22,10 @@ fn none system_free_pages(uint8 mut *ptr, uint64 size) {
     std::system::syscall(11, (uint64)ptr, size);
 }
 
-fn uint8 mut *? default_allocate_impl(Allocator mut *self, uint64 size) {
-    return system_alloc_pages(size);
+type Heap = none;
+
+fn mut uint8 *? Heap.alloc(mut Heap *self, uint64 count) {
+    return system_alloc_pages(count);
 }
 
 fn none default_free_impl(Allocator mut *self, uint8 mut *ptr, uint64 size) {
@@ -31,14 +33,14 @@ fn none default_free_impl(Allocator mut *self, uint8 mut *ptr, uint64 size) {
 }
 
 @export
-Allocator default_heap = {
-    .allocate = default_allocate_impl,
-    .free = default_free_impl,
-    .context = null
-};
+Heap default_heap;
 
 @export
-fn T mut *allocate<T>(uint64 count, Allocator mut *alloc = &default_heap) {
+fn mut T *allocate<T, A: fn mut uint8 *? alloc(mut A *self, uint64 count)>(uint64 count, mut A *alloc = &default_heap) {
     uint64 total_size = count * $sizeof(T);
-    return (T mut *)alloc->allocate(alloc, total_size);
+    mut uint8 *? raw = alloc->alloc(total_size);
+    if (raw == null) {
+        // TODO: abort
+    }
+    return (mut T *)raw;
 }
