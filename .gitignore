@@ -5,3 +5,5 @@ build/
 out*
 a.out
 *.s
+!lib/
+!lib/**/*.s

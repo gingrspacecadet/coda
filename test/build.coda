@@ -1,0 +1,49 @@
+module build_script;
+
+include core::build = build;
+include std::fs = fs;
+include std::io = io;
+include std::string = str;
+
+@export
+fn int main(string[] args) {
+    fs::mkdir("build");
+
+    string[] sources = fs::glob("src/*.c");
+    string[] objects = {};
+
+    build::Cmd cmd = { .args = {} };
+
+    for (mut uint i = 0u; i < sources.len; i = i + 1) {
+        string src = sources[i];
+        
+        string filename = fs::get_filename_no_ext(src);
+        string obj = str::concat({"build/", filename, ".o"});
+        objects.push(obj);
+
+        if (build::needs_rebuild(obj, {src})) {
+            cmd.clear();
+            cmd.append_many({"gcc", "-Wall", "-Werror", "-O2", "-c", src, "-o", obj});
+            
+            if (!cmd.run_sync()) {
+                io::println(str::concat({"Compilation failed for: ", src}));
+                return 1;
+            }
+        }
+    }
+
+    string target = "build/exe";
+    if (build::needs_rebuild(target, objects)) {
+        cmd.clear();
+        cmd.append_many({"gcc", "-o", target});
+        cmd.append_many(objects);
+
+        if (!cmd.run_sync()) {
+            io::println("Linking failed.");
+            return 1;
+        }
+    }
+
+    io::println("Build completed successfully.");
+    return 0;
+}

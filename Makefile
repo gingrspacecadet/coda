@@ -104,4 +104,8 @@ clean:
 locs:
 	cloc --read-lang-def=coda.lang --vcs=git .
 
+.PHONY: tree
+tree:
+	git ls-files | tree --fromfile
+
 -include $(patsubst %.o,%.d,$(OBJS) $(BACKEND_OBJS))
