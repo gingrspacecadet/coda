@@ -2279,7 +2279,7 @@ void resolve_includes(Analyser *ctx, Module *mod) {
         }
 
         if (!entry->is_parsed) {
-            entry->ast = parse_file(string_unmake(entry->path), NULL);
+            entry->ast = parse_file(string_unmake(ctx->arena, entry->path), NULL);
 
             entry->ast->scope = scope_init(ctx->arena);
             entry->ast->scope->parent = mod->scope;

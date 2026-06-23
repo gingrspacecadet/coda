@@ -53,12 +53,8 @@ static String string_copy(Arena *a, String str) {
     return s;
 }
 
-static char *string_unmake(String s) {
-    char *p = malloc(s.length + 1);
-    if (!p) {
-        fprintf(stderr, "OOM\n");
-        exit(1);
-    }
+static char *string_unmake(Arena *a, String s) {
+    char *p = arena_alloc(a, s.length + 1);
     strncpy(p, s.data, s.length);
     p[s.length] = 0;
     return p;
