@@ -34,7 +34,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
         }
         case EXPR_CALL: {
             hir->type = HIR_EXPR_CALL;
-            hir->call.args = hirexprs_array_init();
+            hir->call.args = hirexprs_array_init(ctx->arena);
 
             bool is_method = (ast_expr->call.callee->type == EXPR_MEMBER && 
                               ast_expr->call.callee->symbol && 
@@ -108,7 +108,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
         }
         case EXPR_INIT: {
             hir->type = HIR_EXPR_INIT;
-            hir->init_list.fields = hirinitfields_array_init();
+            hir->init_list.fields = hirinitfields_array_init(ctx->arena);
 
             for (size_t i = 0; i < ast_expr->init_list.fields.len; i++) {
                 InitField *ast_field = &ast_expr->init_list.fields.data[i];
@@ -143,7 +143,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
         case STMT_VAR: {
             if (!ast_stmt->var->init) {
                 hir->type = HIR_STMT_BLOCK;
-                hir->block.stmts = hirstmts_array_init();
+                hir->block.stmts = hirstmts_array_init(ctx->arena);
                 break;
             }
 
@@ -166,7 +166,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
         case STMT_UNSAFE:
         case STMT_BLOCK: {
             hir->type = HIR_STMT_BLOCK;
-            hir->block.stmts = hirstmts_array_init();
+            hir->block.stmts = hirstmts_array_init(ctx->arena);
             for (size_t i = 0; i < ast_stmt->block.stmts.len; i++) {
                 hirstmts_array_push(&hir->block.stmts, lower_stmt(ctx, ast_stmt->block.stmts.data[i]));
             }
@@ -186,7 +186,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
         }
         case STMT_FOR: {
             hir->type = HIR_STMT_BLOCK;
-            hir->block.stmts = hirstmts_array_init();
+            hir->block.stmts = hirstmts_array_init(ctx->arena);
 
             if (ast_stmt->_for.init) {
                 hirstmts_array_push(&hir->block.stmts, lower_stmt(ctx, ast_stmt->_for.init));
@@ -198,7 +198,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
 
             HirStmt *while_body = arena_calloc(ctx->arena, sizeof(HirStmt));
             while_body->type = HIR_STMT_BLOCK;
-            while_body->block.stmts = hirstmts_array_init();
+            while_body->block.stmts = hirstmts_array_init(ctx->arena);
 
             if (ast_stmt->_for.body) {
                 hirstmts_array_push(&while_body->block.stmts, lower_stmt(ctx, ast_stmt->_for.body));
@@ -334,8 +334,8 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
 
 HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     HirModule *hir = arena_calloc(ctx->arena, sizeof(HirModule));
-    hir->functions = hirfndecls_array_init();
-    hir->globals = hirvardecls_array_init();
+    hir->functions = hirfndecls_array_init(ctx->arena);
+    hir->globals = hirvardecls_array_init(ctx->arena);
     for (size_t i = 0; i < ast_mod->decls.len; i++) {
         Decl *d = ast_mod->decls.data[i];
         if (d->type == DECL_FN) {
@@ -347,7 +347,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
             fndecl->is_extern = d->fn->is_extern;
             fndecl->is_export = d->is_export;
     
-            fndecl->params = syms_array_init();
+            fndecl->params = syms_array_init(ctx->arena);
             for (size_t j = 0; j < d->fn->params.len; j++) {
                 syms_array_push(&fndecl->params, d->fn->params.data[j].symbol);
             }
@@ -359,7 +359,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
             }
             fndecl->ret_type = d->fn->ret_type;
     
-            fndecl->locals = syms_array_init();
+            fndecl->locals = syms_array_init(ctx->arena);
             collect_locals(&fndecl->locals, &fndecl->params, fndecl->body);
             collect_ast_locals(&fndecl->locals, &fndecl->params, d->fn->body);
     
@@ -387,8 +387,8 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
 static void hir_resolve_defers_stmt(Analyser *ctx, HirStmt *stmt);
 
 static void hir_resolve_defers_block(Analyser *ctx, HirStmt *block) {
-    hirstmts_array active_defers = hirstmts_array_init();
-    hirstmts_array new_stmts = hirstmts_array_init();
+    hirstmts_array active_defers = hirstmts_array_init(ctx->arena);
+    hirstmts_array new_stmts = hirstmts_array_init(ctx->arena);
 
     for (size_t i = 0; i < block->block.stmts.len; i++) {
         HirStmt *s = block->block.stmts.data[i];
@@ -520,7 +520,7 @@ static HirExpr *clone_hir_expr(Analyser *ctx, HirExpr *src, String placeholder_n
             
         case HIR_EXPR_CALL:
             dst->call.callee = clone_hir_expr(ctx, src->call.callee, placeholder_name, concrete);
-            dst->call.args = hirexprs_array_init();
+            dst->call.args = hirexprs_array_init(ctx->arena);
             for (size_t i = 0; i < src->call.args.len; i++) {
                 hirexprs_array_push(&dst->call.args, 
                     clone_hir_expr(ctx, src->call.args.data[i], placeholder_name, concrete));
@@ -539,7 +539,7 @@ static HirExpr *clone_hir_expr(Analyser *ctx, HirExpr *src, String placeholder_n
             break;
         
         case HIR_EXPR_INIT:
-            dst->init_list.fields = hirinitfields_array_init();
+            dst->init_list.fields = hirinitfields_array_init(ctx->arena);
             for (size_t i = 0; i < src->init_list.fields.len; i++) {
                 HirInitField src_field = src->init_list.fields.data[i];
                 HirInitField dst_field = {0};
@@ -571,7 +571,7 @@ static HirStmt *clone_hir_stmt(Analyser *ctx, HirStmt *src, String placeholder_n
             break;
             
         case HIR_STMT_BLOCK:
-            dst->block.stmts = hirstmts_array_init();
+            dst->block.stmts = hirstmts_array_init(ctx->arena);
             for (size_t i = 0; i < src->block.stmts.len; i++) {
                 hirstmts_array_push(&dst->block.stmts, 
                     clone_hir_stmt(ctx, src->block.stmts.data[i], placeholder_name, concrete));

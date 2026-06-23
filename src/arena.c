@@ -45,6 +45,14 @@ void *arena_alloc(Arena *a, size_t size) {
     return data;
 }
 
+void *arena_realloc(Arena *a, void *p, size_t old_size, size_t new_size) {
+    if (new_size == 0) return NULL;
+    void *d = arena_alloc(a, new_size);
+    size_t to_copy = old_size < new_size ? old_size : new_size;
+    if (p && to_copy) memcpy(d, p, to_copy);
+    return d;
+}
+
 void *arena_calloc(Arena *a, size_t size) {
     void *data = arena_alloc(a, size);
     memset(data, 0, size);

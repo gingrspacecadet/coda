@@ -114,7 +114,7 @@ static void lexer_free(Lexer *l) {
     arena_destroy(l->arena);
 }
 
-static char *read_file(char *path) {
+static char *read_file(Arena *arena, char *path) {
     FILE *f = fopen(path, "r");
     if (!f) goto err;
 
@@ -124,7 +124,7 @@ static char *read_file(char *path) {
     if (fsize < 0) goto err;
     if (fseek(f, 0, SEEK_SET) != 0) goto err;
 
-    char *data = malloc(fsize + 1);
+    char *data = arena_alloc(arena, fsize + 1);
     if (!data) goto err;
     if (fread(data, fsize, 1, f) != 1) goto err;
     if (fclose(f) != 0) goto err;
@@ -137,11 +137,12 @@ err:
 }
 
 static Lexer lexer_init_from_file(char *path) {
+    Arena *a = arena_create();
     return (Lexer){
-        .arena = arena_create(),
+        .arena = a,
         .source = {
             .path = string_make(path),
-            .contents = string_make(read_file(path)),
+            .contents = string_make(read_file(a, path)),
             .index = 0,
         },
         .line = 1,

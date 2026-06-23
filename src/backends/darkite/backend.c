@@ -5,7 +5,7 @@
 
 // TODO: pass options like -Ox, etc
 void backend(FILE *out, MirBuilder *ctx, MirModule *module) {
-    string_const_array string_consts = string_const_array_init();
+    string_const_array string_consts = string_const_array_init(ctx->arena);
     
     // First pass: collect all string constants and lower to LIR
     for (size_t i = 0; i < module->functions.len; i++) {

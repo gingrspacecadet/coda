@@ -78,8 +78,8 @@ static Token expect(Parser *ctx, TokenType type, char *msg) {
 Include *parse_include(Parser *ctx) {
     Include *inc = arena_calloc(ctx->arena, sizeof(Include));
     inc->token = consume(ctx);
-    inc->path = string_array_init();
-    inc->alias = string_array_init();
+    inc->path = string_array_init(ctx->arena);
+    inc->alias = string_array_init(ctx->arena);
 
     while (true) {
         token_optional t = peek(ctx);
@@ -135,7 +135,7 @@ void collect_attributes(Parser *ctx, attr_array *out) {
             .token = name
         };
 
-        attr.args = lit_array_init();
+        attr.args = lit_array_init(ctx->arena);
 
         t = peek(ctx);
         if (t.has_value && t.value.type == TOKENTYPE_LPAREN) {
@@ -331,13 +331,13 @@ TypeRef *parse_type_single(Parser *ctx) {
 
         base->type = TYPEREF_FN;
         base->token = start;
-        base->fn.params = param_array_init();
+        base->fn.params = param_array_init(ctx->arena);
         base->fn.ret_type = ret_type;
 
         t = peek(ctx);
         while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
             start = t.value;
-            attr_array attrs = attr_array_init();
+            attr_array attrs = attr_array_init(ctx->arena);
             collect_attributes(ctx, &attrs);
 
             TypeRef *param_type = parse_type_single(ctx);
@@ -370,7 +370,7 @@ TypeRef *parse_type_single(Parser *ctx) {
     
         base->type = TYPEREF_NAMED;
         base->named.name = type_name;
-        base->named.generic_args = typerefs_array_init();
+        base->named.generic_args = typerefs_array_init(ctx->arena);
         base->is_mutable = is_mut;
         
         if (t.has_value) {
@@ -472,7 +472,7 @@ TypeRef *parse_type(Parser *ctx) {
         TypeRef *sum_type = arena_calloc(ctx->arena, sizeof(TypeRef));
         sum_type->type = TYPEREF_SUM;
         sum_type->token = t.value;
-        sum_type->sum.cases = typerefs_array_init();
+        sum_type->sum.cases = typerefs_array_init(ctx->arena);
 
         typerefs_array_push(&sum_type->sum.cases, left);
         while (t.has_value && t.value.type == TOKENTYPE_PIPE) {
@@ -601,7 +601,7 @@ Expr *expr_new_lit(Parser *ctx, Token t) {
 }
 
 Expr *expr_new_ident(Parser *ctx, Token t) {
-    string_array comps = string_array_init();
+    string_array comps = string_array_init(ctx->arena);
     string_array_push(&comps, t.value.value);
 
     Token last = t;
@@ -723,7 +723,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
         Expr *expr = arena_calloc(ctx->arena, sizeof(Expr));
         expr->type = EXPR_INIT;
         expr->token = lbrace;
-        expr->init_list.fields = initfield_array_init();
+        expr->init_list.fields = initfield_array_init(ctx->arena);
 
         t = peek(ctx);
         while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
@@ -774,12 +774,12 @@ Expr *parse_expr_prefix(Parser *ctx) {
         e->type = EXPR_LAMBDA;
         e->token = start;
         e->lambda.ret_type = parse_type(ctx);
-        e->lambda.params = param_array_init();
+        e->lambda.params = param_array_init(ctx->arena);
         expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
         t = peek(ctx);
         while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
             start = t.value;
-            attr_array attrs = attr_array_init();
+            attr_array attrs = attr_array_init(ctx->arena);
             collect_attributes(ctx, &attrs);
 
             TypeRef *param_type = parse_type_single(ctx);
@@ -817,7 +817,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
         if (next.has_value && next.value.type == TOKENTYPE_LPAREN) {
             Token lparen = consume(ctx);
 
-            exprs_array args = exprs_array_init();
+            exprs_array args = exprs_array_init(ctx->arena);
             token_optional argpeek = peek(ctx);
             if (!argpeek.has_value || argpeek.value.type != TOKENTYPE_RPAREN) {
                 while (true) {
@@ -880,7 +880,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
         } else if (next.has_value && next.value.type == TOKENTYPE_LT) {
             if (is_generic_call_lookahead(ctx)) {
                 Token lt = consume(ctx);
-                typerefs_array args = typerefs_array_init();
+                typerefs_array args = typerefs_array_init(ctx->arena);
 
                 while (true) {
                     typerefs_array_push(&args, parse_type(ctx));
@@ -956,19 +956,19 @@ FnDecl *parse_fn_signature(Parser *ctx);
 static void parse_optional_generic_params(Parser *ctx, genparam_array *out_params) {
     token_optional t = peek(ctx);
     if (!t.has_value || t.value.type != TOKENTYPE_LT) {
-        *out_params = genparam_array_init();
+        *out_params = genparam_array_init(ctx->arena);
         return;
     }
 
     consume(ctx);
-    *out_params = genparam_array_init();
+    *out_params = genparam_array_init(ctx->arena);
 
     while (true) {
         Token param_tok = expect(ctx, TOKENTYPE_IDENT, "Expected generic parameter name");
         GenericParam param = {
             .name = param_tok.value.value,
             .token = param_tok,
-            .constraints = fndecls_array_init()
+            .constraints = fndecls_array_init(ctx->arena)
         };
 
         t = peek(ctx);
@@ -1221,7 +1221,7 @@ Stmt *parse_match_stmt(Parser *ctx) {
     
     expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
     
-    s->match.cases = case_array_init();
+    s->match.cases = case_array_init(ctx->arena);
     token_optional t = peek(ctx);
     while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
         Case c = {
@@ -1239,7 +1239,7 @@ Stmt *parse_match_stmt(Parser *ctx) {
 }
 
 Stmt *parse_stmt(Parser *ctx) {
-    attr_array attrs = attr_array_init();
+    attr_array attrs = attr_array_init(ctx->arena);
     collect_attributes(ctx, &attrs);
 
     token_optional t = peek(ctx);
@@ -1280,7 +1280,7 @@ Stmt *parse_stmt(Parser *ctx) {
 Stmt *parse_block_stmt(Parser *ctx) {
     Token start = expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
 
-    stmts_array stmts = stmts_array_init();
+    stmts_array stmts = stmts_array_init(ctx->arena);
     token_optional t = peek(ctx);
     while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
         stmts_array_push(&stmts, parse_stmt(ctx));
@@ -1299,7 +1299,7 @@ Stmt *parse_block_stmt(Parser *ctx) {
 
 EnumDecl *parse_enum_decl(Parser *ctx) {
     EnumDecl *en = arena_calloc(ctx->arena, sizeof(EnumDecl));
-    en->variants = enumvar_array_init();
+    en->variants = enumvar_array_init(ctx->arena);
     en->token = consume(ctx);
     en->name = expect(ctx, TOKENTYPE_IDENT, "Expected enum name").value.value;
 
@@ -1344,8 +1344,8 @@ EnumDecl *parse_enum_decl(Parser *ctx) {
 
 StructDecl *parse_struct_decl(Parser *ctx) {
     StructDecl *str = arena_calloc(ctx->arena, sizeof(StructDecl));
-    str->members = vardecls_array_init();
-    str->field_offsets = size_array_init();
+    str->members = vardecls_array_init(ctx->arena);
+    str->field_offsets = size_array_init(ctx->arena);
     str->token = consume(ctx);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected struct name");
@@ -1379,7 +1379,7 @@ UnionDecl *parse_union_decl(Parser *ctx) {
     Token start = consume(ctx);
     UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
     un->token = start;
-    un->members = vardecls_array_init();
+    un->members = vardecls_array_init(ctx->arena);
 
     Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name");
     un->name = name.value.value;
@@ -1412,7 +1412,7 @@ FnDecl *parse_fn_signature(Parser *ctx) {
     Token start = expect(ctx, TOKENTYPE_FN, "Expected 'fn'");
     FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
     fn->token = start;
-    fn->params = param_array_init();
+    fn->params = param_array_init(ctx->arena);
 
     fn->ret_type = parse_type(ctx);
     
@@ -1437,7 +1437,7 @@ FnDecl *parse_fn_signature(Parser *ctx) {
     token_optional t = peek(ctx);
     while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
         Token param_start = t.value;
-        attr_array attrs = attr_array_init();
+        attr_array attrs = attr_array_init(ctx->arena);
         collect_attributes(ctx, &attrs);
 
         TypeRef *param_type = parse_type(ctx);
@@ -1498,7 +1498,7 @@ TypeDecl *parse_type_decl(Parser *ctx) {
 
 Decl *parse_decl(Parser *ctx) {
     Decl *d = arena_calloc(ctx->arena, sizeof(Decl));
-    d->attributes = attr_array_init();
+    d->attributes = attr_array_init(ctx->arena);
     collect_attributes(ctx, &d->attributes);
 
     token_optional t = peek(ctx);
@@ -1569,10 +1569,10 @@ Module *parse_module(Parser *ctx) {
 
     Module *m = arena_calloc(ctx->arena, sizeof(Module));
     m->token = start;
-    m->includes = includes_array_init();
-    m->decls = decls_array_init();
+    m->includes = includes_array_init(ctx->arena);
+    m->decls = decls_array_init(ctx->arena);
     m->arena = ctx->arena;
-    m->name = string_array_init();
+    m->name = string_array_init(ctx->arena);
 
     Token modname = expect(ctx, TOKENTYPE_IDENT, "Expected module name");
     string_array_push(&m->name, modname.value.value);

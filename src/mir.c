@@ -564,7 +564,7 @@ static void mir_lower_global(MirBuilder *builder, MirModule *mir_mod, HirVarDecl
     mir_var->symbol = hir_var->symbol;
     mir_var->type = hir_var->type;
     mir_var->is_export = hir_var->is_export;
-    mir_var->init_vals = mirinitvals_array_init();
+    mir_var->init_vals = mirinitvals_array_init(builder->arena);
 
     if (hir_var->init) {
         if (hir_var->init->type == HIR_EXPR_INIT) {
@@ -600,8 +600,8 @@ static void mir_lower_global(MirBuilder *builder, MirModule *mir_mod, HirVarDecl
 
 MirModule *mir_lower_module(MirBuilder *ctx, HirModule *hir) {
     MirModule *mod = arena_calloc(ctx->arena, sizeof(MirModule));
-    mod->functions = mirfns_array_init();
-    mod->globals = mirvardecls_array_init();
+    mod->functions = mirfns_array_init(ctx->arena);
+    mod->globals = mirvardecls_array_init(ctx->arena);
 
     for (size_t i = 0; i < hir->globals.len; i++) {
         mir_lower_global(ctx, mod, hir->globals.data[i]);

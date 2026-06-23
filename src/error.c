@@ -40,7 +40,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
 
     size_t col = t.col ? t.col : (span_start - line_start + 1);
 
-    char_array printable_line = char_array_init();
+    char_array printable_line = char_array_init(arena_create());
     char_array_resize(&printable_line, line_view.length);
     for (size_t i = 0; i < line_view.length; i++) {
         char c = line_view.data[i];
@@ -74,7 +74,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
 
     size_t line_num_len = snprintf(NULL, 0, "%ld", t.line);
 
-    char_array underline = char_array_init();
+    char_array underline = char_array_init(arena_create());
     char_array_append(&underline, line_num_len, ' ');
     char_array_push(&underline, ' ');
     char_array_push(&underline, '|');
@@ -114,7 +114,7 @@ __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
 
     size_t col = t.col ? t.col : (span_start - line_start + 1);
 
-    char_array printable_line = char_array_init();
+    char_array printable_line = char_array_init(arena_create());
     char_array_resize(&printable_line, line_view.length);
     for (size_t i = 0; i < line_view.length; i++) {
         char c = line_view.data[i];
@@ -148,7 +148,7 @@ __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
 
     size_t line_num_len = snprintf(NULL, 0, "%ld", t.line);
 
-    char_array underline = char_array_init();
+    char_array underline = char_array_init(arena_create());
     char_array_append(&underline, line_num_len, ' ');
     char_array_push(&underline, ' ');
     char_array_push(&underline, '|');

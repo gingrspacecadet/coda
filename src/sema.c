@@ -77,7 +77,7 @@ static void inject_builtin_types(Analyser *ctx) {
 
 Scope *scope_init(Arena *a) {
     Scope *s = arena_calloc(a, sizeof(Scope));
-    s->symbols = syms_array_init();
+    s->symbols = syms_array_init(a);
     s->parent = NULL;
     return s;
 }
@@ -90,7 +90,7 @@ Analyser analyser_init(Module *m, Arena *a) {
     an.global_scope = m->scope;
     an.current_scope = an.global_scope;
     an.module = m;
-    an.module_map = modentry_array_init();
+    an.module_map = modentry_array_init(a);
 
     inject_builtin_types(&an);
 
@@ -1743,7 +1743,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
         }
 
         if (src->named.generic_args.len > 0) {
-            typerefs_array substituted_args = typerefs_array_init();
+            typerefs_array substituted_args = typerefs_array_init(mod->arena);
             for (size_t i = 0; i < src->named.generic_args.len; i++) {
                 typerefs_array_push(&substituted_args, 
                     ast_substitute_type(mod, src->named.generic_args.data[i], params, args));
@@ -1756,7 +1756,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
                 TypeRef *rewritten = arena_calloc(mod->arena, sizeof(TypeRef));
                 rewritten->type = TYPEREF_NAMED;
                 rewritten->named.name = concrete_sym->name;
-                rewritten->named.generic_args = typerefs_array_init();
+                rewritten->named.generic_args = typerefs_array_init(mod->arena);
                 rewritten->type_symbol = concrete_sym;
                 rewritten->token = src->token;
                 return rewritten;
@@ -1777,7 +1777,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
             dst->array.elem = ast_substitute_type(mod, src->array.elem, params, args);
             break;
         case TYPEREF_SUM:
-            dst->sum.cases = typerefs_array_init();
+            dst->sum.cases = typerefs_array_init(mod->arena);
             for (size_t i = 0; i < src->sum.cases.len; i++) {
                 typerefs_array_push(&dst->sum.cases, 
                     ast_substitute_type(mod, src->sum.cases.data[i], params, args));
@@ -1785,7 +1785,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
             break;
         case TYPEREF_FN:
             dst->fn.ret_type = ast_substitute_type(mod, src->fn.ret_type, params, args);
-            dst->fn.params = param_array_init();
+            dst->fn.params = param_array_init(mod->arena);
             for (size_t i = 0; i < src->fn.params.len; i++) {
                 Param p = src->fn.params.data[i];
                 p.type = ast_substitute_type(mod, p.type, params, args);
@@ -1811,8 +1811,8 @@ static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_a
     StructDecl *concrete_struct = arena_calloc(mod->arena, sizeof(StructDecl));
     concrete_struct->name = mangled_name;
     concrete_struct->generic_params = (genparam_array){0};
-    concrete_struct->members = vardecls_array_init();
-    concrete_struct->field_offsets = size_array_init();
+    concrete_struct->members = vardecls_array_init(mod->arena);
+    concrete_struct->field_offsets = size_array_init(mod->arena);
 
     for (size_t i = 0; i < template->members.len; i++) {
         VarDecl *src_member = template->members.data[i];
@@ -1868,7 +1868,7 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
             
         case EXPR_SPECIALISE:
             dst->specialise.expr = clone_ast_expr(mod, src->specialise.expr, params, args);
-            dst->specialise.args = typerefs_array_init();
+            dst->specialise.args = typerefs_array_init(mod->arena);
             for (size_t i = 0; i < src->specialise.args.len; i++) {
                 typerefs_array_push(&dst->specialise.args, 
                     ast_substitute_type(mod, src->specialise.args.data[i], params, args));
@@ -1877,7 +1877,7 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
 
         case EXPR_CALL:
             dst->call.callee = clone_ast_expr(mod, src->call.callee, params, args);
-            dst->call.args = exprs_array_init();
+            dst->call.args = exprs_array_init(mod->arena);
             for (size_t i = 0; i < src->call.args.len; i++) {
                 exprs_array_push(&dst->call.args, 
                     clone_ast_expr(mod, src->call.args.data[i], params, args));
@@ -1933,7 +1933,7 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
             break;
 
         case STMT_BLOCK:
-            dst->block.stmts = stmts_array_init();
+            dst->block.stmts = stmts_array_init(mod->arena);
             for (size_t i = 0; i < src->block.stmts.len; i++) {
                 stmts_array_push(&dst->block.stmts, 
                     clone_ast_stmt(mod, src->block.stmts.data[i], params, args));
@@ -1959,7 +1959,6 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
             break;
 
         case STMT_VAR:
-            // Fix pointer alias bug: allocate a new VarDecl container
             dst->var = arena_calloc(mod->arena, sizeof(VarDecl));
             *dst->var = *src->var;
             dst->var->init = clone_ast_expr(mod, src->var->init, params, args);
@@ -1967,9 +1966,8 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
             break;
 
         case STMT_MATCH:
-            // Fix pointer alias bug: recreate case array and deep-allocate inner variables
             dst->match.expr = clone_ast_expr(mod, src->match.expr, params, args);
-            dst->match.cases = case_array_init();
+            dst->match.cases = case_array_init(mod->arena);
             for (size_t i = 0; i < src->match.cases.len; i++) {
                 Case sc = src->match.cases.data[i];
                 Case dc = sc;
@@ -2005,7 +2003,7 @@ static void scan_expr(Module *mod, Expr *expr);
 static void scan_stmt(Module *mod, Stmt *stmt);
 
 static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args) {
-    char_array cs = char_array_init();
+    char_array cs = char_array_init(arena);
     char_array_push(&cs, '$');
     append_string_to_char_array(&cs, base_name);
     
@@ -2047,7 +2045,7 @@ static void scan_expr(Module *mod, Expr *expr) {
                     concrete_fn->ret_type = ast_substitute_type(mod, template->ret_type, template->generic_params, concrete_args);
                     concrete_fn->body = clone_ast_stmt(mod, template->body, template->generic_params, concrete_args);
                     
-                    concrete_fn->params = param_array_init();
+                    concrete_fn->params = param_array_init(mod->arena);
                     for (size_t i = 0; i < template->params.len; i++) {
                         Param p = template->params.data[i];
                         p.type = ast_substitute_type(mod, p.type, template->generic_params, concrete_args);
@@ -2188,13 +2186,13 @@ void ast_pass_monomorphise(Module *mod) {
 
 // include res!
 
-static bool peek_module_decl(char *filepath, string_array *out) {
+static bool peek_module_decl(Arena *arena, char *filepath, string_array *out) {
     Lexer l = lexer_init_from_file(filepath);
     if (lex_next_token(&l).type != TOKENTYPE_MODULE) {
         lexer_free(&l);
         return false;
     }
-    *out = string_array_init();
+    *out = string_array_init(arena);
 
     while (true) {
         Token t = lex_next_token(&l);
@@ -2203,7 +2201,7 @@ static bool peek_module_decl(char *filepath, string_array *out) {
             lexer_free(&l);
             return false;
         }
-        string_array_push(out, t.value.value);
+        string_array_push(out, string_copy(arena, t.value.value));
         Token s = lex_next_token(&l);
         if (s.type == TOKENTYPE_DOUBLECOLON) continue;
         
@@ -2214,6 +2212,7 @@ static bool peek_module_decl(char *filepath, string_array *out) {
         return false;
     }
 
+    lexer_free(&l);
     return true;
 }
 
@@ -2238,11 +2237,11 @@ void scan_dir(Analyser *ctx, char *dir_path) {
 
         const char *ext = strrchr(entry->d_name, '.');
         if (ext && strcmp(ext, ".coda") == 0) {
-            string_array modname = string_array_init();
-            if (!peek_module_decl(full_path, &modname)) continue;
+            string_array modname = string_array_init(ctx->arena);
+            if (!peek_module_decl(ctx->arena, full_path, &modname)) continue;
 
             modentry_array_push(&ctx->module_map, (ModuleEntry){
-                .path = string_copy(string_make(full_path)),
+                .path = string_copy(ctx->arena, string_make(full_path)),
                 .name = modname,
                 .mtime = (uint64_t)st.st_mtime,
                 .hash = 0,
@@ -2330,10 +2329,8 @@ void populate_module_namespaces(Analyser *ctx, Module *mod) {
             } else {
                 Module *synth_mod = arena_calloc(ctx->arena, sizeof(Module));
                 
-                // --- FIX: Initialize the string array and push the component ---
-                synth_mod->name = string_array_init();
+                synth_mod->name = string_array_init(mod->arena);
                 string_array_push(&synth_mod->name, part);
-                // ---------------------------------------------------------------
                 
                 synth_mod->scope = scope_init(ctx->arena);
                 synth_mod->scope->parent = current_scope;

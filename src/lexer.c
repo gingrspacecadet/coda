@@ -92,8 +92,7 @@ Token lex_next_token(Lexer *ctx) {
         return (Token){ .type = TOKENTYPE_EOF };
     }
 
-    
-    char_array buffer = char_array_init();
+    char_array buffer = char_array_init(ctx->arena);
     
     while (true) {
         char_optional p = peek(ctx);

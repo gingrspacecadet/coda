@@ -470,7 +470,7 @@ static String type_to_string(TypeRef *t) {
         return t->named.name;
     }
 
-    char_array cs = char_array_init();
+    char_array cs = char_array_init(arena_create());
 
     if (t->type == TYPEREF_POINTER) {
         String pointee = type_to_string(t->pointer.pointee);
@@ -522,7 +522,7 @@ static String type_to_string(TypeRef *t) {
 }
 
 static String module_name_to_string(string_array *s) {
-    char_array cs = char_array_init();
+    char_array cs = char_array_init(arena_create());
     for (size_t i = 0; i < s->len; i++) {
         append_string_to_char_array(&cs, s->data[i]);
         if (i + 1 != s->len) append_string_to_char_array(&cs, string_make("::"));

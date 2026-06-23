@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "arena.h"
+
 #define string_fmt(S) (int)(S).length, (S).data
 
 typedef struct {
@@ -44,13 +46,9 @@ static bool string_find(String str, String needle) {
     return found != NULL;
 }
 
-static String string_copy(String str) {
+static String string_copy(Arena *a, String str) {
     String s = { .length = str.length };
-    s.data = malloc(str.length);
-    if (!s.data) {
-        fprintf(stderr, "OOM\n");
-        exit(1);
-    }
+    s.data = arena_alloc(a, str.length);
     strncpy(s.data, str.data, str.length);
     return s;
 }

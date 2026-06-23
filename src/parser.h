@@ -34,8 +34,9 @@ Module *parse_module(Parser *ctx);
 extern void error_set_source(Source);
 
 static Module *parse_file(char *path, Parser *out) {
-    Lexer *l = malloc(sizeof(Lexer));
-    *l = lexer_init_from_file(path);
+    Lexer le = lexer_init_from_file(path);
+    Lexer *l = arena_calloc(le.arena, sizeof(Lexer));
+    memcpy(l, &le, sizeof(Lexer));
     Parser p = {
         .arena = l->arena,
         .lexer = l,
