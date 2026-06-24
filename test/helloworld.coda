@@ -1,14 +1,9 @@
-module main;
+module std_test;
 
 include std::io;
 
-@extern fn none write(char *ptr, uint64 len);
-
-fn none print(string s) {
-    write(s.ptr, s.len);
-}
-
+@export
 fn int main() {
-    print("Hello, world!");
+    std::io::print("Hello, world!\n");
     return 0;
 }

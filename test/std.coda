@@ -1,9 +1,0 @@
-module std_test;
-
-include std::io;
-
-@export
-fn int main() {
-    std::io::print("Hello, world!\n");
-    return 0;
-}
