@@ -1388,7 +1388,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     if (string_eq(candidate->name, next_name)) {
                         if (!(candidate->flags & SYMFLAG_EXPORT)) {
                             error(expr->token, format("Namespace '%.*s' is private to module '%.*s'", 
-                                string_fmt(candidate->name), string_fmt(module_name_to_string(&mod->name))));
+                                string_fmt(candidate->name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
                         }
                         found_next = candidate;
                         break;
@@ -1397,7 +1397,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 if (!found_next) {
                     error(expr->token, format("No nested namespace '%.*s' found in module '%.*s'", 
-                        string_fmt(next_name), string_fmt(module_name_to_string(&mod->name))));
+                        string_fmt(next_name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
                 }
 
                 current_sym = found_next;
@@ -1420,7 +1420,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                         if (string_eq(candidate->name, target_name)) {
                             if (!(candidate->flags & SYMFLAG_EXPORT)) {
                                 error(expr->token, format("Symbol '%.*s' is private to module '%.*s'", 
-                                    string_fmt(candidate->name), string_fmt(module_name_to_string(&mod->name))));
+                                    string_fmt(candidate->name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
                             }
                             target_sym = candidate;
                             break;
@@ -1429,7 +1429,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                     if (!target_sym) {
                         error(expr->token, format("No symbol '%.*s' found in namespace '%.*s'", 
-                            string_fmt(target_name), string_fmt(module_name_to_string(&mod->name))));
+                            string_fmt(target_name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
                     }
 
                     result_type = target_sym->type;

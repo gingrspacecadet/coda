@@ -521,8 +521,8 @@ static String type_to_string(TypeRef *t) {
     return string_make("Unknown");
 }
 
-static String module_name_to_string(string_array *s) {
-    char_array cs = char_array_init(arena_create());
+static String module_name_to_string(Arena *a, string_array *s) {
+    char_array cs = char_array_init(a);
     for (size_t i = 0; i < s->len; i++) {
         append_string_to_char_array(&cs, s->data[i]);
         if (i + 1 != s->len) append_string_to_char_array(&cs, string_make("::"));

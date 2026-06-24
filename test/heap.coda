@@ -4,5 +4,6 @@ include std::mem;
 
 @export
 fn int main() {
-    char *s = std::mem::allocate<char>(12u);
+    std::mem::default_heap.alloc<char>(12u);
+    // char *s = std::mem::allocate<char>(12u);
 }
