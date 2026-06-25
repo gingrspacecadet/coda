@@ -9,7 +9,7 @@ TARGET = coda
 BACKEND_DIRS = $(shell find src/backends -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null)
 BACKEND_SRCS = $(shell find src/backends -type f -name "*.c" 2>/dev/null)
 BACKEND_OBJS = $(patsubst src/%.c,build/%.o,$(BACKEND_SRCS))
-BACKENDS_SO = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
+BACKENDS_SO  = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
 
 ifeq ($(OS),Windows_NT)
     SOEXT = dll
