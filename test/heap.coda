@@ -1,9 +1,12 @@
 module heap;
 
 include std::mem;
+include std::io = io;
 
 @export
 fn int main() {
-    std::mem::default_heap.alloc<char>(12u);
-    // char *s = std::mem::allocate<char>(12u);
+    char *cs = std::mem::allocate<char>(12u);
+    string s = string.from_cstr(cs);
+    io::println(s);
+    return 0;
 }
