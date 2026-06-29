@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
 export CODA_BACKEND=$PWD/build/
-export CODA_STDLIB=$PWD/lib
+export CODA_STDLIB=$PWD/lib/x86_64/linux/
 
 make
