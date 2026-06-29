@@ -4,7 +4,7 @@ CFLAGS = -g -Werror -Wno-unused -MMD -MD -std=gnu23 -O0 -fsanitize=address -fno-
 SRCS = $(shell find src -type f -name "*.c" ! -path "src/backends/*" 2>/dev/null)
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
-TARGET = coda
+TARGET = codac
 
 BACKEND_DIRS = $(shell find src/backends -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null)
 BACKEND_SRCS = $(shell find src/backends -type f -name "*.c" 2>/dev/null)

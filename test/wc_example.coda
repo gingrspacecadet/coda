@@ -1,0 +1,103 @@
+module wc;
+
+include std::io = io;
+include std::fs = fs;
+
+struct Stats {
+    uint64 bytes;
+    uint64 lines;
+    uint64 words;
+    bool in_word;
+}
+
+fn none Stats.feed(Stats mut *self, uint8[] buf) {
+    for (mut uint i = 0; i < buf.len; i = i + 1) {
+        uint8 c = buf[i];
+
+        self->bytes = self->bytes + 1;
+
+        if (c == '\n') {
+            self->lines = self->lines + 1;
+        }
+
+        bool is_space =
+            c == ' '  || c == '\n' ||
+            c == '\t' || c == '\r' ||
+            c == '\f' || c == '\v';
+
+        if (is_space) {
+            self->in_word = false;
+        } else if (!self->in_word) {
+            self->words = self->words + 1;
+            self->in_word = true;
+        }
+    }
+}
+
+fn Stats count_stream<R: fn uint64 read(R mut *self, uint8[] buffer)>(R mut *src) {
+    Stats s = {
+        .bytes = 0,
+        .lines = 0,
+        .words = 0,
+        .in_word = false,
+    };
+
+    uint8[8192] buf;
+
+    while (true) {
+        uint64 n = src->read(buf);
+        if (n == 0u) {
+            break;
+        }
+
+        s.feed(buf[0..n]); // this syntax doesn't exist yet, idk if i like it
+    }
+
+    return s;
+}
+
+fn none print_stats(string name, Stats s) {
+    io::printf("{}\t{}\t{}\t{}\n", {s.lines, s.words, s.bytes, name});
+}
+
+@export
+fn int main(string[] args) {
+    int status = 0;
+
+    if (args.len < 2u) {
+        io::println("usage: wc <file> [file...]");
+        return 1;
+    }
+
+    Stats total = {
+        .bytes = 0,
+        .lines = 0,
+        .words = 0,
+        .in_word = false,
+    };
+
+    for (mut uint i = 1u; i < args.len; i = i + 1) {
+        match (fs::open(args[i])) {
+            fs::File file {
+                defer file.close();
+
+                Stats s = count_stream(&file);
+                total.bytes = total.bytes + s.bytes;
+                total.lines = total.lines + s.lines;
+                total.words = total.words + s.words;
+
+                print_stats(args[i], s);
+            }
+            fs::FileError err {
+                io::printf("wc: {}: {}\n", {args[i], $enumstr(err)});
+                status = 1;
+            }
+        }
+    }
+
+    if (args.len > 2u) {
+        print_stats("total", total);
+    }
+
+    return status;
+}
