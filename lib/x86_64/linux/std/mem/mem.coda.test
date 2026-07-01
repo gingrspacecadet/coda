@@ -1,0 +1,17 @@
+module std::mem;
+
+fn none copy(mut byte[] dst, byte[] src);
+
+fn none move(mut byte[] dst, byte[] src);
+
+fn none fill(mut byte[] dst, byte value);
+
+fn none zero(mut byte[] dst);
+
+fn int compare(byte[] lhs, byte[] rhs);
+
+fn none swap<T>(mut T *a, mut T *b);
+
+fn uint64 align_up(uint64 value, uint64 alignment);
+
+fn uint64 align_down(uint64 value, uint64 alignment);

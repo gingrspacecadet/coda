@@ -1,0 +1,17 @@
+module std::path;
+
+fn string join(string[] parts);
+
+fn string filename(string);
+
+fn string stem(string);
+
+fn string extension(string);
+
+fn string parent(string);
+
+fn bool is_absolute(string);
+
+fn bool is_relative(string);
+
+fn string normalise(string);

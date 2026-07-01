@@ -1,0 +1,33 @@
+module std::fs;
+
+include std::io;
+
+struct File;
+
+fn uint64 File.read(mut File self, mut byte[] dst);
+fn uint64 File.write(mut File self, byte[] src);
+fn uint64 File.seek(mut File self, std::io::SeekOrigin origin, int64 offset);
+fn uint64 File.tell(File self);
+fn none File.close(mut File self);
+
+struct FileInfo;
+
+struct Directory;
+
+fn File open(string path);
+
+fn File create(string path);
+
+fn bool exists(string path);
+
+fn none remove(string path);
+
+fn none rename(string from, string to);
+
+fn none mkdir(string path);
+
+fn none mkdirs(string path);
+
+fn FileInfo stat(string path);
+
+fn Directory open_dir(string path);
