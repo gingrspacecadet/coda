@@ -75,6 +75,7 @@ typedef enum {
     TOKENTYPE_SLASHEQ,
     TOKENTYPE_SHREQ,
     TOKENTYPE_SHLEQ,
+    TOKENTYPE_BAD,
     TOKENTYPE_EOF,
 } TokenType;
 

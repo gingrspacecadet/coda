@@ -251,9 +251,7 @@ Token lex_next_token(Lexer *ctx) {
             case '.': t.type = TOKENTYPE_DOT; break;
             case '?': t.type = TOKENTYPE_QUESTION; break;
             case '|': t.type = TOKENTYPE_PIPE; break;
-            default:
-                printf("Unknown character %c\n", c);
-                exit(1);
+            default: t.type = TOKENTYPE_BAD; break;
         }
 
         t.span = (Span){ .start = start, .length = ctx->source.index - start };
