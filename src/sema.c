@@ -77,6 +77,7 @@ static void inject_builtin_types(Analyser *ctx) {
 
 Scope *scope_init(Arena *a) {
     Scope *s = arena_calloc(a, sizeof(Scope));
+    printf("Creating new scope %p\n", s);
     s->symbols = syms_array_init(a);
     s->parent = NULL;
     return s;
@@ -144,6 +145,7 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
                 error(sym->type->token, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             }
         }
+        sym->defined_in = ctx->current_scope;
     }
 
     Symbol *sym = arena_calloc(ctx->arena, sizeof(Symbol));
@@ -155,12 +157,23 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
     return sym;
 }
 
+void print_indent(int indent) { for (int i = 0; i < indent; i++) putchar(' '); }
+
+void print_scope(Scope *scope, int indent) {
+    print_indent(indent); printf("Scope %p: %zu symbols:\n", scope, scope->symbols.len);
+    for (size_t i = 0; i < scope->symbols.len; i++) {
+        print_indent(indent + 2); printf("- %.*s\n", string_fmt(scope->symbols.data[i]->name));
+    }
+    if (scope->parent) print_scope(scope->parent, indent + 2);
+}
+
 Symbol *lookup_symbol(Analyser *ctx, String name) {
     Scope *scope = ctx->current_scope;
 
     while (scope != NULL) {
         for (size_t i = 0; i < scope->symbols.len; i++) {
             Symbol *sym = scope->symbols.data[i];
+            fprintf(stderr, "symbol %.*s scope %p\n", string_fmt(sym->name), scope);
             if (string_eq(sym->name, name)) {
                 return sym;
             }
@@ -631,7 +644,11 @@ void resolve_types(Analyser *ctx, Module *mod) {
                     resolve_typeref(ctx, d->symbol->type->fn.params.data[p].type);
                     
                     if (d->symbol->type->fn.params.data[p].default_value) {
+                        Scope *old = ctx->current_scope;
+                        ctx->current_scope = d->symbol->defined_in;
+                        fprintf(stderr, "entering new scope! %.*s\n", string_fmt(d->symbol->mangled));
                         check_expr(ctx, d->symbol->type->fn.params.data[p].default_value);
+                        ctx->current_scope = old;
                     }
                 }
 
@@ -940,6 +957,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
         }
         case EXPR_IDENT: {
             Symbol *sym = lookup_symbol(ctx, expr->ident.name);
+            print_scope(ctx->current_scope, 0);
             if (!sym) {
                 error(expr->token, format("Unknown variable '%.*s'", string_fmt(expr->ident.name)));
             }
@@ -1063,7 +1081,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
 
                 resolve_typeref(ctx, param_type);
-                
+
                 if (pushed_generic_scope) {
                     leave_scope(ctx);
                 }
@@ -1102,11 +1120,8 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     bool is_default_arg = (i >= virtual_args_len);
                     Scope *old_scope = ctx->current_scope;
 
-                    if (is_default_arg && callee_sym && callee_sym->decl && callee_sym->decl->type == DECL_FN) {
-                        FnDecl *fn = callee_sym->decl->fn;
-                        if (fn->local_scope && fn->local_scope->parent) {
-                            ctx->current_scope = fn->local_scope->parent;
-                        }
+                    if (is_default_arg && callee_sym && callee_sym->defined_in) {
+                        ctx->current_scope = callee_sym->defined_in;
                     }
 
                     arg_type = check_expr(ctx, arg);
@@ -2061,6 +2076,7 @@ static void scan_expr(Module *mod, Expr *expr) {
                     sym->name = mangled_name;
                     sym->decl = new_decl;
                     sym->flags = SYMFLAG_FN;
+                    sym->defined_in = mod->scope;
                     
                     TypeRef *fn_type = arena_calloc(mod->arena, sizeof(TypeRef));
                     fn_type->type = TYPEREF_FN;
@@ -2288,6 +2304,7 @@ void resolve_includes(Analyser *ctx, Module *mod) {
             resolve_includes(ctx, entry->ast);
         }
 
+        entry->ast->scope->parent = ctx->current_scope;
         inc->resolved = entry->ast;
     }
 }
