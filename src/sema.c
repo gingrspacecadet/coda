@@ -156,8 +156,8 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
     return sym;
 }
 
-Symbol *lookup_symbol(Analyser *ctx, String name) {
-    Scope *scope = ctx->current_scope;
+Symbol *lookup_symbol_scoped(Scope *scoped, String name) {
+    Scope *scope = scoped;
 
     while (scope != NULL) {
         for (size_t i = 0; i < scope->symbols.len; i++) {
@@ -171,6 +171,11 @@ Symbol *lookup_symbol(Analyser *ctx, String name) {
 
     return NULL;
 }
+
+Symbol *lookup_symbol(Analyser *ctx, String name) {
+    return lookup_symbol_scoped(ctx->current_scope, name);
+}
+
 
 void validate_decl_attrs(Analyser *ctx, Decl *d) {
     // first, general attributes
@@ -1723,6 +1728,33 @@ static FnDecl *find_generic_fn_template(Module *mod, String name) {
     return NULL;
 }
 
+static Module *resolve_module_path(Module *mod, string_array path, size_t len) {
+    Module *current_mod = mod;
+
+    for (size_t i = 0; i < len; i++) {
+        Symbol *sym = lookup_symbol_scoped(current_mod->scope, path.data[i]);
+        if (!sym) return NULL;
+        if (!sym->decl) return NULL;
+
+        current_mod = sym->decl->namespace;
+        if (!current_mod) return NULL;
+    }
+
+    return current_mod;
+}
+
+static FnDecl *find_generic_fn_template_by_path(Module *mod, string_array path) {
+    if (path.len == 1) {
+        return find_generic_fn_template(mod, path.data[0]);
+    }
+
+    Module *target_mod = resolve_module_path(mod, path, path.len - 1);
+    if (!target_mod) return NULL;
+
+    String fn_name = path.data[path.len - 1];
+    return find_generic_fn_template(target_mod, fn_name);
+}
+
 static StructDecl *find_generic_struct_template(Module *mod, String name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
@@ -2024,63 +2056,79 @@ static void scan_expr(Module *mod, Expr *expr) {
 
     switch (expr->type) {
         case EXPR_SPECIALISE: {
-            if (expr->specialise.expr->type != EXPR_IDENT) break; 
+            String base_name;
 
-            String base_name = expr->specialise.expr->ident.name;
+            if (expr->specialise.expr->type == EXPR_IDENT) {
+                base_name = expr->specialise.expr->ident.name;
+            } else if (expr->specialise.expr->type == EXPR_PATH) {
+                if (expr->specialise.expr->path.components.len == 0) break;
+                base_name = expr->specialise.expr->path.components.data[expr->specialise.expr->path.components.len - 1];
+            } else {
+                break;
+            }
+
             typerefs_array concrete_args = expr->specialise.args;
 
             String mangled_name = mangle_generic_name(mod->arena, base_name, concrete_args);
 
             if (!concrete_fn_exists(mod, mangled_name)) {
-                FnDecl *template = find_generic_fn_template(mod, base_name);
-                if (template) {
-                    if (template->generic_params.len != concrete_args.len) {
-                        printf("Monomorphisation Error: Generic param count mismatch!\n");
-                        break;
-                    }
-
-                    FnDecl *concrete_fn = arena_calloc(mod->arena, sizeof(FnDecl));
-                    *concrete_fn = *template;
-                    
-                    concrete_fn->name = mangled_name;
-                    concrete_fn->generic_params = (genparam_array){0};
-                    
-                    concrete_fn->ret_type = ast_substitute_type(mod, template->ret_type, template->generic_params, concrete_args);
-                    concrete_fn->body = clone_ast_stmt(mod, template->body, template->generic_params, concrete_args);
-                    
-                    concrete_fn->params = param_array_init(mod->arena);
-                    for (size_t i = 0; i < template->params.len; i++) {
-                        Param p = template->params.data[i];
-                        p.type = ast_substitute_type(mod, p.type, template->generic_params, concrete_args);
-                        param_array_push(&concrete_fn->params, p);
-                    }
-
-                    Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
-                    new_decl->type = DECL_FN;
-                    new_decl->fn = concrete_fn;
-                    new_decl->token = template->token;
-                    
-                    Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
-                    sym->name = mangled_name;
-                    sym->decl = new_decl;
-                    sym->flags = SYMFLAG_FN;
-                    sym->defined_in = mod->scope;
-                    
-                    TypeRef *fn_type = arena_calloc(mod->arena, sizeof(TypeRef));
-                    fn_type->type = TYPEREF_FN;
-                    fn_type->fn.ret_type = concrete_fn->ret_type;
-                    fn_type->fn.params = concrete_fn->params;
-                    sym->type = fn_type;
-
-                    new_decl->symbol = sym;
-                    concrete_fn->symbol = sym;
-                    
-                    if (mod->scope) {
-                        syms_array_push(&mod->scope->symbols, sym);
-                    }
-
-                    decls_array_push(&mod->decls, new_decl);
+                FnDecl *template = NULL;
+                
+                if(expr->specialise.expr->type == EXPR_IDENT) {
+                    template = find_generic_fn_template(mod, base_name);
+                } else if (expr->specialise.expr->type == EXPR_PATH) {
+                    template = find_generic_fn_template_by_path(mod, expr->specialise.expr->path.components);
                 }
+
+                if (!template) {
+                    error(expr->token, format("Could not find generic template for '%.*s'", string_fmt(base_name)));
+                }
+
+                if (template->generic_params.len != concrete_args.len) {
+                    error(expr->token, "Generic parameter count mismatch");
+                }
+
+                FnDecl *concrete_fn = arena_calloc(mod->arena, sizeof(FnDecl));
+                *concrete_fn = *template;
+                
+                concrete_fn->name = mangled_name;
+                concrete_fn->generic_params = (genparam_array){0};
+                
+                concrete_fn->ret_type = ast_substitute_type(mod, template->ret_type, template->generic_params, concrete_args);
+                concrete_fn->body = clone_ast_stmt(mod, template->body, template->generic_params, concrete_args);
+                
+                concrete_fn->params = param_array_init(mod->arena);
+                for (size_t i = 0; i < template->params.len; i++) {
+                    Param p = template->params.data[i];
+                    p.type = ast_substitute_type(mod, p.type, template->generic_params, concrete_args);
+                    param_array_push(&concrete_fn->params, p);
+                }
+
+                Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
+                new_decl->type = DECL_FN;
+                new_decl->fn = concrete_fn;
+                new_decl->token = template->token;
+                
+                Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
+                sym->name = mangled_name;
+                sym->decl = new_decl;
+                sym->flags = SYMFLAG_FN;
+                sym->defined_in = mod->scope;
+                
+                TypeRef *fn_type = arena_calloc(mod->arena, sizeof(TypeRef));
+                fn_type->type = TYPEREF_FN;
+                fn_type->fn.ret_type = concrete_fn->ret_type;
+                fn_type->fn.params = concrete_fn->params;
+                sym->type = fn_type;
+
+                new_decl->symbol = sym;
+                concrete_fn->symbol = sym;
+                
+                if (mod->scope) {
+                    syms_array_push(&mod->scope->symbols, sym);
+                }
+
+                decls_array_push(&mod->decls, new_decl);
             }
 
             expr->type = EXPR_IDENT;
