@@ -77,7 +77,6 @@ static void inject_builtin_types(Analyser *ctx) {
 
 Scope *scope_init(Arena *a) {
     Scope *s = arena_calloc(a, sizeof(Scope));
-    printf("Creating new scope %p\n", s);
     s->symbols = syms_array_init(a);
     s->parent = NULL;
     return s;
@@ -157,23 +156,12 @@ Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
     return sym;
 }
 
-void print_indent(int indent) { for (int i = 0; i < indent; i++) putchar(' '); }
-
-void print_scope(Scope *scope, int indent) {
-    print_indent(indent); printf("Scope %p: %zu symbols:\n", scope, scope->symbols.len);
-    for (size_t i = 0; i < scope->symbols.len; i++) {
-        print_indent(indent + 2); printf("- %.*s\n", string_fmt(scope->symbols.data[i]->name));
-    }
-    if (scope->parent) print_scope(scope->parent, indent + 2);
-}
-
 Symbol *lookup_symbol(Analyser *ctx, String name) {
     Scope *scope = ctx->current_scope;
 
     while (scope != NULL) {
         for (size_t i = 0; i < scope->symbols.len; i++) {
             Symbol *sym = scope->symbols.data[i];
-            fprintf(stderr, "symbol %.*s scope %p\n", string_fmt(sym->name), scope);
             if (string_eq(sym->name, name)) {
                 return sym;
             }
@@ -646,7 +634,6 @@ void resolve_types(Analyser *ctx, Module *mod) {
                     if (d->symbol->type->fn.params.data[p].default_value) {
                         Scope *old = ctx->current_scope;
                         ctx->current_scope = d->symbol->defined_in;
-                        fprintf(stderr, "entering new scope! %.*s\n", string_fmt(d->symbol->mangled));
                         check_expr(ctx, d->symbol->type->fn.params.data[p].default_value);
                         ctx->current_scope = old;
                     }
@@ -956,13 +943,14 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             goto check_expr_finished;
         }
         case EXPR_IDENT: {
-            Symbol *sym = lookup_symbol(ctx, expr->ident.name);
-            print_scope(ctx->current_scope, 0);
-            if (!sym) {
-                error(expr->token, format("Unknown variable '%.*s'", string_fmt(expr->ident.name)));
+            if (!expr->symbol) {
+                Symbol *sym = lookup_symbol(ctx, expr->ident.name);
+                if (!sym) {
+                    error(expr->token, format("Unknown variable '%.*s'", string_fmt(expr->ident.name)));
+                }
+                expr->symbol = sym;
             }
-            expr->symbol = sym;
-            result_type = sym->type;
+            result_type = expr->symbol->type;
             goto check_expr_finished;
         }
         case EXPR_BINARY: {
