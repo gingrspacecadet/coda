@@ -11,6 +11,7 @@ void resolve_types(Analyser *ctx, Module *mod);
 void check_bodies(Analyser *ctx, Module *mod);
 TypeRef *check_expr(Analyser *ctx, Expr *expr);
 bool types_compatible(TypeRef *src, TypeRef *dst);
+static Module *resolve_module_path(Module *mod, string_array path, size_t len);
 
 static bool is_unsigned_integer(TypeRef *t) {
     if (!t || t->type != TYPEREF_NAMED) return false;
@@ -356,6 +357,43 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
                 if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
                 if (type->type == TYPEREF_FN) type->fn = sym->type->fn;
                 if (type->type == TYPEREF_NAMED) type->named = sym->type->named;
+                type->type_symbol = sym->type->type_symbol;
+            }
+            break;
+        }
+        case TYPEREF_PATH: {
+            size_t path_len = type->path.components.len;
+
+            Module *target_mod = resolve_module_path(ctx->module, type->path.components, path_len - 1);
+
+            if (!target_mod) {
+                error(type->token, "Could not resolve module path for type");
+            }
+
+            String type_name = type->path.components.data[path_len - 1];
+            Symbol *sym = lookup_symbol_scoped(target_mod->scope, type_name);
+
+            if (!sym || !(sym->flags & SYMFLAG_TYPE)) {
+                error(type->token, format("Unknown type '%.*s' in module", string_fmt(type_name)));
+            }
+
+            type->type_symbol = sym;
+
+            if (sym->type) {
+                if (sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym) {
+                    return;
+                }
+                
+                resolve_typeref(ctx, sym->type);
+                
+                type->type = sym->type->type;
+                if (type->type == TYPEREF_ARRAY) type->array = sym->type->array;
+                if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
+                if (type->type == TYPEREF_FN) type->fn = sym->type->fn;
+                if (type->type == TYPEREF_NAMED) type->named = sym->type->named;
+                
+                if (type->type == TYPEREF_PATH) type->path = sym->type->path; 
+                
                 type->type_symbol = sym->type->type_symbol;
             }
             break;

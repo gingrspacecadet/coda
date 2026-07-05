@@ -1,7 +1,7 @@
 # final binary
 codac
 
-build/
+/build/
 out*
 a.out
 *.s

@@ -283,6 +283,7 @@ INSTANTIATE(GenericParam, genparam, ARRAY_TEMPLATE)
 struct TypeRef {
     enum {
         TYPEREF_NAMED,
+        TYPEREF_PATH,
         TYPEREF_POINTER,
         TYPEREF_ARRAY,
         TYPEREF_FN,
@@ -293,6 +294,10 @@ struct TypeRef {
             String name;
             typerefs_array generic_args;
         } named;
+        struct {
+            string_array components;
+            typerefs_array generic_args;
+        } path;
         struct {
             TypeRef *pointee;
         } pointer;

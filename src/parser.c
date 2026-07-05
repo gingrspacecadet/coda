@@ -221,8 +221,20 @@ static bool looks_like_type_single_internal(Parser *ctx) {
     } 
     else if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
         consume(ctx);
-        
+
         t = peek(ctx);
+        while (t.has_value && t.value.type == TOKENTYPE_DOUBLECOLON) {
+            consume(ctx);
+            
+            t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
+                return false;
+            }
+            consume(ctx);
+            
+            t = peek(ctx);
+        }
+        
         if (t.has_value && t.value.type == TOKENTYPE_LT) {
             consume(ctx);
             while (true) {
@@ -239,7 +251,7 @@ static bool looks_like_type_single_internal(Parser *ctx) {
             if (!t.has_value || t.value.type != TOKENTYPE_GT) return false;
             consume(ctx);
         }
-    } 
+    }
     else {
         return false;
     }
@@ -366,14 +378,36 @@ TypeRef *parse_type_single(Parser *ctx) {
     else if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
         error(ctx, "Expected type name");
     } else {
-        String type_name = consume(ctx).value.value;
-    
-        base->type = TYPEREF_NAMED;
-        base->named.name = type_name;
-        base->named.generic_args = typerefs_array_init(ctx->arena);
+        string_array components = string_array_init(ctx->arena);
+        String first_ident = consume(ctx).value.value;
+        string_array_push(&components, first_ident);
+
+        t = peek(ctx);
+        while (t.has_value && t.value.type == TOKENTYPE_DOUBLECOLON) {
+            consume(ctx);
+            
+            t = peek(ctx);
+            if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
+                error(ctx, "Expected identifier after '::'");
+            }
+            String next_ident = consume(ctx).value.value;
+            string_array_push(&components, next_ident);
+            t = peek(ctx);
+        }
+
+        if (components.len > 1) {
+            base->type = TYPEREF_PATH;
+            base->path.components = components;
+            base->path.generic_args = typerefs_array_init(ctx->arena);
+        } else {
+            base->type = TYPEREF_NAMED;
+            base->named.name = components.data[0];
+            base->named.generic_args = typerefs_array_init(ctx->arena);
+        }
+        
         base->is_mutable = is_mut;
         
-        if (t.has_value) {
+        if (first.has_value) {
             base->token = first.value;
         }
 
@@ -381,7 +415,10 @@ TypeRef *parse_type_single(Parser *ctx) {
         if (gen_check.has_value && gen_check.value.type == TOKENTYPE_LT) {
             consume(ctx);
             while (true) {
-                typerefs_array_push(&base->named.generic_args, parse_type_single(ctx));
+                typerefs_array *gen_args = (base->type == TYPEREF_PATH) ? 
+                    &base->path.generic_args : &base->named.generic_args;
+                    
+                typerefs_array_push(gen_args, parse_type_single(ctx));
                 
                 gen_check = peek(ctx);
                 if (gen_check.has_value && gen_check.value.type == TOKENTYPE_COMMA) {

@@ -5,8 +5,7 @@ include std::io = io;
 
 @export
 fn int main() {
-    char *cs = std::mem::allocate<char>(12u);
-    string s = string.from_cstr(cs);
-    io::println(s);
-    return 0;
+    mut int mut*cs = std::mem::allocate<int, std::mem::Heap>(12u, &std::mem::default_heap);
+    *cs = 3;
+    return *cs;
 }

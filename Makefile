@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Werror -Wno-unused -MMD -MD -std=gnu23 -O0 # -fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -g -Werror -Wno-unused -MMD -MD -std=gnu23 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
 
 SRCS = $(shell find src -type f -name "*.c" ! -path "src/backends/*" 2>/dev/null)
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
