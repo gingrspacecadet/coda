@@ -13,6 +13,20 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr);
 bool types_compatible(TypeRef *src, TypeRef *dst);
 static Module *resolve_module_path(Module *mod, string_array path, size_t len);
 
+static TypeRef *unwrap_type(TypeRef *type) {
+    while (type && (type->type == TYPEREF_NAMED || type->type == TYPEREF_PATH)) {
+        if (type->type_symbol && type->type_symbol->type) {
+            if (type->type_symbol->type == type) {
+                break;
+            }
+            type = type->type_symbol->type;
+        } else {
+            break;
+        }
+    }
+    return type;
+}
+
 static bool is_unsigned_integer(TypeRef *t) {
     if (!t || t->type != TYPEREF_NAMED) return false;
     Symbol *s = t->type_symbol;
@@ -340,10 +354,7 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
             }
 
             type->type_symbol = sym;
-            
-            // type aliases are annoying
-            // gotta do weird recursive stuffs
-            // anyway it works now
+
             if (sym->type) {
                 if (sym->type->type == TYPEREF_NAMED && 
                     sym->type->type_symbol == sym) {
@@ -351,13 +362,6 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
                 }
                 
                 resolve_typeref(ctx, sym->type);
-                
-                type->type = sym->type->type;
-                if (type->type == TYPEREF_ARRAY) type->array =sym->type->array;
-                if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
-                if (type->type == TYPEREF_FN) type->fn = sym->type->fn;
-                if (type->type == TYPEREF_NAMED) type->named = sym->type->named;
-                type->type_symbol = sym->type->type_symbol;
             }
             break;
         }
@@ -385,16 +389,6 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
                 }
                 
                 resolve_typeref(ctx, sym->type);
-                
-                type->type = sym->type->type;
-                if (type->type == TYPEREF_ARRAY) type->array = sym->type->array;
-                if (type->type == TYPEREF_POINTER) type->pointer = sym->type->pointer;
-                if (type->type == TYPEREF_FN) type->fn = sym->type->fn;
-                if (type->type == TYPEREF_NAMED) type->named = sym->type->named;
-                
-                if (type->type == TYPEREF_PATH) type->path = sym->type->path; 
-                
-                type->type_symbol = sym->type->type_symbol;
             }
             break;
         }
@@ -989,6 +983,9 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
             if (!expr->symbol) {
                 Symbol *sym = lookup_symbol(ctx, expr->ident.name);
                 if (!sym) {
+                    for (size_t i = 0; i < ctx->current_scope->symbols.len; i++) {
+                        printf("sym %.*s\n", string_fmt(ctx->current_scope->symbols.data[i]->name));
+                    }
                     error(expr->token, format("Unknown variable '%.*s'", string_fmt(expr->ident.name)));
                 }
                 expr->symbol = sym;
@@ -1179,96 +1176,91 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 goto check_expr_finished;
             }
 
-            if (base_type->type == TYPEREF_ARRAY) {
+            TypeRef *actual_struct_type = base_type;
+            TypeRef *struct_type = unwrap_type(actual_struct_type);
+            
+            if (struct_type && struct_type->type == TYPEREF_POINTER && expr->member.deref) {
+                actual_struct_type = struct_type->pointer.pointee;
+                struct_type = unwrap_type(actual_struct_type);
+            }
+
+            if (struct_type && struct_type->type == TYPEREF_ARRAY) {
                 if (string_eq(expr->member.member, string_make("ptr"))) {
-                    // construct a pointer to the array's underlying element type
                     TypeRef *ptr_type = arena_calloc(ctx->arena, sizeof(TypeRef));
                     ptr_type->type = TYPEREF_POINTER;
-                    ptr_type->pointer.pointee = base_type->array.elem;
+                    ptr_type->pointer.pointee = struct_type->array.elem;
                     
                     result_type = ptr_type;
                     goto check_expr_finished;
                 } else if (string_eq(expr->member.member, string_make("len"))) {
-                    // len is a uint64
                     Symbol *uint64_sym = lookup_symbol(ctx, string_make("uint64"));
                     result_type = uint64_sym->type;
                     goto check_expr_finished;
                 } else {
                     error(expr->member.base->token, format("Unknown array member '%.*s'", string_fmt(expr->member.member)));
                 }
-            } else {
-                TypeRef *actual_struct_type = base_type;
-                
-                if (actual_struct_type->type == TYPEREF_POINTER && expr->member.deref) {
-                    actual_struct_type = actual_struct_type->pointer.pointee;
-                }
-
+            } 
+            else {
                 Symbol *type_sym = actual_struct_type->type_symbol;
                 if (!type_sym) {
                     error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
                 }
 
-                if (!type_sym->decl) {
-                    FnDecl *current_fn = ctx->current_function;
-
-                    if (current_fn && current_fn->generic_params.len > 0) {
-                        for (size_t i = 0; i < current_fn->generic_params.len; i++) {
-                            if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
-                                for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
-                                    FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
+                FnDecl *current_fn = ctx->current_function;
+                if (current_fn && current_fn->generic_params.len > 0) {
+                    for (size_t i = 0; i < current_fn->generic_params.len; i++) {
+                        if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
+                            
+                            for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
+                                FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
     
-                                    if (constraint && string_eq(constraint->name, expr->member.member)) {
-                                        resolve_typeref(ctx, constraint->ret_type);
-                                        for (size_t k = 0; k < constraint->params.len; k++) {
-                                            resolve_typeref(ctx, constraint->params.data[k].type);
-                                        }
-
-                                        TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
-                                        fn_type->type = TYPEREF_FN;
-                                        fn_type->fn.ret_type = constraint->ret_type;
-                                        fn_type->fn.params = constraint->params;
-                                        
-                                        result_type = fn_type;
-                                        expr->symbol = NULL;
-                                        goto check_expr_finished;
+                                if (constraint && string_eq(constraint->name, expr->member.member)) {
+                                    resolve_typeref(ctx, constraint->ret_type);
+                                    for (size_t k = 0; k < constraint->params.len; k++) {
+                                        resolve_typeref(ctx, constraint->params.data[k].type);
                                     }
+
+                                    TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                                    fn_type->type = TYPEREF_FN;
+                                    fn_type->fn.ret_type = constraint->ret_type;
+                                    fn_type->fn.params = constraint->params;
+                                    
+                                    result_type = fn_type;
+                                    expr->symbol = NULL;
+                                    goto check_expr_finished;
                                 }
                             }
+                            
+                            error(expr->token, format("Generic parameter '%.*s' has no method named '%.*s'", string_fmt(type_sym->name), string_fmt(expr->member.member)));
                         }
-
-                        error(expr->token, format("Generic parameter '%.*s' has no method named '%.*s'", string_fmt(type_sym->name), string_fmt(expr->member.member)));
                     }
-
-                    // TODO: ensure constraints allow this, otherwise error
-                    error(expr->token, format("Type placeholder '%.*s' does not have member elements", string_fmt(type_sym->name)));
                 }
 
                 if (!(type_sym->flags & SYMFLAG_TYPE)) {
                     error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
                 }
     
+                Symbol *structural_sym = (struct_type ? struct_type->type_symbol : type_sym);
+
                 StructDecl *str = NULL;
                 UnionDecl *unn = NULL;
     
-                if (type_sym->decl->type == DECL_STRUCT) str = type_sym->decl->_struct;
-                else if (type_sym->decl->type == DECL_UNION) unn = type_sym->decl->_union;
-    
-                if (!str && !unn) {
-                    error(expr->token, "Cannot get member of type without members");
+                if (structural_sym && structural_sym->decl) {
+                    if (structural_sym->decl->type == DECL_STRUCT) str = structural_sym->decl->_struct;
+                    else if (structural_sym->decl->type == DECL_UNION) unn = structural_sym->decl->_union;
                 }
     
                 VarDecl *found_member = NULL;
-                size_t member_index = 0;
 
-                for (size_t i = 0; i < (str ? str->members.len : unn->members.len); i++) {
-                    if (string_eq(str ? str->members.data[i]->name : unn->members.data[i]->name, expr->member.member)) {
-                        found_member = str ? str->members.data[i] : unn->members.data[i];
-                        member_index = i;
-                        break;
+                if (str || unn) {
+                    for (size_t i = 0; i < (str ? str->members.len : unn->members.len); i++) {
+                        if (string_eq(str ? str->members.data[i]->name : unn->members.data[i]->name, expr->member.member)) {
+                            found_member = str ? str->members.data[i] : unn->members.data[i];
+                            break;
+                        }
                     }
                 }
 
-                // prioritise members over methods (TODO: error on this?)
                 if (found_member) {
                     result_type = found_member->type;
                     goto check_expr_finished;
@@ -1283,7 +1275,7 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
 
                 error(expr->token, format("Unknown member or method '%.*s' on type '%.*s'", string_fmt(expr->member.member), string_fmt(type_sym->name)));
             }
-        }
+        }        
         case EXPR_UNARY: {
             TypeRef *operand_type = check_expr(ctx, expr->unary.operand);
             if (!operand_type) result_type = NULL;
@@ -1675,23 +1667,29 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
         return false;
     }
 
-    if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null")) && dst->type == TYPEREF_POINTER) {
-        return dst->is_optional;
+    if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
+        TypeRef *unwrapped_dst = unwrap_type(dst);
+        if (unwrapped_dst->type == TYPEREF_POINTER) {
+            return dst->is_optional;
+        }
     }
     
     if (!dst->is_optional && src->is_optional) return false;
     
-    if (src->type != dst->type) return false;
+    TypeRef *u_src = unwrap_type(src);
+    TypeRef *u_dst = unwrap_type(dst);
 
-    if (src->type == TYPEREF_NAMED) {
-        if ((is_signed_integer(src) || is_unsigned_integer(src)) &&
-            (is_signed_integer(dst) || is_unsigned_integer(dst))) {
+    if (u_src->type != u_dst->type) return false;
 
-            size_t src_bits = integer_size_bits(src);
-            size_t dst_bits = integer_size_bits(dst);
+    if (u_src->type == TYPEREF_NAMED) {
+        if ((is_signed_integer(u_src) || is_unsigned_integer(u_src)) &&
+            (is_signed_integer(u_dst) || is_unsigned_integer(u_dst))) {
+
+            size_t src_bits = integer_size_bits(u_src);
+            size_t dst_bits = integer_size_bits(u_dst);
 
             if (dst_bits >= src_bits) {
-                if (is_signed_integer(src) && is_unsigned_integer(dst)) {
+                if (is_signed_integer(u_src) && is_unsigned_integer(u_dst)) {
                     return false;
                 }
                 return true;
@@ -1699,50 +1697,50 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
             return false;
         }
 
-        if (src->type_symbol == dst->type_symbol) {
+        if (u_src->type_symbol == u_dst->type_symbol) {
             return true;
         }
 
-        if (src->type_symbol && dst->type_symbol) {
-            bool src_is_generic = (src->type_symbol->flags & SYMFLAG_GENERIC) || 
-                                  (src->type_symbol->flags & SYMFLAG_TYPE && !src->type_symbol->decl);
-            bool dst_is_generic = (dst->type_symbol->flags & SYMFLAG_GENERIC) || 
-                                  (dst->type_symbol->flags & SYMFLAG_TYPE && !dst->type_symbol->decl);
+        if (u_src->type_symbol && u_dst->type_symbol) {
+            bool src_is_generic = (u_src->type_symbol->flags & SYMFLAG_GENERIC) || 
+                                  (u_src->type_symbol->flags & SYMFLAG_TYPE && !u_src->type_symbol->decl);
+            bool dst_is_generic = (u_dst->type_symbol->flags & SYMFLAG_GENERIC) || 
+                                  (u_dst->type_symbol->flags & SYMFLAG_TYPE && !u_dst->type_symbol->decl);
 
             if (src_is_generic && dst_is_generic) {
-                return string_eq(src->type_symbol->name, dst->type_symbol->name);
+                return string_eq(u_src->type_symbol->name, u_dst->type_symbol->name);
             }
         }
 
         return false;
     }
 
-    if (src->type == TYPEREF_POINTER) {
-        return types_compatible(src->pointer.pointee, dst->pointer.pointee);
+    if (u_src->type == TYPEREF_POINTER) {
+        return types_compatible(u_src->pointer.pointee, u_dst->pointer.pointee);
     }
 
-    if (src->type == TYPEREF_ARRAY) {
-        if (dst->array.length != 0 && src->array.length != dst->array.length) {
+    if (u_src->type == TYPEREF_ARRAY) {
+        if (u_dst->array.length != 0 && u_src->array.length != u_dst->array.length) {
             return false;
         }
         
-        return types_compatible(src->array.elem, dst->array.elem);
+        return types_compatible(u_src->array.elem, u_dst->array.elem);
     }
 
-    if (src->type == TYPEREF_FN) {
-        if (!types_compatible(src->fn.ret_type, dst->fn.ret_type)) return false;
+    if (u_src->type == TYPEREF_FN) {
+        if (!types_compatible(u_src->fn.ret_type, u_dst->fn.ret_type)) return false;
 
-        if (src->fn.params.len != dst->fn.params.len) return false;
-        for (size_t i = 0; i < src->fn.params.len; i++) {
-            if (!types_compatible(src->fn.params.data[i].type, dst->fn.params.data[i].type)) return false;
+        if (u_src->fn.params.len != u_dst->fn.params.len) return false;
+        for (size_t i = 0; i < u_src->fn.params.len; i++) {
+            if (!types_compatible(u_src->fn.params.data[i].type, u_dst->fn.params.data[i].type)) return false;
         }
 
         return true;
     }
 
-    if (src->type == TYPEREF_SUM) {
-        for (size_t i = 0; i < src->sum.cases.len; i++) {
-            if (types_compatible(src->sum.cases.data[i], dst)) return true;
+    if (u_src->type == TYPEREF_SUM) {
+        for (size_t i = 0; i < u_src->sum.cases.len; i++) {
+            if (types_compatible(u_src->sum.cases.data[i], dst)) return true;
         }
         return false;
     }
