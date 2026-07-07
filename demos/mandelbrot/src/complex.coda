@@ -1,0 +1,12 @@
+module complex;
+
+struct Complex {
+    float64 real;
+    float64 imag;
+}
+
+fn Complex add(Complex a, Complex b);
+
+fn Complex square(Complex z);
+
+fn float64 magnitude_squared(Complex Z);

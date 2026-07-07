@@ -13,6 +13,68 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr);
 bool types_compatible(TypeRef *src, TypeRef *dst);
 static Module *resolve_module_path(Module *mod, string_array path, size_t len);
 
+static String mangle_type(Arena *arena, TypeRef *t) {
+    if (!t) return string_make("void"); 
+
+    if (t->type == TYPEREF_NAMED) {
+        if (t->type_symbol) return t->type_symbol->name;
+        return t->named.name;
+    }
+
+    char_array cs = char_array_init(arena); 
+
+    if (t->type == TYPEREF_POINTER) {
+        if (t->is_optional) append_string_to_char_array(&cs, string_make("opt_"));
+        if (t->is_mutable)  append_string_to_char_array(&cs, string_make("mut_"));
+        append_string_to_char_array(&cs, string_make("ptr_"));
+        
+        String pointee = mangle_type(arena, t->pointer.pointee);
+        append_string_to_char_array(&cs, pointee);
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_ARRAY) {
+        append_string_to_char_array(&cs, string_make("arr_"));
+        
+        char buf[32];
+        int n = snprintf(buf, sizeof buf, "%zu_", t->array.length);
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) char_array_push(&cs, buf[i]);
+        }
+
+        String base = mangle_type(arena, t->array.elem);
+        append_string_to_char_array(&cs, base);
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_FN) {
+        append_string_to_char_array(&cs, string_make("fn_"));
+
+        for (size_t i = 0; i < t->fn.params.len; ++i) {
+            TypeRef *param_t = t->fn.params.data[i]; 
+            String param_str = mangle_type(arena, param_t);
+            append_string_to_char_array(&cs, param_str);
+            append_string_to_char_array(&cs, string_make("_"));
+        }
+
+        append_string_to_char_array(&cs, string_make("ret_"));
+        String ret = mangle_type(arena, t->fn.ret_type);
+        append_string_to_char_array(&cs, ret);
+
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_SUM) {
+        append_string_to_char_array(&cs, string_make("sum_"));
+        for (size_t i = 0; i < t->sum.cases.len; ++i) {
+            TypeRef *case_t = t->sum.cases.data[i];
+            String cs_str = mangle_type(arena, case_t);
+            append_string_to_char_array(&cs, cs_str);
+            if (i + 1 < t->sum.cases.len) append_string_to_char_array(&cs, string_make("_"));
+        }
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+
+    return string_make("unknown");
+}
+
 static TypeRef *unwrap_type(TypeRef *type) {
     while (type && (type->type == TYPEREF_NAMED || type->type == TYPEREF_PATH)) {
         if (type->type_symbol && type->type_symbol->type) {
