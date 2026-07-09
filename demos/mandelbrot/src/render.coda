@@ -1,0 +1,61 @@
+module render;
+
+include complex;
+include fixed;
+include image;
+
+struct Config {
+    uint width;
+    uint height;
+
+    fixed::Fixed min_x;
+    fixed::Fixed max_x;
+    fixed::Fixed min_y;
+    fixed::Fixed max_y;
+
+    uint iterations;
+}
+
+fn uint iterations(complex::Complex c, uint max) {
+    complex::Complex z = {
+        .real = 0,
+        .imag = 0
+    };
+
+    for (uint i = 0u; i < max; i = i + 1) {
+        if (complex::magnitude_squared(z) > fixed::from_int(4)) {
+            return i;
+        }
+
+        z = complex::iter(z, c);
+    }
+
+    return max;
+}
+
+fn image::RGB colour(uint iteration, uint max) {
+    if (iteration == max) {
+        return {0, 0, 0};
+    }
+
+    uint8 c = iteration;
+
+    return {c, c, c};
+}
+
+@export
+fn none render(mut image::Image image, Config config) {
+    for (uint y = 0u; y < image.height; y = y + 1) {
+        for (uint x = 0u; x < image.width; x = x + 1) {
+            fixed::Fixed real = fixed::lerp(config.mix_x, config.max_x, x, image.width);
+
+            fixed::Fixed imag = fixed::lerp(config.min_y, config.max_y, y, image.height);
+
+            complex::Complex c = { .real = real, .imag = imag };
+
+            uint count = iterations(c, config.iterations);
+
+            image::set(image, x, y, colour(count, config.iterations));
+        }
+    }
+}

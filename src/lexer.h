@@ -2,6 +2,8 @@
 #define LEXER_H
 
 #include <stddef.h>
+#include <errno.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include "array.h"
 #include "string.h"
@@ -116,24 +118,39 @@ static void lexer_free(Lexer *l) {
 }
 
 static char *read_file(Arena *arena, char *path) {
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(path, "rb");
     if (!f) goto err;
 
-    if (fseek(f, 0, SEEK_END) != 0) goto err;
+    if (fseek(f, 0, SEEK_END) != 0)
+        goto err;
 
-    ssize_t fsize = ftell(f);
-    if (fsize < 0) goto err;
-    if (fseek(f, 0, SEEK_SET) != 0) goto err;
+    long size = ftell(f);
+    if (size < 0)
+        goto err;
 
-    char *data = arena_alloc(arena, fsize + 1);
-    if (!data) goto err;
-    if (fread(data, fsize, 1, f) != 1) goto err;
-    if (fclose(f) != 0) goto err;
-    data[fsize] = 0;
+    if (fseek(f, 0, SEEK_SET) != 0)
+        goto err;
+
+    char *data = arena_alloc(arena, (size_t)size + 1);
+    if (!data)
+        goto err;
+
+    size_t nread = fread(data, 1, (size_t)size, f);
+    if (nread != (size_t)size)
+        goto err;
+
+    if (fclose(f) != 0)
+        goto err;
+
+    data[size] = '\0';
     return data;
 
 err:
-    perror(path);
+    if (f) fclose(f);
+    fprintf(stderr, "Failed to read file %s: %s\n", path, strerror(errno));
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)))
+        fprintf(stderr, "CWD %s\n", cwd);
     exit(1);
 }
 

@@ -1,0 +1,34 @@
+module image;
+
+@export
+struct RGB {
+    uint8 r;
+    uint8 g;
+    uint8 b;
+}
+
+@export
+struct Image {
+    uint width;
+    uint height;
+    RGB[] pixels;
+}
+
+@export
+fn image::Image create<T: fn mut uint8 *? alloc(mut T *self, uint64 count)>(T *allocator, uint width, uint height) {
+    return (image::Image){
+        .width = width,
+        .height = height,
+        .pixels = allocator->alloc<RGB>(width * height),
+    };
+}
+
+@export
+fn none set(mut Image *image, uint x, uint y, RGB colour) {
+    image->pixels[y * image->width + x] = colour;
+}
+
+@export
+fn RGB get(Image image, uint x, uint y) {
+    return image.pixels[y * image.width + x];
+}

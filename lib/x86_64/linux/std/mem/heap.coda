@@ -24,6 +24,7 @@ fn none system_free_pages(uint8 mut *ptr, uint64 size) {
 
 type Heap = none;
 
+@export
 fn mut uint8 *? Heap.alloc(mut Heap *self, uint64 count) {
     return system_alloc_pages(count);
 }

@@ -1,0 +1,32 @@
+module main;
+
+include std::fs;
+include image;
+include ppm;
+include render;
+include std::mem;
+include fixed;
+
+fn int main(string[] args) {
+    image::Image img = image::create<std::mem::Heap>(&std::mem::default_heap, 800u, 600u);
+
+    render::render(
+        img,
+        (render::Config){
+            .min_x = fixed::from_int(-2),
+            .max_x = fixed::from_int(1),
+            .min_y = fixed::from_int(-1),
+            .max_y = fixed::from_int(1),
+            .iterations = 256,
+        }
+    );
+
+    std::fs::File file = std::fs::create("mandelbrot.ppm");
+
+    ppm::write<std::fs::File>(
+        file,
+        img
+    );
+
+    return 0;
+}

@@ -522,6 +522,14 @@ static String type_to_string(TypeRef *t) {
         }
         return (String){ .data = cs.data, .length = cs.len };
     }
+    else if (t->type == TYPEREF_PATH) {
+        for (size_t i = 0; i < t->path.components.len; ++i) {
+            String cs_str = t->path.components.data[i];
+            append_string_to_char_array(&cs, cs_str);
+            if (i + 1 < t->path.components.len) { char_array_push(&cs, ':'); char_array_push(&cs, ':'); }
+        }
+        return (String){ .data = cs.data, .length = cs.len };
+    }
 
     return string_make("Unknown");
 }

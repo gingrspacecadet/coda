@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#define error(T, msg) _Generic((T), \
+#define error(T, msg) fprintf(stderr, "error occured at "__FILE__":%d\n", __LINE__); _Generic((T), \
     Parser *: error_parser, \
     Token: error_sema \
 )(T, msg)

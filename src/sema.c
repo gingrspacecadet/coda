@@ -3,7 +3,7 @@
 #include "sema.h"
 #include "error.h"
 
-static String generate_mangled_name(Analyser *ctx, Module *mod, String sym_name, Token err_tok);
+static String mangle_symbol(Arena *arena, Module *module, TypeRef *owner, String name, typerefs_array generic_args);
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags);
 Symbol *lookup_symbol(Analyser *ctx, String name);
 void register_globals(Analyser *ctx, Module *mod);
@@ -12,6 +12,16 @@ void check_bodies(Analyser *ctx, Module *mod);
 TypeRef *check_expr(Analyser *ctx, Expr *expr);
 bool types_compatible(TypeRef *src, TypeRef *dst);
 static Module *resolve_module_path(Module *mod, string_array path, size_t len);
+
+static void print_scope(Scope *s) {
+    if (!s) return;
+
+    for (size_t i = 0; i < s->symbols.len; i++) {
+        printf("%.*s\n", string_fmt(s->symbols.data[i]->name));
+    }
+    
+    print_scope(s->parent);
+}
 
 static String mangle_type(Arena *arena, TypeRef *t) {
     if (!t) return string_make("void"); 
@@ -49,7 +59,7 @@ static String mangle_type(Arena *arena, TypeRef *t) {
         append_string_to_char_array(&cs, string_make("fn_"));
 
         for (size_t i = 0; i < t->fn.params.len; ++i) {
-            TypeRef *param_t = t->fn.params.data[i]; 
+            TypeRef *param_t = t->fn.params.data[i].type; 
             String param_str = mangle_type(arena, param_t);
             append_string_to_char_array(&cs, param_str);
             append_string_to_char_array(&cs, string_make("_"));
@@ -68,6 +78,14 @@ static String mangle_type(Arena *arena, TypeRef *t) {
             String cs_str = mangle_type(arena, case_t);
             append_string_to_char_array(&cs, cs_str);
             if (i + 1 < t->sum.cases.len) append_string_to_char_array(&cs, string_make("_"));
+        }
+        return (String){ .data = cs.data, .length = cs.len };
+    }
+    else if (t->type == TYPEREF_PATH) {
+        for (size_t i = 0; i < t->path.components.len; i++) {
+            String cs_str = t->path.components.data[i];
+            append_string_to_char_array(&cs, cs_str);
+            if (i + 1 < t->path.components.len) append_string_to_char_array(&cs, string_make("_"));
         }
         return (String){ .data = cs.data, .length = cs.len };
     }
@@ -317,7 +335,9 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
 }
 
 void register_globals(Analyser *ctx, Module *mod) {
+    Module *old_mod = ctx->module;
     ctx->current_scope = mod->scope;
+    ctx->module = mod;
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
@@ -335,7 +355,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 if (d->fn->is_extern) flags |= SYMFLAG_EXTERN;
 
                 Symbol *sym = declare_symbol(ctx, d->fn->name, flags);
-                if (d->is_export) sym->mangled = generate_mangled_name(ctx, mod, d->fn->name, d->token);
+                if (d->is_export) sym->mangled = mangle_symbol(ctx->arena, ctx->module, NULL, sym->name, (typerefs_array){0});
                 else sym->mangled = sym->name;
                 TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
                 fn_type->type = TYPEREF_FN;
@@ -388,7 +408,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 Symbol *sym = declare_symbol(ctx, d->var->name, flags);
 
                 if (d->is_export) {
-                    sym->mangled = generate_mangled_name(ctx, mod, d->var->name, d->token);
+                    sym->mangled = mangle_symbol(ctx->arena, ctx->module, NULL, sym->name, (typerefs_array){0});
                 } else {
                     sym->mangled = sym->name;
                 }
@@ -399,10 +419,12 @@ void register_globals(Analyser *ctx, Module *mod) {
             }
         }
     }
+    ctx->module = old_mod;
 }
 
 void resolve_typeref(Analyser *ctx, TypeRef *type) {
     if (!type) return;
+    if (type->type_symbol) return;
 
     switch (type->type) {
         case TYPEREF_NAMED: {
@@ -433,7 +455,7 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
             Module *target_mod = resolve_module_path(ctx->module, type->path.components, path_len - 1);
 
             if (!target_mod) {
-                error(type->token, "Could not resolve module path for type");
+                error(type->token, format("Could not resolve module path for type '%.*s'", string_fmt(type_to_string(type))));
             }
 
             String type_name = type->path.components.data[path_len - 1];
@@ -449,8 +471,13 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
                 if (sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym) {
                     return;
                 }
-                
+
+                Module *old_mod = ctx->module;
+                ctx->module = target_mod;
+
                 resolve_typeref(ctx, sym->type);
+
+                ctx->module = old_mod;
             }
             break;
         }
@@ -493,11 +520,17 @@ size_t get_type_size(TypeRef *type) {
                 return 16;
             }
         }
+        case TYPEREF_PATH:
         case TYPEREF_NAMED: {
             Symbol *sym = type->type_symbol;
             if (!sym) return 0;
 
-            
+            if (sym->type) {
+                if (!(sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym)) {
+                    return get_type_size(sym->type);
+                }
+            }
+
             if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
             || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
                 return 1;
@@ -509,19 +542,20 @@ size_t get_type_size(TypeRef *type) {
                 return 4;
             }
             if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
-            || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
+            || string_eq(sym->name, string_make("int"))   || string_eq(sym->name, string_make("uint")) ) {
                 return 8;
             }
             if (string_eq(sym->name, string_make("string")) ) {
                 return 16;  // ptr + len
             }
             
-            if (!sym->decl) return 0;
-            if (sym->decl->type == DECL_STRUCT) {
-                return sym->decl->_struct->size;
-            }
-            if (sym->decl->type == DECL_UNION) {
-                return sym->decl->_union->size;
+            if (sym->decl) {
+                if (sym->decl->type == DECL_STRUCT) {
+                    return sym->decl->_struct->size;
+                }
+                if (sym->decl->type == DECL_UNION) {
+                    return sym->decl->_union->size;
+                }
             }
 
             return 0;
@@ -535,8 +569,6 @@ size_t get_type_size(TypeRef *type) {
             }
             return highest;
         }
-
-        return 0;
     }
 
     return 0;
@@ -553,9 +585,16 @@ static size_t get_type_align(TypeRef *type) {
         case TYPEREF_ARRAY: {
             return get_type_align(type->array.elem);
         }
+        case TYPEREF_PATH:
         case TYPEREF_NAMED: {
             Symbol *sym = type->type_symbol;
             if (!sym) return 1;
+
+            if (sym->type) {
+                if (!(sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym)) {
+                    return get_type_align(sym->type);
+                }
+            }
 
             if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
              || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
@@ -568,17 +607,20 @@ static size_t get_type_align(TypeRef *type) {
                 return 4;
             }
             if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
-             || string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint")) ) {
+             || string_eq(sym->name, string_make("int"))   || string_eq(sym->name, string_make("uint")) ) {
                 return 8;
             }
             if (string_eq(sym->name, string_make("string")) ) {
                 return 8;   // ptr + len
             }
-            if (sym->decl->type == DECL_STRUCT) {
-                return sym->decl->_struct->align;
-            }
-            if (sym->decl->type == DECL_UNION) {
-                return sym->decl->_union->align;
+            
+            if (sym->decl) {
+                if (sym->decl->type == DECL_STRUCT) {
+                    return sym->decl->_struct->align;
+                }
+                if (sym->decl->type == DECL_UNION) {
+                    return sym->decl->_union->align;
+                }
             }
 
             return 1;
@@ -592,8 +634,6 @@ static size_t get_type_align(TypeRef *type) {
             }
             return highest;
         }
-        
-        return 1;
     }
 
     return 0;
@@ -607,6 +647,9 @@ static void calculate_struct_layout(StructDecl *str) {
         VarDecl *member = str->members.data[i];
         size_t member_size = get_type_size(member->type);
         size_t member_align = get_type_align(member->type);
+        if (member_align == 0) {
+            error(str->token, format("Internal error: struct '%.*s' member '%.*s''s align is 0!", string_fmt(str->name), string_fmt(member->name)));
+        }
 
         if (member_align > max_align) {
             max_align = member_align;
@@ -706,6 +749,8 @@ static TypeRef *check_expr_with_target(Analyser *ctx, Expr *expr, TypeRef *targe
 
 void resolve_types(Analyser *ctx, Module *mod) {
     ctx->current_scope = mod->scope;
+    Module *old_mod = ctx->module;
+    ctx->module = mod;
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
@@ -809,6 +854,8 @@ void resolve_types(Analyser *ctx, Module *mod) {
             }
         }
     }
+
+    ctx->module = old_mod;
 }
 
 void check_stmt(Analyser *ctx, Stmt *stmt) {
@@ -975,6 +1022,8 @@ void check_fn_body(Analyser *ctx, FnDecl *fn) {
 
 void check_bodies(Analyser *ctx, Module *mod) {
     ctx->current_scope = ctx->global_scope;
+    Module *old_mod = ctx->module;
+    ctx->module = mod;
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
@@ -985,6 +1034,8 @@ void check_bodies(Analyser *ctx, Module *mod) {
             check_fn_body(ctx, d->fn);
         }
     }
+
+    ctx->module = old_mod;
 }
 
 static bool is_integer_type(TypeRef *type) {
@@ -1004,21 +1055,8 @@ static bool is_integer_type(TypeRef *type) {
            string_eq(sym->name, string_make("uint64"));
 }
 
-static Symbol *find_struct_method(Analyser *ctx, String struct_name, String method) {
-    Module *mod = ctx->module;
-    if (!mod) return NULL;
-
-    for (size_t i = 0; i < mod->decls.len; i++) {
-        Decl *decl = mod->decls.data[i];
-        if (decl->type == DECL_FN) {
-            FnDecl *fn = decl->fn;
-            if (fn->struct_name.has_value && string_eq(fn->struct_name.value, struct_name)) {
-                if (string_eq(fn->name, method)) return fn->symbol;
-            }
-        }
-    }
-
-    return NULL;
+static Symbol *find_struct_method(Analyser *ctx, Scope *scope, TypeRef *owner, String method) {
+    return lookup_symbol_scoped(scope, mangle_symbol(ctx->arena, ctx->module, owner, method, (typerefs_array){}));
 }
 
 TypeRef *check_expr(Analyser *ctx, Expr *expr) {
@@ -1272,10 +1310,8 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 if (current_fn && current_fn->generic_params.len > 0) {
                     for (size_t i = 0; i < current_fn->generic_params.len; i++) {
                         if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
-                            
                             for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
                                 FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
-    
                                 if (constraint && string_eq(constraint->name, expr->member.member)) {
                                     resolve_typeref(ctx, constraint->ret_type);
                                     for (size_t k = 0; k < constraint->params.len; k++) {
@@ -1292,7 +1328,6 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                                     goto check_expr_finished;
                                 }
                             }
-                            
                             error(expr->token, format("Generic parameter '%.*s' has no method named '%.*s'", string_fmt(type_sym->name), string_fmt(expr->member.member)));
                         }
                     }
@@ -1302,8 +1337,15 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
                 }
     
-                Symbol *structural_sym = (struct_type ? struct_type->type_symbol : type_sym);
+                Symbol *method_sym = find_struct_method(ctx, type_sym->defined_in ? type_sym->defined_in : ctx->current_scope, type_sym->name, expr->member.member);;
 
+                if (method_sym) {
+                    expr->symbol = method_sym;
+                    result_type = method_sym->type;
+                    goto check_expr_finished;
+                }
+
+                Symbol *structural_sym = (struct_type ? struct_type->type_symbol : type_sym);
                 StructDecl *str = NULL;
                 UnionDecl *unn = NULL;
     
@@ -1313,7 +1355,6 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                 }
     
                 VarDecl *found_member = NULL;
-
                 if (str || unn) {
                     for (size_t i = 0; i < (str ? str->members.len : unn->members.len); i++) {
                         if (string_eq(str ? str->members.data[i]->name : unn->members.data[i]->name, expr->member.member)) {
@@ -1328,16 +1369,10 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
                     goto check_expr_finished;
                 }
 
-                Symbol *method_sym = find_struct_method(ctx, type_sym->name, expr->member.member);
-                if (method_sym) {
-                    expr->symbol = method_sym;
-                    result_type = method_sym->type;
-                    goto check_expr_finished;
-                }
-
+                print_scope(ctx->current_scope);
                 error(expr->token, format("Unknown member or method '%.*s' on type '%.*s'", string_fmt(expr->member.member), string_fmt(type_sym->name)));
             }
-        }        
+        }
         case EXPR_UNARY: {
             TypeRef *operand_type = check_expr(ctx, expr->unary.operand);
             if (!operand_type) result_type = NULL;
@@ -1702,6 +1737,7 @@ bool types_equal(TypeRef *a, TypeRef *b) {
     if (a->type != b->type) return false;
 
     switch (a->type) {
+        case TYPEREF_PATH:
         case TYPEREF_NAMED: {
             return a->type_symbol == b->type_symbol;
         }
@@ -1719,7 +1755,7 @@ bool types_equal(TypeRef *a, TypeRef *b) {
 
 bool types_compatible(TypeRef *src, TypeRef *dst) {
     if (!src || !dst) return false;
-
+    
     if (types_equal(src, dst)) return true;
 
     if (dst->type == TYPEREF_SUM) {
@@ -1728,7 +1764,7 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
         }
         return false;
     }
-
+    
     if (src->type == TYPEREF_NAMED && string_eq(src->type_symbol->name, string_make("$null"))) {
         TypeRef *unwrapped_dst = unwrap_type(dst);
         if (unwrapped_dst->type == TYPEREF_POINTER) {
@@ -1740,6 +1776,10 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
     
     TypeRef *u_src = unwrap_type(src);
     TypeRef *u_dst = unwrap_type(dst);
+
+    if (u_src->type_symbol && u_src->type_symbol == u_dst->type_symbol) {
+        return true;
+    }
 
     if (u_src->type != u_dst->type) return false;
 
@@ -2135,15 +2175,54 @@ static bool concrete_fn_exists(Module *mod, String mangled_name) {
 static void scan_expr(Module *mod, Expr *expr);
 static void scan_stmt(Module *mod, Stmt *stmt);
 
+static void mangle_component(char_array *out, String s) {
+    char buf[32];
+    int n = snprintf(buf, sizeof(buf), "%zu", s.length);
+
+    append_string_to_char_array(out, string_make(buf));
+    append_string_to_char_array(out, s);
+}
+
+static String mangle_symbol(Arena *arena, Module *module, TypeRef *owner, String name, typerefs_array generic_args) {
+    char_array out = char_array_init(arena);
+
+    append_string_to_char_array(&out, string_make("_C"));
+
+    if (module) {
+        for (size_t i = 0; i < module->name.len; i++) {
+            mangle_component(&out, module->name.data[i]);
+        }
+    }
+
+    if (owner) {
+        mangle_component(&out, mangle_type(arena, owner));
+    }
+
+    mangle_component(&out, name);
+
+    for (size_t i = 0; i < generic_args.len; i++) {
+        String ty = mangle_type(arena, generic_args.data[i]);
+        mangle_component(&out, ty);
+    }
+
+    return (String){
+        .data = out.data,
+        .length = out.len,
+    };
+}
+
 static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args) {
     char_array cs = char_array_init(arena);
-    char_array_push(&cs, '$');
-    append_string_to_char_array(&cs, base_name);
+    append_string_to_char_array(&cs, string_make("_C"));
+    char *s = format("%zu%*.s", base_name.length, string_fmt(base_name));
+    append_string_to_char_array(&cs, string_make(s));
+    free(s);
     
     for (size_t i = 0; i < concrete_args.len; i++) {
-        char_array_push(&cs, '_');
-        String type_str = type_to_string(concrete_args.data[i]);
-        append_string_to_char_array(&cs, type_str);
+        String type_str = mangle_type(arena, concrete_args.data[i]);
+        s = format("%zu%*.s", type_str.length, string_fmt(type_str));
+        append_string_to_char_array(&cs, string_make(s));
+        free(s);
     }
     
     return (String){ .data = cs.data, .length = cs.len };

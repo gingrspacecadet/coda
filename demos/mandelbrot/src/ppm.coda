@@ -1,0 +1,13 @@
+module ppm;
+
+include image;
+include std::io;
+
+@export
+fn none write<W: fn uint64 write(mut W self, uint8[] src)>(W writer, image::Image image) {
+    writer.write("P6\n800 600\n255\n");
+    for (mut uint i = 0u; i < image.width * image.height; i = i + 1) {
+        image::RGB p = image.pixels[i];
+        writer.write((uint8[3])p);
+    }
+}

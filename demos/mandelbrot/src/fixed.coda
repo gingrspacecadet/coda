@@ -1,0 +1,47 @@
+module fixed;
+
+@export
+type Fixed = int64;
+
+@export
+Fixed ONE = 1 << 32;
+
+@export
+fn Fixed from_int(int64 i) {
+    return i * ONE;
+}
+
+@export
+fn Fixed add(Fixed a, Fixed b) {
+    return (a + b);
+}
+
+@export
+fn Fixed sub(Fixed a, Fixed b) {
+    return (a - b);
+}
+
+@export
+fn Fixed mul(Fixed a, Fixed b) {
+    return (a * b) >> 32;
+}
+
+@export
+fn Fixed div(Fixed a, Fixed b) {
+    return (a << 32) / b;
+}
+
+@export
+fn Fixed scale(Fixed value, int64 factor) {
+    return (value * factor);
+}
+
+@export
+fn Fixed square(Fixed x) {
+    return f::mul(x, x);
+}
+
+@export
+fn Fixed lerp(Fixed a, Fixed b, uint value, uint max) {
+    return mul((a + (b - a)), div(value, max));
+}

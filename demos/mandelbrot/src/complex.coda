@@ -1,12 +1,26 @@
 module complex;
 
+include fixed;
+
 struct Complex {
-    float64 real;
-    float64 imag;
+    fixed::Fixed real;
+    fixed::Fixed imag;
 }
 
-fn Complex add(Complex a, Complex b);
+fn Complex add(Complex a, Complex b) {
 
-fn Complex square(Complex z);
+}
 
-fn float64 magnitude_squared(Complex Z);
+fn Complex square(Complex z) {
+    fixed::Fixed real = fixed::square(z.real);
+    fixed::Fixed imag = fixed::square(z.imag);
+
+    return (Complex){
+        .real = real - imag,
+        .imag = 2 * fixed::mul(z.real, z.imag)
+    };
+}
+
+fn fixed::Fixed magnitude_squared(Complex z) {
+    return fixed::square(z.real) + fixed::square(z.imag);
+}

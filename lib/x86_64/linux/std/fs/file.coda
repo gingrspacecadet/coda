@@ -1,0 +1,15 @@
+module std::fs;
+
+include std::system = sys;
+
+@export
+struct File {
+    int fd; // TODO: this is temporary
+}
+
+@export
+fn File create(string path) {
+    return (File){
+        .fd = sys::syscall(2u, (uint64)path.ptr, 1u | 64u, 420u),
+    };
+}
