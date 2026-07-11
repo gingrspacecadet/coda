@@ -15,4 +15,4 @@ jobs:
         run: |
           . ./env
           make
-          ./codac --run test/helloworld.coda | grep "hello"
+          ./codac --run test/helloworld.coda | grep "Hello, world!"
