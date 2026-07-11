@@ -49,13 +49,13 @@ static bool string_find(String str, String needle) {
 static String string_copy(Arena *a, String str) {
     String s = { .length = str.length };
     s.data = arena_alloc(a, str.length);
-    strncpy(s.data, str.data, str.length);
+    memcpy(s.data, str.data, str.length);
     return s;
 }
 
 static char *string_unmake(Arena *a, String s) {
     char *p = arena_alloc(a, s.length + 1);
-    strncpy(p, s.data, s.length);
+    memcpy(p, s.data, s.length);
     p[s.length] = 0;
     return p;
 }
