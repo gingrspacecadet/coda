@@ -39,5 +39,6 @@ void ast_pass_monomorphise(Module *mod);
 void scan_dir(Analyser *ctx, char *dir_path);
 void resolve_includes(Analyser *ctx, Module *mod);
 void populate_module_namespaces(Analyser *ctx, Module *mod);
+TypeRef *unwrap_type(TypeRef *type);
 
 #endif

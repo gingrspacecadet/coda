@@ -81,7 +81,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->type = HIR_EXPR_FIELD_OFFSET;
             hir->field_offset.base = lower_expr(ctx, ast_expr->member.base);
 
-            TypeRef *base_type = ast_expr->member.base->resolved_type;
+            TypeRef *base_type = unwrap_type(ast_expr->member.base->resolved_type);
             if (base_type->type == TYPEREF_POINTER && ast_expr->member.deref) {
                 base_type = base_type->pointer.pointee;
             }

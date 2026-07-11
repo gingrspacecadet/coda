@@ -93,7 +93,7 @@ static String mangle_type(Arena *arena, TypeRef *t) {
     return string_make("unknown");
 }
 
-static TypeRef *unwrap_type(TypeRef *type) {
+TypeRef *unwrap_type(TypeRef *type) {
     while (type && (type->type == TYPEREF_NAMED || type->type == TYPEREF_PATH)) {
         if (type->type_symbol && type->type_symbol->type) {
             if (type->type_symbol->type == type) {
@@ -1282,7 +1282,6 @@ TypeRef *check_expr_member(Analyser *ctx, Expr *expr) {
             ptr_type->type = TYPEREF_POINTER;
             ptr_type->pointer.pointee = struct_type->array.elem;
             return ptr_type;
-            
         } else if (string_eq(expr->member.member, string_make("len"))) {
             Symbol *uint64_sym = lookup_symbol(ctx, string_make("uint64"));
             return uint64_sym->type;
@@ -2161,6 +2160,9 @@ static void mangle_component(char_array *out, String s) {
 }
 
 static String mangle_symbol(Arena *arena, Module *module, TypeRef *owner, String name, typerefs_array generic_args) {
+    // TODO: there must be a better solution to this...
+    if (string_eq(name, string_make("main"))) return name;
+
     char_array out = char_array_init(arena);
 
     append_string_to_char_array(&out, string_make("_C"));

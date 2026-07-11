@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     HirModule *hir = hir_lower_module(&analyser, module);
     hir_pass_monomorphise(&analyser, hir);
     hir_pass_resolve_defers(&analyser, hir);
-
+    
     MirBuilder mirbuilder = {
         .arena = module->arena,
         .global_scope = analyser.global_scope,
@@ -150,6 +150,8 @@ int main(int argc, char **argv) {
     for (size_t i = 0; i < mir->functions.len; i++) {
         opt_constant_folding(mir->functions.data[i]);
     }
+    
+    // hir_pretty_print(hir); mir_pretty_print(mir);
 
     lib_handle handle = load_lib((char*)backend_path);
     if (!handle) {
