@@ -2190,20 +2190,22 @@ static String mangle_symbol(Arena *arena, Module *module, TypeRef *owner, String
 
 static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args) {
     char_array cs = char_array_init(arena);
+
     append_string_to_char_array(&cs, string_make("_C"));
-    char *s = format("%zu%*.s", base_name.length, string_fmt(base_name));
-    append_string_to_char_array(&cs, string_make(s));
-    free(s);
-    
+
+    mangle_component(&cs, base_name);
+
     for (size_t i = 0; i < concrete_args.len; i++) {
         String type_str = mangle_type(arena, concrete_args.data[i]);
-        s = format("%zu%*.s", type_str.length, string_fmt(type_str));
-        append_string_to_char_array(&cs, string_make(s));
-        free(s);
+        mangle_component(&cs, type_str);
     }
-    
-    return (String){ .data = cs.data, .length = cs.len };
+
+    return (String){
+        .data = cs.data,
+        .length = cs.len,
+    };
 }
+
 
 static void scan_expr(Module *mod, Expr *expr) {
     if (!expr) return;
