@@ -8,6 +8,7 @@ on:
 jobs:
   test-linux:
     runs-on: ubuntu-latest
+    container: gcc:latest
 
     steps:
       - uses: actions/checkout@v5
