@@ -1,0 +1,18 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: main
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test examples
+        run: |
+          . ./env
+          make
+          ./codac --run test/helloworld.coda | grep "hello"
