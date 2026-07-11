@@ -2,6 +2,13 @@ module std::mem;
 
 include std::system;
 
+@export
+struct Allocator {
+    fn uint8 mut *? (Allocator mut *self, uint64 size) allocate;
+    fn none (Allocator mut *self, uint8 mut *ptr, uint64 size) free;
+    uint8 mut *? context;
+}
+
 fn uint8 mut *? system_alloc_pages(uint64 size) {
     uint8 mut *ptr = (uint8 mut *)std::system::syscall(9, 0u, size, 3u, 34u, 18446744073709551615u, 0u);
 
@@ -15,7 +22,26 @@ fn none system_free_pages(uint8 mut *ptr, uint64 size) {
     std::system::syscall(11, (uint64)ptr, size);
 }
 
+type Heap = none;
+
 @export
-fn T *alloc<T>(uint64 count) {
-    return system_alloc_pages($sizeof(T) * count);
+fn mut uint8 *? Heap.alloc(mut Heap *self, uint64 count) {
+    return system_alloc_pages(count);
+}
+
+fn none default_free_impl(Allocator mut *self, uint8 mut *ptr, uint64 size) {
+    system_free_pages(ptr, size);
+}
+
+@export
+Heap default_heap;
+
+@export
+fn mut T *allocate<T, A: fn mut uint8 *? alloc(mut A *self, uint64 count)>(uint64 count, mut A *alloc) {
+    uint64 total_size = count * $sizeof(T);
+    mut uint8 *? raw = alloc->alloc(total_size);
+    if (raw == null) {
+        // TODO: abort
+    }
+    return (mut T *)raw;
 }
