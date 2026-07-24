@@ -1830,3 +1830,280 @@ The exact layout guarantees are defined by the Memory Model.
 Implementations may provide implementation-defined attributes.
 
 Implementation-defined attributes should use a reserved namespace to avoid conflicts with future language-defined attributes.
+
+## 11. Intrinsics
+
+Intrinsics are compiler-provided operations.
+
+Intrinsics are part of the language, but they are not ordinary functions.
+
+An intrinsic is written using the `#` prefix.
+
+Examples:
+
+```coda
+#file()
+#line()
+#typeid(value)
+#sizeof(T)
+```
+
+### 11.1 Nature of Intrinsics
+
+Intrinsics are resolved directly by the compiler.
+
+They are not looked up through ordinary name resolution.
+
+They do not have user-defined bodies.
+
+They cannot be overridden by ordinary declarations.
+
+They do not support operator overloading.
+
+An intrinsic may correspond to:
+
+* A compile-time value
+* A code-generation primitive
+* A type query
+* A source-location query
+* A compiler-recognised lowering rule
+
+### 11.2 Compile-Time Availability
+
+Some intrinsics are only valid during compile-time evaluation.
+
+If a compile-time-only intrinsic is used outside a compile-time context, the program is ill-formed.
+
+Examples of compile-time intrinsics include source-location and type-introspection intrinsics.
+
+### 11.3 Type Introspection Intrinsics
+
+Coda provides intrinsics for inspecting types at compile time.
+
+Examples include:
+
+* `#typeid(value)` — obtains the type identifier of a value or type
+* `#typestr(value)` — obtains a string representation of a type
+* `#enumstr(value)` — obtains the name of an enum variant as a string
+
+The exact representation of type identifiers is defined in typeid.md
+
+### 11.4 Source Information Intrinsics
+
+Coda provides intrinsics for obtaining source information.
+
+Examples include:
+
+* `#file()` — the current source file
+* `#line()` — the current line number
+* `#column()` — the current column number
+* `#module()` — the current module name
+
+These intrinsics are useful for diagnostics, logging, and compile-time generation.
+
+### 11.5 Layout Intrinsics
+
+Coda provides intrinsics for querying type layout.
+
+Examples include:
+
+* `#sizeof(T)` — the size of `T` in bytes
+* `#alignof(T)` — the alignment of `T` in bytes
+* `#offsetof(T, member)` — the byte offset of a member within a type
+
+Layout intrinsics reflect the layout rules of the target platform and the type system.
+
+### 11.6 Restrictions
+
+Intrinsics are not first-class values.
+
+Their address may not be taken.
+
+They may not be assigned to variables.
+
+They may not be passed as ordinary function values unless the language explicitly defines a lowering for that use.
+
+An intrinsic may only be used in forms recognised by the compiler.
+
+If the compiler does not recognise a use of an intrinsic, the program is ill-formed.
+
+## 12. Memory Model
+
+The memory model describes how Coda programs represent, access, and retain storage.
+
+The memory model defines observable behaviour. Implementations may use any internal representation, provided the observable rules of the language are preserved.
+
+### 12.1 Objects and Storage
+
+An object is a region of storage associated with a type.
+
+Every object has an address.
+
+Objects may exist in one of three storage durations:
+
+* Static storage
+* Automatic storage
+* Dynamic storage
+
+### 12.2 Static Storage
+
+Static storage is storage that exists for the duration of program execution.
+
+Global variables occupy static storage.
+
+Data produced by compile-time evaluation may also be placed in static storage.
+
+Static storage is created before program startup and released only when the program terminates.
+
+### 12.3 Automatic Storage
+
+Automatic storage is storage associated with block scope.
+
+Local variables ordinarily occupy automatic storage.
+
+Automatic storage is created when execution enters the declaring scope and is released when execution leaves that scope.
+
+Deferred actions associated with the scope are executed before the storage is released.
+
+### 12.4 Dynamic Storage
+
+Dynamic storage is storage obtained at runtime through allocation facilities.
+
+Dynamic storage remains valid until it is explicitly released by the program.
+
+The exact allocation API is defined by the standard library, not by the language core.
+
+### 12.5 Lifetimes
+
+Every object has a lifetime.
+
+An object's lifetime begins when its storage is made available for that object.
+
+An object's lifetime ends when its storage is released or reused for another object.
+
+Any pointer referring to an object becomes invalid once that object's lifetime has ended.
+
+### 12.6 Pointers
+
+A pointer stores the address of an object.
+
+A non-optional pointer is guaranteed not to be `null` by the type system.
+
+An optional pointer may contain `null`.
+
+Dereferencing a null pointer or a pointer to an object whose lifetime has ended is invalid.
+
+Pointer values may alias the same object.
+
+The language does not impose uniqueness or borrow restrictions on ordinary pointers.
+
+### 12.7 Mutability and Aliasing
+
+Mutability is a property of the access path, not a guarantee of exclusivity.
+
+A mutable access path permits modification of the referenced object through that path.
+
+An immutable access path permits reading but not writing through that path.
+
+Multiple mutable or immutable pointers may refer to the same object simultaneously, subject to the type rules governing the access paths themselves.
+
+The `mut` qualifier determines whether a particular access path may be used to modify storage.
+
+### 12.8 Arrays
+
+Arrays own their data.
+
+Array elements are stored contiguously in index order.
+
+For a type `T[n]`, the array contains exactly `n` elements of type `T`.
+
+Unless otherwise specified by an attribute such as `@packed`, elements are laid out without reordering.
+
+### 12.9 Slices and Strings
+
+A slice is a non-owning view over a contiguous sequence of elements.
+
+A slice contains:
+
+* A length
+* A pointer to the first element
+
+Slices do not own the storage they reference.
+
+The referenced storage must remain valid for the lifetime of the slice value.
+
+The `string` type is a slice of `char` values.
+
+String literals may refer to static storage.
+
+### 12.10 Structs
+
+Struct fields are laid out in declaration order.
+
+The implementation may insert padding between fields to satisfy alignment requirements.
+
+The exact offsets of fields are determined by the type layout rules and the target platform.
+
+### 12.11 Unions
+
+All fields of a union occupy overlapping storage.
+
+A union value is large enough to hold any of its fields.
+
+The active field of a union is determined by the program's use of the value.
+
+Reading a field that is not currently active is invalid unless the language or implementation explicitly defines a conversion or reinterpretation rule.
+
+### 12.12 Sum Types
+
+A sum type contains one active variant at a time.
+
+A sum type stores:
+
+* A tag identifying the active variant
+* Storage sufficient for the largest variant
+
+Nested sum types are flattened.
+
+The order of variants in a sum type does not affect the meaning of the type.
+
+The exact in-memory representation of the tag and payload is implementation-defined, provided the abstract behaviour of the type is preserved.
+
+### 12.13 Packed Types
+
+The `@packed` attribute requests that the implementation minimise padding.
+
+A packed type may reduce or remove padding between fields.
+
+The exact layout of a packed type is defined by the Memory Model and the target architecture.
+
+Packed types may impose stricter access requirements or lower performance than unpacked types.
+
+### 12.14 Global Initialisation
+
+Global variables must be initialised.
+
+A global variable may be initialised in one of two ways:
+
+* By a compile-time value
+* By a runtime start routine executed before `main`
+
+Compile-time initialisation is performed during compilation and becomes part of the program image.
+
+Runtime initialisation is performed before program entry and may depend on other global initialisation rules.
+
+The order of runtime global initialisation follows module dependency order.
+
+### 12.15 Invalid Access
+
+The following are invalid:
+
+* Dereferencing a null pointer
+* Dereferencing a dangling pointer
+* Accessing an object after its lifetime has ended
+* Reading or writing outside the bounds of an array or slice
+* Accessing a union field that is not active, unless explicitly permitted
+
+If the compiler can prove such an access is invalid, it shall reject the program.
+
+Otherwise, the resulting behaviour is undefined.
