@@ -24,6 +24,19 @@
     #define PATH_SEP "\\"
     #define ROOT "C:\\ProgramData\\coda"
     #define TEMP_EXE "coda_run_tmp.exe"
+#elifdef __APPLE__
+    #include <dlfcn.h>
+    #include <unistd.h>
+    #include <sys/wait.h>
+    #define lib_handle void*
+    #define load_lib(name) dlopen(name, RTLD_LAZY)
+    #define load_sym dlsym
+    #define close_lib dlclose
+    #define HOST_OS "linux"
+    #define SO_EXT ".dylib"
+    #define PATH_SEP "/"
+    #define ROOT "/usr/share/coda"
+    #define TEMP_EXE "./coda_run_tmp"    
 #else
     #include <dlfcn.h>
     #include <unistd.h>

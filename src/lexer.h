@@ -101,7 +101,7 @@ typedef struct {
     size_t line, col;
 } Token;
 
-INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
+// INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 INSTANTIATE(Token, token, ARRAY_TEMPLATE)
 
 typedef struct {

@@ -327,6 +327,7 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
             case DECL_ENUM: {
                 break;
             }
+            default: break;
         }
         if (found) continue;
         
@@ -417,6 +418,8 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->symbol = sym;
                 break;
             }
+
+            default: break;
         }
     }
     ctx->module = old_mod;
@@ -851,7 +854,11 @@ void resolve_types(Analyser *ctx, Module *mod) {
                         error(v->token, format("Cannot assign variable of type '%.*s' object of type '%.*s'", string_fmt(type_to_string(v->type)), string_fmt(type_to_string(init_type))));
                     }
                 }
+
+                break;
             }
+
+            default: break;
         }
     }
 
@@ -1617,7 +1624,7 @@ TypeRef *check_expr_init(Analyser *ctx, Expr *expr) {
 
 TypeRef *check_expr_lambda(Analyser *ctx, Expr *expr) {
     char mangled_str[64];
-    int len = snprintf(mangled_str, sizeof(mangled_str), ".L__lambda_%d", ctx->lambda_count++);
+    int len = snprintf(mangled_str, sizeof(mangled_str), ".L__lambda_%zu", ctx->lambda_count++);
     char *safe_str = arena_alloc(ctx->arena, len + 1);
     memcpy(safe_str, mangled_str, len + 1);
     String mangled = string_make(safe_str);

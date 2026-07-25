@@ -740,7 +740,7 @@ static const char *binary_op_name(BinaryOp op) {
 static void print_literal(Literal lit) {
     switch (lit.type) {
         case LITERAL_INT:
-            printf("%ld", lit._int);
+            printf("%lld", lit._int);
             break;
         case LITERAL_FLOAT:
             printf("%g", lit._float);

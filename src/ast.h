@@ -418,7 +418,7 @@ struct TypeDecl {
     Token token;
 };
 
-INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
+// INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 struct Include {
     string_array path;

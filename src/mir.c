@@ -96,7 +96,7 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
                 emit(ctx, MIR_OP_COPY, addr_tmp, base, null_op());
                 return addr_tmp;
             }
-            break;
+            return (MirOperand){0};
         }
         case HIR_EXPR_VAR:
             return make_symbol(hir->var.symbol);
@@ -656,7 +656,7 @@ static void print_operand(MirOperand op) {
     switch (op.type) {
         case MIR_VAL_LIT:
             if (op.lit.type == LITERAL_INT) {
-                printf("%ld", op.lit._int);
+                printf("%lld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
                 printf("\"%.*s (id:%zu)\"", string_fmt(op.lit.string), op.lit.str_id);
             } else if (op.lit.type == LITERAL_NULL) {
@@ -677,9 +677,9 @@ static void print_operand(MirOperand op) {
             break;
         case MIR_VAL_MEM:
             if (op.base_symbol) {
-                printf("mem(sym=%.*s, off=%ld)", string_fmt(op.base_symbol->name), op.offset);
+                printf("mem(sym=%.*s, off=%lld)", string_fmt(op.base_symbol->name), op.offset);
             } else {
-                printf("mem(tmp=t%d, off=%ld)", op.base_temp, op.offset);
+                printf("mem(tmp=t%d, off=%lld)", op.base_temp, op.offset);
             }
             break;
         case MIR_VAL_LABEL:
