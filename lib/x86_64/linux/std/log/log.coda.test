@@ -1,0 +1,17 @@
+module std::log;
+
+include std::io;
+
+enum Level {
+    Debug,
+    Info,
+    Warning,
+    Error
+};
+
+fn none write(std::io::Writer *writer, Level level, string message);
+
+fn none debug(std::io::Writer *writer, string message);
+fn none info(std::io::Writer *writer, string message);
+fn none warning(std::io::Writer *writer, string message);
+fn none error(std::io::Writer *writer, string message);
