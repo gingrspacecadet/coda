@@ -2,7 +2,8 @@
 
 ## Table of Contents
 
-1. Overview
+0. Overview
+1. Design Principles
 2. Lexical Structure
 3. Modules
 4. Types
@@ -15,7 +16,7 @@
 11. Intrinsics
 12. Memory Model
 
-## 1. Overview
+## 0. Overview
 
 Coda is a statically typed systems programming language designed around explicitness, safety, and predictable compilation.
 
@@ -33,6 +34,109 @@ Coda provides:
 Coda programs are compiled ahead of time into native machine code.
 
 The language avoids implicit behaviour where possible. Operations which may affect ownership, mutability, memory, or control flow are explicit in source code.
+
+## 1. Design Principles
+
+Coda is designed around a few core principles.
+
+### Explicit over Implicit
+
+Coda avoids hidden behaviour where possible.
+
+Operations which may affect program behaviour should be visible in the source code.
+
+Examples:
+
+- Memory allocation is explicit
+- Errors are values
+- Mutability is declared
+- Imports are explicit
+
+The compiler should not make surprising decisions on behalf of the programmer.
+
+### Simple language, powerful compiler
+
+The language should provide a small number of orthogonal features that compose well.
+
+Complex behaviour should come from:
+
+- compile-time evaluation
+- generic programming
+- modules
+- libraries
+
+rather than from many special cases built into the language.
+
+### No hidden costs
+
+Code should make its performance characteristics understandable.
+
+A programmer should be able to determine:
+
+- where allocations happen
+- where copies happen
+- where control flow can exit
+- what operations may be expensive
+
+Convenience features should not hide significant runtime costs.
+
+### Safety through rules, not restrictions
+
+Coda should provenet common mistakes while remaining suitable for systems programming.
+
+The compiler should reject ambiguous or unsafe constructs, but should not prevent low-level programming.
+
+### Libraries, not language features
+
+Functionality should live in libraries wherever possible.
+
+The compiler should provide mechanisms such as:
+
+- generics
+- compile-time execution
+- interfaces 
+- methods
+
+and the standard library should build upon them.
+
+### One obvious way
+
+Coda prefers one clear solution over many equivalent mechanisms.
+
+Examples:
+
+- Modules are the namespace boundary
+- Errors use inline sum types
+- Mutability uses `mut`
+
+The language should avoid requiring programmers to remember subtle rules.
+
+### Predictable compilation
+
+The compiler should behave consistently.
+
+A programmer should be able to understand why code compiles or fails.
+
+Coda does not use warnings as a separate category of correctness. Invalid code should be rejected.
+
+### Zero-cost abstractions
+
+High-level features should compile down to efficient low-level code.
+
+Generics, interfaces, and convenience syntax should not require unnecessary runtime overhead unless explicitly requested.
+
+### The programmer controls resources
+
+Resources should have clear ownership.
+
+The programmer controls:
+
+- memory allocation
+- file handles
+- system resources
+- lifetimes
+
+The language should make ownership visible rather than hiding it behind automatic mechanisms.
 
 ## 2. Lexical Structure
 
