@@ -1,0 +1,14 @@
+module std::string;
+
+fn bool contains(string, string);
+
+fn bool starts_with(string, string);
+fn bool ends_with(string, string);
+
+fn string[] split(string, string separator);
+
+fn string trim(string);
+
+fn bool is_alpha(char);
+fn bool is_digit(char);
+fn bool is_space(char);

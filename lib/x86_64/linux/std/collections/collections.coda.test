@@ -1,0 +1,68 @@
+module std::collections;
+
+struct ArrayList<T> {
+    Allocator alloc;
+    T[] data;
+}
+
+fn ArrayList<T> | AllocationError create<T>(
+    Allocator alloc
+);
+
+fn none ArrayList<T>.destroy(
+    mut self
+);
+
+fn none | AllocationError ArrayList<T>.reserve(
+    mut self,
+    uint64 capacity
+);
+
+fn none | AllocationError ArrayList<T>.append(
+    mut self,
+    T value
+);
+
+fn T *ArrayList<T>.get(
+    mut self,
+    uint64 index
+);
+
+fn none ArrayList<T>.clear(
+    mut self
+);
+
+fn T[] ArrayList<T>.items(
+    self
+);
+
+struct HashMap<K, V>;
+
+fn HashMap<K,V> | AllocationError create<K,V>(
+    Allocator alloc
+);
+
+fn none HashMap<K,V>.destroy(
+    mut self
+);
+
+fn none | AllocationError insert<K,V>(
+    mut self,
+    K key,
+    V value
+);
+
+fn V *get<K,V>(
+    mut self,
+    K key
+);
+
+fn bool contains<K,V>(
+    self,
+    K key
+);
+
+fn none remove<K,V>(
+    mut self,
+    K key
+);

@@ -1,0 +1,31 @@
+module std::process;
+
+struct Process;
+
+fn string[] args();
+
+fn string env(string name);
+
+fn none exit(int code);
+
+fn Process | IOErrors spawn(
+    string executable,
+    string[] args
+);
+
+struct Command {
+    string program;
+    string[] args;
+}
+
+fn Command create(string program);
+
+fn none Command.arg(
+    mut Command *self,
+    string arg
+);
+
+fn Process | IOError Command.spawn(
+    Command *self
+);
+
