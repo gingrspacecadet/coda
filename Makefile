@@ -16,6 +16,7 @@ ifeq ($(OS),Windows_NT)
     SHARED_FLAGS =
     DLL_LINK = -shared
     HOST_OS = windows
+
     ifeq ($(PROCESSOR_ARCHITECTURE),AMD64)
         HOST_ARCH = x86_64
     else ifeq ($(PROCESSOR_ARCHITECTURE),ARM64)
@@ -23,8 +24,11 @@ ifeq ($(OS),Windows_NT)
     else
         HOST_ARCH = unknown
     endif
+
 else
     UNAME_S := $(shell uname -s)
+    UNAME_M := $(shell uname -m)
+
     ifeq ($(UNAME_S),Darwin)
         HOST_OS = macos
         SOEXT = dylib
@@ -35,6 +39,16 @@ else
         SOEXT = so
         SHARED_FLAGS = -fPIC
         DLL_LINK = -shared
+    endif
+    
+    ifeq ($(UNAME_M),x86_64)
+        HOST_ARCH = x86_64
+    else ifeq ($(UNAME_M),arm64)
+        HOST_ARCH = aarch64
+    else ifeq ($(UNAME_M),aarch64)
+        HOST_ARCH = aarch64
+    else
+        HOST_ARCH = unknown
     endif
 endif
 
