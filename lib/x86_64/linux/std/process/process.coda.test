@@ -6,6 +6,7 @@ fn string[] args();
 
 fn string env(string name);
 
+@noreturn
 fn none exit(int code);
 
 fn Process | IOErrors spawn(
