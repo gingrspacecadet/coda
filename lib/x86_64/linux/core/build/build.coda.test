@@ -2,25 +2,25 @@ module core::build;
 
 include std::process;
 
-type Library = struct {
-    string name;
-    string[] sources;
-    string[] include_dirs;
-    string[] defines;
-    string[] links;
-};
-
-type Executable = struct {
-    string name;
-    string[] sources;
-    Target *[] deps;
-};
-
-type Target = Library | Executable;
-
-Target[] load(string path);
-
 type Command = std::process::Command;
 
-fn none Command.clear();
+fn Command command(string executable);
 
+fn none Command.arg(
+    mut Command self,
+    string arg
+);
+
+fn none Command.args(
+    mut Command self,
+    string[] args
+);
+
+fn bool Command.run(
+    Command self
+);
+
+fn bool needs_rebuild(
+    string output,
+    string[] inputs
+);
