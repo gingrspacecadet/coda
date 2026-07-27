@@ -72,7 +72,9 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             break;
         }
         case EXPR_MEMBER: {
-            if (ast_expr->symbol && ast_expr->symbol->decl && ast_expr->symbol->decl->type == DECL_FN) {
+            if (ast_expr->symbol &&
+                ast_expr->symbol->decl &&
+                ast_expr->symbol->decl->type == DECL_FN) {
                 hir->type = HIR_EXPR_VAR;
                 hir->var.symbol = ast_expr->symbol;
                 break;
@@ -81,28 +83,60 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->type = HIR_EXPR_FIELD_OFFSET;
             hir->field_offset.base = lower_expr(ctx, ast_expr->member.base);
 
-            TypeRef *base_type = unwrap_type(ast_expr->member.base->resolved_type);
-            if (base_type->type == TYPEREF_POINTER && ast_expr->member.deref) {
-                base_type = base_type->pointer.pointee;
+            TypeRef *base_type = resolve_type_alias(ast_expr->member.base->resolved_type);
+            if (!base_type) {
+                error(ast_expr->member.base->token,
+                      format("Unknown base type '%.*s'",
+                             string_fmt(type_to_string(ast_expr->member.base->resolved_type))));
             }
-            Symbol *type_sym = base_type->type_symbol;
+
+            if (base_type->type == TYPEREF_POINTER && ast_expr->member.deref) {
+                base_type = resolve_type_alias(base_type->pointer.pointee);
+                if (!base_type) {
+                    error(ast_expr->member.base->token,
+                          format("Unknown base type '%.*s'",
+                                 string_fmt(type_to_string(ast_expr->member.base->resolved_type))));
+                }
+            }
+
             size_t offset = 0;
-            
+            bool found = false;
+
             if (base_type->type == TYPEREF_ARRAY) {
                 if (string_eq(ast_expr->member.member, string_make("ptr"))) {
-                    offset = 8;
+                    offset = sizeof(size_t);
+                    found = true;
                 } else if (string_eq(ast_expr->member.member, string_make("len"))) {
                     offset = 0;
+                    found = true;
                 }
-            } else if (type_sym && type_sym->decl && type_sym->decl->type == DECL_STRUCT) {
-                StructDecl *str = type_sym->decl->_struct;
-                for (size_t i = 0; i < str->members.len; i++) {
-                    if (string_eq(str->members.data[i]->name, ast_expr->member.member)) {
-                        offset = str->field_offsets.data[i];
+            }
+            else if (base_type->type == TYPEREF_STRUCT) {
+                for (size_t i = 0; i < base_type->_struct.members.len; i++) {
+                    if (string_eq(base_type->_struct.members.data[i]->name, ast_expr->member.member)) {
+                        offset = base_type->_struct.field_offsets.data[i];
+                        found = true;
                         break;
                     }
                 }
             }
+            else if (base_type->type == TYPEREF_UNION) {
+                for (size_t i = 0; i < base_type->_union.members.len; i++) {
+                    if (string_eq(base_type->_union.members.data[i]->name, ast_expr->member.member)) {
+                        offset = 0;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!found) {
+                error(ast_expr->member.base->token,
+                      format("Unknown member '%.*s' on type '%.*s'",
+                             string_fmt(ast_expr->member.member),
+                             string_fmt(type_to_string(base_type))));
+            }
+
             hir->field_offset.byte_offset = offset;
             break;
         }

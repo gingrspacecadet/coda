@@ -3,9 +3,9 @@ module std::fs;
 include std::system = sys;
 
 @export
-struct File {
+type File = struct {
     int fd; // TODO: this is temporary
-}
+};
 
 @export
 fn File create(string path) {

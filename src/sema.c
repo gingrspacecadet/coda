@@ -94,17 +94,51 @@ static String mangle_type(Arena *arena, TypeRef *t) {
 }
 
 TypeRef *unwrap_type(TypeRef *type) {
-    while (type && (type->type == TYPEREF_NAMED || type->type == TYPEREF_PATH)) {
-        if (type->type_symbol && type->type_symbol->type) {
-            if (type->type_symbol->type == type) {
-                break;
-            }
-            type = type->type_symbol->type;
-        } else {
+    for (size_t depth = 0; type && depth < 64; ++depth) {
+        if (type->type != TYPEREF_NAMED && type->type != TYPEREF_PATH) {
             break;
         }
+
+        Symbol *sym = type->type_symbol;
+        if (!sym || !sym->decl || sym->decl->type != DECL_TYPE) {
+            break;
+        }
+
+        TypeDecl *decl = sym->decl->_type;
+        if (!decl || !decl->alias || decl->alias == type) {
+            break;
+        }
+
+        type = decl->alias;
     }
+
     return type;
+}
+
+TypeRef *resolve_type_alias(TypeRef *t) {
+    for (size_t depth = 0; t && depth < 64; ++depth) {
+        t = unwrap_type(t);
+        if (!t) return NULL;
+
+        if ((t->type == TYPEREF_NAMED || t->type == TYPEREF_PATH) && t->type_symbol) {
+            Symbol *sym = t->type_symbol;
+
+            if (sym->decl && sym->decl->type == DECL_TYPE) {
+                TypeDecl *ty = sym->decl->_type;
+                if (ty && ty->alias && ty->alias != t) {
+                    t = ty->alias;
+                    continue;
+                }
+            } else if (sym->type && sym->type != t) {
+                t = sym->type;
+                continue;
+            }
+        }
+
+        break;
+    }
+
+    return t;
 }
 
 static bool is_unsigned_integer(TypeRef *t) {
@@ -159,10 +193,7 @@ static void inject_builtin_types(Analyser *ctx) {
 
     TypeRef *type_ref = arena_calloc(ctx->arena, sizeof(TypeRef));
     type_ref->type = TYPEREF_ARRAY;
-    type_ref->array.elem = arena_calloc(ctx->arena, sizeof(TypeRef));
-    type_ref->array.elem->type = TYPEREF_NAMED;
-    type_ref->array.elem->named.name = string_make("char");
-    type_ref->array.elem->type_symbol = lookup_symbol(ctx, string_make("char"));
+    type_ref->array.elem = lookup_symbol(ctx, string_make("char"))->type;
     
     Symbol *sym = declare_symbol(ctx, string_make("string"), SYMFLAG_TYPE);
 
@@ -299,32 +330,10 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
                 }
                 break;
             }
-            case DECL_STRUCT: {
-                if (string_eq(a->name, string_make("packed"))) {
-                    found = true;
-                    d->_struct->align = 1;
-                    a->consumed = true;
-                }
-                else if (string_eq(a->name, string_make("align"))) {
-                    found = true;
-                    if (a->args.len != 1 || a->args.data[0].type != LITERAL_INT) {
-                        error(a->args.data[0].token, "Attribute only expects a single integer argument");
-                    }
-                    d->_struct->align = a->args.data[0]._int;
-                    a->consumed = true;
-                }
-                break;
-            }
             case DECL_TYPE: {
                 break;
             }
-            case DECL_UNION: {
-                break;
-            }
             case DECL_VAR: {
-                break;
-            }
-            case DECL_ENUM: {
                 break;
             }
             default: break;
@@ -368,38 +377,12 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->fn->symbol = sym;
                 break;
             }
-            case DECL_STRUCT: {
-                Symbol *sym = declare_symbol(ctx, d->_struct->name, SYMFLAG_TYPE);
-                sym->decl = d;
-                d->symbol = sym;
-                d->_struct->symbol = sym;
-                break;
-            }
-            case DECL_UNION: {
-                Symbol *sym = declare_symbol(ctx, d->_union->name, SYMFLAG_TYPE);
-                sym->decl = d;
-                d->symbol = sym;
-                d->_union->symbol = sym;
-                break;
-            }
             case DECL_TYPE: {
                 Symbol *sym = declare_symbol(ctx, d->_type->name, SYMFLAG_TYPE);
                 sym->decl = d;
                 sym->type = d->_type->alias;
                 d->symbol = sym;
                 d->_type->symbol = sym;
-                break;
-            }
-            case DECL_ENUM: {
-                Symbol *sym = declare_symbol(ctx, d->_enum->name, SYMFLAG_TYPE);
-
-                TypeRef *enum_type = arena_calloc(ctx->arena, sizeof(TypeRef));
-                enum_type->type = TYPEREF_NAMED;
-                enum_type->type_symbol = sym;
-                sym->type = enum_type;
-
-                sym->decl = d;
-                d->symbol = sym;
                 break;
             }
             case DECL_VAR: {
@@ -508,180 +491,198 @@ void resolve_typeref(Analyser *ctx, TypeRef *type) {
     }
 }
 
+static bool builtin_type_layout(Symbol *sym, size_t *size, size_t *align) {
+    if (!sym || !(sym->flags & SYMFLAG_TYPE)) return false;
+
+    if (string_eq(sym->name, string_make("none")) || string_eq(sym->name, string_make("$null"))) {
+        *size = 0;
+        *align = 1;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("bool"))) {
+        *size = 1;
+        *align = 1;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("char")) || string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8"))) {
+        *size = 1;
+        *align = 1;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16"))) {
+        *size = 2;
+        *align = 2;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("int32")) || string_eq(sym->name, string_make("uint32"))) {
+        *size = 4;
+        *align = 4;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64"))) {
+        *size = 8;
+        *align = 8;
+        return true;
+    }
+
+    if (string_eq(sym->name, string_make("int")) || string_eq(sym->name, string_make("uint"))) {
+        *size = 8;
+        *align = 8;
+        return true;
+    }
+
+    return false;
+}
+
 size_t get_type_size(TypeRef *type) {
     if (!type) return 0;
 
-    switch (type->type) {
-        case TYPEREF_FN:
-        case TYPEREF_POINTER: {
-            return 8;   // TODO: architecture-dependant
-        }
-        case TYPEREF_ARRAY: {
-            if (type->array.length > 0) {
-                return 8 + get_type_size(type->array.elem) * type->array.length;
-            } else {
-                return 16;
-            }
-        }
-        case TYPEREF_PATH:
-        case TYPEREF_NAMED: {
-            Symbol *sym = type->type_symbol;
-            if (!sym) return 0;
-
-            if (sym->type) {
-                if (!(sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym)) {
-                    return get_type_size(sym->type);
-                }
-            }
-
-            if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
-            || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
-                return 1;
-            }
-            if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16")) ) {
-                return 2;
-            }
-            if (string_eq(sym->name, string_make("int32")) || string_eq(sym->name, string_make("uint32")) ) {
-                return 4;
-            }
-            if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
-            || string_eq(sym->name, string_make("int"))   || string_eq(sym->name, string_make("uint")) ) {
-                return 8;
-            }
-            if (string_eq(sym->name, string_make("string")) ) {
-                return 16;  // ptr + len
-            }
-            
-            if (sym->decl) {
-                if (sym->decl->type == DECL_STRUCT) {
-                    return sym->decl->_struct->size;
-                }
-                if (sym->decl->type == DECL_UNION) {
-                    return sym->decl->_union->size;
-                }
-            }
-
-            return 0;
-        }
-        case TYPEREF_SUM: {
-            size_t highest = 0;
-            for (size_t i = 0; i < type->sum.cases.len; i++) {
-                if (get_type_size(type->sum.cases.data[i]) > highest) {
-                    highest = get_type_size(type->sum.cases.data[i]);
-                }
-            }
-            return highest;
-        }
-    }
-
-    return 0;
-}
-
-static size_t get_type_align(TypeRef *type) {
+    type = resolve_type_alias(type);
     if (!type) return 0;
 
     switch (type->type) {
+        case TYPEREF_POINTER:
+            return sizeof(void *);
+
+        case TYPEREF_ARRAY:
+            return get_type_size(type->array.elem) * type->array.length;
+
         case TYPEREF_FN:
-        case TYPEREF_POINTER: {
-            return 8;   // TODO: architecture-dependant
-        }
-        case TYPEREF_ARRAY: {
-            return get_type_align(type->array.elem);
-        }
-        case TYPEREF_PATH:
+            return sizeof(void *);
+
+        case TYPEREF_STRUCT:
+            return type->_struct.size;
+
+        case TYPEREF_UNION:
+            return type->_union.size;
+
+        case TYPEREF_ENUM:
+            return get_type_size(type->_enum.underlying ? type->_enum.underlying : NULL);
+
         case TYPEREF_NAMED: {
-            Symbol *sym = type->type_symbol;
-            if (!sym) return 1;
-
-            if (sym->type) {
-                if (!(sym->type->type == TYPEREF_NAMED && sym->type->type_symbol == sym)) {
-                    return get_type_align(sym->type);
-                }
+            size_t size, align;
+            if (builtin_type_layout(type->type_symbol, &size, &align)) {
+                return size;
             }
 
-            if (string_eq(sym->name, string_make("int8")) || string_eq(sym->name, string_make("uint8")) 
-             || string_eq(sym->name, string_make("bool")) || string_eq(sym->name, string_make("char")) ) {
-                return 1;
-            }
-            if (string_eq(sym->name, string_make("int16")) || string_eq(sym->name, string_make("uint16")) ) {
-                return 2;
-            }
-            if (string_eq(sym->name, string_make("int32")) || string_eq(sym->name, string_make("uint32")) ) {
-                return 4;
-            }
-            if (string_eq(sym->name, string_make("int64")) || string_eq(sym->name, string_make("uint64")) 
-             || string_eq(sym->name, string_make("int"))   || string_eq(sym->name, string_make("uint")) ) {
-                return 8;
-            }
-            if (string_eq(sym->name, string_make("string")) ) {
-                return 8;   // ptr + len
-            }
-            
-            if (sym->decl) {
-                if (sym->decl->type == DECL_STRUCT) {
-                    return sym->decl->_struct->align;
-                }
-                if (sym->decl->type == DECL_UNION) {
-                    return sym->decl->_union->align;
-                }
+            if (type->type_symbol && type->type_symbol->type && type->type_symbol->type != type) {
+                return get_type_size(type->type_symbol->type);
             }
 
-            return 1;
+            error(type->token, "Unknown named type in size calculation");
+            return 0;
         }
-        case TYPEREF_SUM: {
-            size_t highest = 1;
-            for (size_t i = 0; i < type->sum.cases.len; i++) {
-                if (get_type_align(type->sum.cases.data[i]) > highest) {
-                    highest = get_type_align(type->sum.cases.data[i]);
-                }
-            }
-            return highest;
-        }
+
+        default:
+            error(type->token, "Unsupported type in size calculation");
+            return 0;
     }
-
-    return 0;
 }
 
-static void calculate_struct_layout(StructDecl *str) {
+size_t get_type_align(TypeRef *type) {
+    if (!type) return 1;
+
+    type = resolve_type_alias(type);
+    if (!type) return 1;
+
+    switch (type->type) {
+        case TYPEREF_POINTER:
+        case TYPEREF_FN:
+            return sizeof(void *);
+
+        case TYPEREF_ARRAY:
+            return get_type_align(type->array.elem);
+
+        case TYPEREF_STRUCT:
+            return type->_struct.align ? type->_struct.align : 1;
+
+        case TYPEREF_UNION:
+            return type->_union.align ? type->_union.align : 1;
+
+        case TYPEREF_ENUM:
+            return get_type_align(type->_enum.underlying ? type->_enum.underlying : NULL);
+
+        case TYPEREF_NAMED: {
+            size_t size, align;
+            if (builtin_type_layout(type->type_symbol, &size, &align)) {
+                return align;
+            }
+
+            if (type->type_symbol && type->type_symbol->type && type->type_symbol->type != type) {
+                return get_type_align(type->type_symbol->type);
+            }
+
+            error(type->token, "Unknown named type in alignment calculation");
+            return 1;
+        }
+
+        default:
+            error(type->token, "Unsupported type in alignment calculation");
+            return 1;
+    }
+}
+
+static String aggregate_name(TypeRef *t) {
+    if (t && t->type_symbol) return t->type_symbol->name;
+    return string_make("(anonymous)");
+}
+
+static void calculate_struct_layout(TypeRef *str) {
+    if (!str || str->type != TYPEREF_STRUCT) {
+        error(str ? str->token : (Token){0}, "Internal error: expected struct type");
+    }
+
     size_t offset = 0;
     size_t max_align = 1;
 
-    for (size_t i = 0; i < str->members.len; i++) {
-        VarDecl *member = str->members.data[i];
+    for (size_t i = 0; i < str->_struct.members.len; i++) {
+        VarDecl *member = str->_struct.members.data[i];
         size_t member_size = get_type_size(member->type);
         size_t member_align = get_type_align(member->type);
+
         if (member_align == 0) {
-            error(str->token, format("Internal error: struct '%.*s' member '%.*s''s align is 0!", string_fmt(str->name), string_fmt(member->name)));
+            error(str->token, format(
+                "Internal error: struct '%.*s' member '%.*s''s align is 0!",
+                string_fmt(aggregate_name(str)),
+                string_fmt(member->name)
+            ));
         }
 
         if (member_align > max_align) {
             max_align = member_align;
         }
 
-        // align the offset
         if (offset % member_align != 0) {
             offset += member_align - (offset % member_align);
         }
 
-        str->field_offsets.data[i] = offset;
+        str->_struct.field_offsets.data[i] = offset;
         offset += member_size;
     }
 
-    // final struct size must be a multiple of its alignment
     if (offset % max_align != 0) {
         offset += max_align - (offset % max_align);
     }
 
-    str->size = offset;
-    str->align = max_align;
+    str->_struct.size = offset;
+    str->_struct.align = max_align;
 }
 
-static void calculate_union_layout(UnionDecl *unn) {
+static void calculate_union_layout(TypeRef *unn) {
+    if (!unn || unn->type != TYPEREF_UNION) {
+        error(unn ? unn->token : (Token){0}, "Internal error: expected union type");
+    }
+
     size_t max_size = 0;
     size_t max_align = 1;
 
-    for (size_t i = 0; i < unn->members.len; i++) {
-        VarDecl *member = unn->members.data[i];
+    for (size_t i = 0; i < unn->_union.members.len; i++) {
+        VarDecl *member = unn->_union.members.data[i];
         size_t member_size = get_type_size(member->type);
         size_t member_align = get_type_align(member->type);
 
@@ -693,61 +694,85 @@ static void calculate_union_layout(UnionDecl *unn) {
         }
     }
 
-    // final union size must be a multiple of its alignment
     if (max_size % max_align != 0) {
         max_size += max_align - (max_size % max_align);
     }
 
-    unn->size = max_size;
-    unn->align = max_align;
+    unn->_union.size = max_size;
+    unn->_union.align = max_align;
 }
 
 static TypeRef *check_expr_with_target(Analyser *ctx, Expr *expr, TypeRef *target_type) {
     if (expr->type == EXPR_INIT) {
-        if (target_type->type != TYPEREF_NAMED || target_type->type_symbol->decl->type != DECL_STRUCT) {
+        TypeRef *resolved = resolve_type_alias(target_type);
+
+        if (!resolved || resolved->type != TYPEREF_STRUCT) {
             error(expr->token, "Initialiser list can only be inferred to a struct type");
         }
-        
-        StructDecl *str = target_type->type_symbol->decl->_struct;
+
+        TypeRef *str = resolved;
         expr->resolved_type = target_type;
 
         for (size_t i = 0; i < expr->init_list.fields.len; i++) {
             InitField *f = &expr->init_list.fields.data[i];
-            
-            if (f->field_name.has_value) {
-                VarDecl *member;
 
-                for (size_t i = 0; i < str->members.len; i++) {
-                    if (string_eq(str->members.data[i]->name, f->field_name.value)) {
-                        member = str->members.data[i];
+            if (f->field_name.has_value) {
+                VarDecl *member = NULL;
+
+                for (size_t j = 0; j < str->_struct.members.len; j++) {
+                    if (string_eq(str->_struct.members.data[j]->name, f->field_name.value)) {
+                        member = str->_struct.members.data[j];
                         break;
                     }
                 }
 
                 if (!member) {
-                    error(f->token, format("Struct '%.*s' has no member named '%.*s'", 
-                        string_fmt(str->name), string_fmt(f->field_name.value)));
+                    error(f->token, format(
+                        "Struct '%.*s' has no member named '%.*s'",
+                        string_fmt(aggregate_name(str)),
+                        string_fmt(f->field_name.value)
+                    ));
                 }
-                
+
                 TypeRef *field_expr_type = check_expr(ctx, f->value);
                 if (!types_compatible(field_expr_type, member->type)) {
-                    error(f->token, format("Cannot assign to member of type '%.*s' object of type '%.*s'", string_fmt(type_to_string(member->type)), string_fmt(type_to_string(field_expr_type))));
+                    error(f->token, format(
+                        "Cannot assign to member of type '%.*s' object of type '%.*s'",
+                        string_fmt(type_to_string(member->type)),
+                        string_fmt(type_to_string(field_expr_type))
+                    ));
                 }
             } else {
-                if (i >= str->members.len) {
+                if (i >= str->_struct.members.len) {
                     error(f->token, "Too many elements in structural initialiser list");
                 }
-                VarDecl *member = str->members.data[i];
+
+                VarDecl *member = str->_struct.members.data[i];
                 TypeRef *field_expr_type = check_expr(ctx, f->value);
                 if (!types_compatible(member->type, field_expr_type)) {
                     error(f->token, "Type mismatch for positional initialiser field");
                 }
             }
         }
+
         return target_type;
     }
 
     return check_expr(ctx, expr);
+}
+
+static void declare_generic_type_params(Analyser *ctx, genparam_array *params) {
+    if (!params || params->len == 0) return;
+
+    for (size_t k = 0; k < params->len; k++) {
+        String param_name = params->data[k].name;
+
+        Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+        TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+        generic_type->type = TYPEREF_NAMED;
+        generic_type->type_symbol = sym;
+        sym->type = generic_type;
+    }
 }
 
 void resolve_types(Analyser *ctx, Module *mod) {
@@ -762,22 +787,12 @@ void resolve_types(Analyser *ctx, Module *mod) {
             case DECL_FN: {
                 enter_scope(ctx, NULL);
 
-                if (d->fn->generic_params.len > 0) {
-                    for (size_t k = 0; k < d->fn->generic_params.len; k++) {
-                        String param_name = d->fn->generic_params.data[k].name;
-
-                        Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
-                        TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
-                        generic_type->type = TYPEREF_NAMED;
-                        generic_type->type_symbol = sym;
-                        sym->type = generic_type;
-                    }
-                }
+                declare_generic_type_params(ctx, &d->fn->generic_params);
 
                 resolve_typeref(ctx, d->symbol->type->fn.ret_type);
                 for (size_t p = 0; p < d->symbol->type->fn.params.len; p++) {
                     resolve_typeref(ctx, d->symbol->type->fn.params.data[p].type);
-                    
+
                     if (d->symbol->type->fn.params.data[p].default_value) {
                         Scope *old = ctx->current_scope;
                         ctx->current_scope = d->symbol->defined_in;
@@ -789,57 +804,63 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 leave_scope(ctx);
                 break;
             }
-            case DECL_STRUCT: {
+
+            case DECL_TYPE: {
+                TypeDecl *ty = d->_type;
+
                 enter_scope(ctx, NULL);
+                declare_generic_type_params(ctx, &ty->generic_params);
 
-                if (d->_struct->generic_params.len > 0) {
-                    for (size_t k = 0; k < d->_struct->generic_params.len; k++) {
-                        String param_name = d->_struct->generic_params.data[k].name;
+                resolve_typeref(ctx, ty->alias);
+                d->symbol->type = ty->alias;
 
-                        Symbol *sym = declare_symbol(ctx, param_name, SYMFLAG_TYPE);
+                TypeRef *resolved = resolve_type_alias(ty->alias);
+                if (resolved) {
+                    resolved->type_symbol = d->symbol;
+                }
 
-                        TypeRef *generic_type = arena_calloc(ctx->arena, sizeof(TypeRef));
-                        generic_type->type = TYPEREF_NAMED;
-                        generic_type->type_symbol = sym;
-                        sym->type = generic_type;
+                if (resolved && resolved->type == TYPEREF_STRUCT) {
+                    for (size_t j = 0; j < resolved->_struct.members.len; j++) {
+                        VarDecl *m = resolved->_struct.members.data[j];
+                        resolve_typeref(ctx, m->type);
+                    }
+
+                    if (ty->generic_params.len == 0) {
+                        calculate_struct_layout(resolved);
                     }
                 }
+                else if (resolved && resolved->type == TYPEREF_UNION) {
+                    for (size_t j = 0; j < resolved->_union.members.len; j++) {
+                        VarDecl *m = resolved->_union.members.data[j];
+                        resolve_typeref(ctx, m->type);
+                    }
 
-                for (size_t j = 0; j < d->_struct->members.len; j++) {
-                    VarDecl *m = d->_struct->members.data[j];
-                    resolve_typeref(ctx, m->type);
+                    if (ty->generic_params.len == 0) {
+                        calculate_union_layout(resolved);
+                    }
                 }
+                else if (resolved && resolved->type == TYPEREF_ENUM) {
+                    if (resolved->_enum.underlying) {
+                        resolve_typeref(ctx, resolved->_enum.underlying);
+                    }
 
-                if (d->_struct->generic_params.len == 0) {
-                    calculate_struct_layout(d->_struct);
+                    for (size_t j = 0; j < resolved->_enum.variants.len; j++) {
+                        if (resolved->_enum.variants.data[j].value) {
+                            check_expr_with_target(ctx,
+                                resolved->_enum.variants.data[j].value,
+                                resolved->_enum.underlying ? resolved->_enum.underlying : d->symbol->type);
+                        }
+                    }
                 }
 
                 leave_scope(ctx);
                 break;
             }
-            case DECL_UNION: {
-                for (size_t j = 0; j < d->_union->members.len; j++) {
-                    VarDecl *m = d->_union->members.data[j];
-                    resolve_typeref(ctx, m->type);
-                }
 
-                calculate_union_layout(d->_union);
-                break;
-            }
-            case DECL_TYPE: {
-                resolve_typeref(ctx, d->_type->alias);
-                d->symbol->type = d->_type->alias;
-                break;
-            }
-            case DECL_ENUM: {
-                resolve_typeref(ctx, d->_enum->type);
-                break;
-            }
             case DECL_VAR: {
                 VarDecl *v = d->var;
 
                 resolve_typeref(ctx, v->type);
-
                 d->symbol->type = v->type;
 
                 if (v->init) {
@@ -851,14 +872,19 @@ void resolve_types(Analyser *ctx, Module *mod) {
                     }
 
                     if (!types_compatible(v->type, init_type)) {
-                        error(v->token, format("Cannot assign variable of type '%.*s' object of type '%.*s'", string_fmt(type_to_string(v->type)), string_fmt(type_to_string(init_type))));
+                        error(v->token, format(
+                            "Cannot assign variable of type '%.*s' object of type '%.*s'",
+                            string_fmt(type_to_string(v->type)),
+                            string_fmt(type_to_string(init_type))
+                        ));
                     }
                 }
 
                 break;
             }
 
-            default: break;
+            default:
+                break;
         }
     }
 
@@ -1275,96 +1301,119 @@ TypeRef *check_expr_member(Analyser *ctx, Expr *expr) {
         return NULL;
     }
 
-    TypeRef *actual_struct_type = base_type;
-    TypeRef *struct_type = unwrap_type(actual_struct_type);
-    
-    if (struct_type && struct_type->type == TYPEREF_POINTER && expr->member.deref) {
-        actual_struct_type = struct_type->pointer.pointee;
-        struct_type = unwrap_type(actual_struct_type);
+    TypeRef *resolved = resolve_type_alias(base_type);
+    if (!resolved) {
+        error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
     }
 
-    if (struct_type && struct_type->type == TYPEREF_ARRAY) {
+    if (resolved->type == TYPEREF_POINTER && expr->member.deref) {
+        resolved = resolve_type_alias(resolved->pointer.pointee);
+    }
+
+    if (!resolved) {
+        error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
+    }
+
+    if (resolved->type == TYPEREF_ARRAY) {
         if (string_eq(expr->member.member, string_make("ptr"))) {
             TypeRef *ptr_type = arena_calloc(ctx->arena, sizeof(TypeRef));
             ptr_type->type = TYPEREF_POINTER;
-            ptr_type->pointer.pointee = struct_type->array.elem;
+            ptr_type->pointer.pointee = resolved->array.elem;
+            ptr_type->token = expr->token;
             return ptr_type;
-        } else if (string_eq(expr->member.member, string_make("len"))) {
+        }
+
+        if (string_eq(expr->member.member, string_make("len"))) {
             Symbol *uint64_sym = lookup_symbol(ctx, string_make("uint64"));
-            return uint64_sym->type;
-        } else {
-            error(expr->member.base->token, format("Unknown array member '%.*s'", string_fmt(expr->member.member)));
-        }
-    } 
-    else {
-        Symbol *type_sym = actual_struct_type->type_symbol;
-        if (!type_sym) {
-            error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
+            return uint64_sym ? uint64_sym->type : NULL;
         }
 
-        FnDecl *current_fn = ctx->current_function;
-        if (current_fn && current_fn->generic_params.len > 0) {
-            for (size_t i = 0; i < current_fn->generic_params.len; i++) {
-                if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
-                    for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
-                        FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
-                        if (constraint && string_eq(constraint->name, expr->member.member)) {
-                            resolve_typeref(ctx, constraint->ret_type);
-                            for (size_t k = 0; k < constraint->params.len; k++) {
-                                resolve_typeref(ctx, constraint->params.data[k].type);
-                            }
-
-                            TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
-                            fn_type->type = TYPEREF_FN;
-                            fn_type->fn.ret_type = constraint->ret_type;
-                            fn_type->fn.params = constraint->params;
-                            
-                            expr->symbol = NULL;
-                            return fn_type;
-                        }
-                    }
-                    error(expr->token, format("Generic parameter '%.*s' has no method named '%.*s'", string_fmt(type_sym->name), string_fmt(expr->member.member)));
-                }
-            }
-        }
-
-        if (!(type_sym->flags & SYMFLAG_TYPE)) {
-            error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
-        }
-
-        Symbol *method_sym = find_struct_method(ctx, type_sym->defined_in ? type_sym->defined_in : ctx->current_scope, type_sym->type, expr->member.member);;
-
-        if (method_sym) {
-            expr->symbol = method_sym;
-            return method_sym->type;
-        }
-
-        Symbol *structural_sym = (struct_type ? struct_type->type_symbol : type_sym);
-        StructDecl *str = NULL;
-        UnionDecl *unn = NULL;
-
-        if (structural_sym && structural_sym->decl) {
-            if (structural_sym->decl->type == DECL_STRUCT) str = structural_sym->decl->_struct;
-            else if (structural_sym->decl->type == DECL_UNION) unn = structural_sym->decl->_union;
-        }
-
-        VarDecl *found_member = NULL;
-        if (str || unn) {
-            for (size_t i = 0; i < (str ? str->members.len : unn->members.len); i++) {
-                if (string_eq(str ? str->members.data[i]->name : unn->members.data[i]->name, expr->member.member)) {
-                    found_member = str ? str->members.data[i] : unn->members.data[i];
-                    break;
-                }
-            }
-        }
-
-        if (found_member) {
-            return found_member->type;
-        }
-
-        print_scope(ctx->current_scope);
-        error(expr->token, format("Unknown member or method '%.*s' on type '%.*s'", string_fmt(expr->member.member), string_fmt(type_sym->name)));
+        error(expr->member.base->token, format("Unknown array member '%.*s'", string_fmt(expr->member.member)));
     }
+
+    Symbol *type_sym = resolved->type_symbol ? resolved->type_symbol : base_type->type_symbol;
+    if (!type_sym && (resolved->type != TYPEREF_STRUCT &&
+                      resolved->type != TYPEREF_UNION &&
+                      resolved->type != TYPEREF_ENUM)) {
+        error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
+    }
+
+    FnDecl *current_fn = ctx->current_function;
+    if (type_sym && current_fn && current_fn->generic_params.len > 0) {
+        for (size_t i = 0; i < current_fn->generic_params.len; i++) {
+            if (string_eq(current_fn->generic_params.data[i].name, type_sym->name)) {
+                for (size_t j = 0; j < current_fn->generic_params.data[i].constraints.len; j++) {
+                    FnDecl *constraint = current_fn->generic_params.data[i].constraints.data[j];
+                    if (constraint && string_eq(constraint->name, expr->member.member)) {
+                        resolve_typeref(ctx, constraint->ret_type);
+                        for (size_t k = 0; k < constraint->params.len; k++) {
+                            resolve_typeref(ctx, constraint->params.data[k].type);
+                        }
+
+                        TypeRef *fn_type = arena_calloc(ctx->arena, sizeof(TypeRef));
+                        fn_type->type = TYPEREF_FN;
+                        fn_type->fn.ret_type = constraint->ret_type;
+                        fn_type->fn.params = constraint->params;
+                        expr->symbol = NULL;
+                        return fn_type;
+                    }
+                }
+
+                error(expr->token, format(
+                    "Generic parameter '%.*s' has no method named '%.*s'",
+                    string_fmt(type_sym->name),
+                    string_fmt(expr->member.member)
+                ));
+            }
+        }
+    }
+
+    if (type_sym && !(type_sym->flags & SYMFLAG_TYPE)) {
+        error(expr->member.base->token, format("Unknown base type '%.*s'", string_fmt(type_to_string(base_type))));
+    }
+
+    Symbol *method_sym = NULL;
+    if (type_sym) {
+        method_sym = find_struct_method(
+            ctx,
+            type_sym->defined_in ? type_sym->defined_in : ctx->current_scope,
+            type_sym->type,
+            expr->member.member
+        );
+    }
+
+    if (method_sym) {
+        expr->symbol = method_sym;
+        return method_sym->type;
+    }
+
+    VarDecl *found_member = NULL;
+    if (resolved->type == TYPEREF_STRUCT) {
+        for (size_t i = 0; i < resolved->_struct.members.len; i++) {
+            if (string_eq(resolved->_struct.members.data[i]->name, expr->member.member)) {
+                found_member = resolved->_struct.members.data[i];
+                break;
+            }
+        }
+    } else if (resolved->type == TYPEREF_UNION) {
+        for (size_t i = 0; i < resolved->_union.members.len; i++) {
+            if (string_eq(resolved->_union.members.data[i]->name, expr->member.member)) {
+                found_member = resolved->_union.members.data[i];
+                break;
+            }
+        }
+    }
+
+    if (found_member) {
+        return found_member->type;
+    }
+
+    print_scope(ctx->current_scope);
+    error(expr->token, format(
+        "Unknown member or method '%.*s' on type '%.*s'",
+        string_fmt(expr->member.member),
+        string_fmt(type_sym ? type_sym->name : resolved->type_symbol ? resolved->type_symbol->name : string_make("<anonymous>"))
+    ));
 }
 
 TypeRef *check_expr_unary(Analyser *ctx, Expr *expr) {
@@ -1509,8 +1558,11 @@ TypeRef *check_expr_path(Analyser *ctx, Expr *expr) {
             Symbol *candidate = mod_scope->symbols.data[j];
             if (string_eq(candidate->name, next_name)) {
                 if (!(candidate->flags & SYMFLAG_EXPORT)) {
-                    error(expr->token, format("Namespace '%.*s' is private to module '%.*s'", 
-                        string_fmt(candidate->name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
+                    error(expr->token, format(
+                        "Namespace '%.*s' is private to module '%.*s'",
+                        string_fmt(candidate->name),
+                        string_fmt(module_name_to_string(ctx->arena, &mod->name))
+                    ));
                 }
                 found_next = candidate;
                 break;
@@ -1518,8 +1570,11 @@ TypeRef *check_expr_path(Analyser *ctx, Expr *expr) {
         }
 
         if (!found_next) {
-            error(expr->token, format("No nested namespace '%.*s' found in module '%.*s'", 
-                string_fmt(next_name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
+            error(expr->token, format(
+                "No nested namespace '%.*s' found in module '%.*s'",
+                string_fmt(next_name),
+                string_fmt(module_name_to_string(ctx->arena, &mod->name))
+            ));
         }
 
         current_sym = found_next;
@@ -1541,8 +1596,11 @@ TypeRef *check_expr_path(Analyser *ctx, Expr *expr) {
                 Symbol *candidate = mod_scope->symbols.data[i];
                 if (string_eq(candidate->name, target_name)) {
                     if (!(candidate->flags & SYMFLAG_EXPORT)) {
-                        error(expr->token, format("Symbol '%.*s' is private to module '%.*s'", 
-                            string_fmt(candidate->name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
+                        error(expr->token, format(
+                            "Symbol '%.*s' is private to module '%.*s'",
+                            string_fmt(candidate->name),
+                            string_fmt(module_name_to_string(ctx->arena, &mod->name))
+                        ));
                     }
                     target_sym = candidate;
                     break;
@@ -1550,43 +1608,64 @@ TypeRef *check_expr_path(Analyser *ctx, Expr *expr) {
             }
 
             if (!target_sym) {
-                error(expr->token, format("No symbol '%.*s' found in namespace '%.*s'", 
-                    string_fmt(target_name), string_fmt(module_name_to_string(ctx->arena, &mod->name))));
+                error(expr->token, format(
+                    "No symbol '%.*s' found in namespace '%.*s'",
+                    string_fmt(target_name),
+                    string_fmt(module_name_to_string(ctx->arena, &mod->name))
+                ));
             }
 
             expr->symbol = target_sym;
             return target_sym->type;
         }
 
-        case DECL_ENUM: {
-            EnumDecl *en = current_sym->decl->_enum;
-
-            for (size_t i = 0; i < en->variants.len; i++) {
-                if (string_eq(en->variants.data[i].name, target_name)) {
-                    expr->symbol = current_sym;
-                    return current_sym->type;
-                }
+        case DECL_TYPE: {
+            TypeRef *alias = resolve_type_alias(current_sym->type);
+            if (!alias) {
+                error(expr->token, format("Invalid type alias '%.*s'", string_fmt(current_sym->name)));
             }
 
-            error(expr->token, format("Enum '%.*s' has no variant '%.*s'", string_fmt(current_sym->name), string_fmt(target_name)));
-        }
-
-        case DECL_UNION: {
-            UnionDecl *unn = current_sym->decl->_union;
-
-            for (size_t i = 0; i < unn->members.len; i++) {
-                if (string_eq(unn->members.data[i]->name, target_name)) {
-                    expr->symbol = current_sym;
-                    return current_sym->type;
+            if (alias->type == TYPEREF_ENUM) {
+                for (size_t i = 0; i < alias->_enum.variants.len; i++) {
+                    if (string_eq(alias->_enum.variants.data[i].name, target_name)) {
+                        expr->symbol = current_sym;
+                        return current_sym->type;
+                    }
                 }
+
+                error(expr->token, format(
+                    "Enum '%.*s' has no variant '%.*s'",
+                    string_fmt(current_sym->name),
+                    string_fmt(target_name)
+                ));
             }
 
-            error(expr->token, format("Union '%.*s' has no constructor variant '%.*s'", string_fmt(current_sym->name), string_fmt(target_name)));
+            if (alias->type == TYPEREF_UNION) {
+                for (size_t i = 0; i < alias->_union.members.len; i++) {
+                    if (string_eq(alias->_union.members.data[i]->name, target_name)) {
+                        expr->symbol = current_sym;
+                        return current_sym->type;
+                    }
+                }
+
+                error(expr->token, format(
+                    "Union '%.*s' has no constructor variant '%.*s'",
+                    string_fmt(current_sym->name),
+                    string_fmt(target_name)
+                ));
+            }
+
+            error(expr->token, format(
+                "Path resolution is not supported out of container type: '%.*s'",
+                string_fmt(current_sym->name)
+            ));
         }
 
-        default: {
-            error(expr->token, format("Path resolution is not supported out of container type: '%.*s'", string_fmt(current_sym->name)));
-        }
+        default:
+            error(expr->token, format(
+                "Path resolution is not supported out of container type: '%.*s'",
+                string_fmt(current_sym->name)
+            ));
     }
 }
 
@@ -1834,7 +1913,7 @@ bool types_compatible(TypeRef *src, TypeRef *dst) {
 }
 
 // silly monomorphisation thingies
-static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_array concrete_args);
+static Symbol *monomorphise_struct(Module *mod, TypeDecl *template, typerefs_array concrete_args);
 static String mangle_generic_name(Arena *arena, String base_name, typerefs_array concrete_args);
 
 static FnDecl *find_generic_fn_template(Module *mod, String name) {
@@ -1876,15 +1955,19 @@ static FnDecl *find_generic_fn_template_by_path(Module *mod, string_array path) 
     return find_generic_fn_template(target_mod, fn_name);
 }
 
-static StructDecl *find_generic_struct_template(Module *mod, String name) {
+static TypeDecl *find_generic_struct_template(Module *mod, String name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
-        if (decl->type == DECL_STRUCT && string_eq(decl->_struct->name, name)) {
-            if (decl->_struct->generic_params.len > 0) {
-                return decl->_struct;
-            }
+        if (decl->type != DECL_TYPE) continue;
+        if (!string_eq(decl->_type->name, name)) continue;
+        if (decl->_type->generic_params.len == 0) continue;
+
+        TypeRef *alias = resolve_type_alias(decl->_type->alias);
+        if (alias && alias->type == TYPEREF_STRUCT) {
+            return decl->_type;
         }
     }
+
     return NULL;
 }
 
@@ -1905,7 +1988,7 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
                     ast_substitute_type(mod, src->named.generic_args.data[i], params, args));
             }
 
-            StructDecl *template_str = find_generic_struct_template(mod, src->named.name);
+            TypeDecl *template_str = find_generic_struct_template(mod, src->named.name);
             if (template_str) {
                 Symbol *concrete_sym = monomorphise_struct(mod, template_str, substituted_args);
 
@@ -1954,48 +2037,75 @@ static TypeRef *ast_substitute_type(Module *mod, TypeRef *src, genparam_array pa
     return dst;
 }
 
-static Symbol *monomorphise_struct(Module *mod, StructDecl *template, typerefs_array concrete_args) {
+static Symbol *monomorphise_struct(Module *mod, TypeDecl *template, typerefs_array concrete_args) {
     String mangled_name = mangle_generic_name(mod->arena, template->name, concrete_args);
-    
+
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
-        if (d->type == DECL_STRUCT && string_eq(d->_struct->name, mangled_name)) {
-            return d->symbol; 
+        if (d->type == DECL_TYPE && string_eq(d->_type->name, mangled_name)) {
+            return d->symbol;
         }
     }
 
-    StructDecl *concrete_struct = arena_calloc(mod->arena, sizeof(StructDecl));
-    concrete_struct->name = mangled_name;
-    concrete_struct->generic_params = (genparam_array){0};
-    concrete_struct->members = vardecls_array_init(mod->arena);
-    concrete_struct->field_offsets = size_array_init(mod->arena);
-
-    for (size_t i = 0; i < template->members.len; i++) {
-        VarDecl *src_member = template->members.data[i];
-        VarDecl *dst_member = arena_calloc(mod->arena, sizeof(VarDecl));
-        *dst_member = *src_member;
-        
-        dst_member->type = ast_substitute_type(mod, src_member->type, template->generic_params, concrete_args);
-        vardecls_array_push(&concrete_struct->members, dst_member);
+    TypeRef *template_alias = resolve_type_alias(template->alias);
+    if (!template_alias || template_alias->type != TYPEREF_STRUCT) {
+        error(template->token, "Internal error: monomorphising non-struct type");
     }
 
+    TypeRef *concrete_struct = arena_calloc(mod->arena, sizeof(TypeRef));
+    concrete_struct->type = TYPEREF_STRUCT;
+    concrete_struct->token = template->token;
+    concrete_struct->_struct.members = vardecls_array_init(mod->arena);
+    concrete_struct->_struct.field_offsets = size_array_init(mod->arena);
+    concrete_struct->_struct.size = 0;
+    concrete_struct->_struct.align = 0;
+
+    for (size_t i = 0; i < template_alias->_struct.members.len; i++) {
+        VarDecl *src_member = template_alias->_struct.members.data[i];
+        VarDecl *dst_member = arena_calloc(mod->arena, sizeof(VarDecl));
+        *dst_member = *src_member;
+        dst_member->type = ast_substitute_type(
+            mod,
+            src_member->type,
+            template->generic_params,
+            concrete_args
+        );
+        vardecls_array_push(&concrete_struct->_struct.members, dst_member);
+    }
+
+    concrete_struct->_struct.field_offsets = size_array_init(mod->arena);
+    for (size_t i = 0; i < concrete_struct->_struct.members.len; i++) {
+        size_array_push(&concrete_struct->_struct.field_offsets, 0);
+    }
+
+    calculate_struct_layout(concrete_struct);
+
+    TypeDecl *new_type = arena_calloc(mod->arena, sizeof(TypeDecl));
+    new_type->name = mangled_name;
+    new_type->generic_params = (genparam_array){0};
+    new_type->alias = concrete_struct;
+    new_type->token = template->token;
+
     Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
-    new_decl->type = DECL_STRUCT;
-    new_decl->_struct = concrete_struct;
+    new_decl->type = DECL_TYPE;
+    new_decl->_type = new_type;
     new_decl->token = template->token;
-    
+
     Symbol *sym = arena_calloc(mod->arena, sizeof(Symbol));
     sym->name = mangled_name;
     sym->decl = new_decl;
     sym->flags = SYMFLAG_TYPE;
-    
-    TypeRef *struct_type = arena_calloc(mod->arena, sizeof(TypeRef));
-    struct_type->type = TYPEREF_NAMED;
-    struct_type->named.name = mangled_name;
-    struct_type->type_symbol = sym;
-    sym->type = struct_type;
+    sym->defined_in = mod->scope;
 
-    new_decl->symbol = sym; 
+    TypeRef *named = arena_calloc(mod->arena, sizeof(TypeRef));
+    named->type = TYPEREF_NAMED;
+    named->named.name = mangled_name;
+    named->type_symbol = sym;
+    named->token = template->token;
+    sym->type = named;
+
+    new_decl->symbol = sym;
+    concrete_struct->type_symbol = sym;
 
     if (mod->scope) {
         syms_array_push(&mod->scope->symbols, sym);

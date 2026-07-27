@@ -3,11 +3,11 @@ module std::mem;
 include std::system;
 
 @export
-struct Allocator {
+type Allocator = struct {
     fn uint8 mut *? (Allocator mut *self, uint64 size) allocate;
     fn none (Allocator mut *self, uint8 mut *ptr, uint64 size) free;
     uint8 mut *? context;
-}
+};
 
 fn uint8 mut *? system_alloc_pages(uint64 size) {
     uint8 mut *ptr = (uint8 mut *)std::system::syscall(9, 0u, size, 3u, 34u, 18446744073709551615u, 0u);
