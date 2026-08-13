@@ -6,88 +6,24 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "instantiate.h"
 #include "arena.h"
 
-#define ARRAY_TEMPLATE(T, N) \
-typedef struct { \
-    T *data; \
-    size_t len; \
-    size_t cap; \
-    bool alive; \
-    Arena *arena; \
-} N##_array; \
-static N##_array N##_array_empty = {}; \
-static inline N##_array N##_array##_init(Arena *arena) { \
-    N##_array v = {}; \
-    v.data = arena_calloc(arena, sizeof(T)); \
-    v.len = 0; \
-    v.cap = 1; \
-    v.alive = true; \
-    v.arena = arena; \
-    return v; \
-} \
-static inline void N##_array##_push(N##_array *v, T item) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_push: uninitialised array\n"); \
-        exit(1); \
-    } \
-    if (v->len == v->cap) { \
-        size_t old_cap = v->cap ? v->cap : 8; \
-        size_t new_cap = v->cap ? v->cap * 2 : 8; \
-        size_t old_bytes = old_cap * sizeof(T); \
-        size_t new_bytes = new_cap * sizeof(T); \
-        v->data = arena_realloc(v->arena, v->data, old_bytes, new_bytes); \
-        if (!v->data) { \
-            fprintf(stderr, #N "_array_push: realloc failed\n"); \
-            exit(1); \
-        } \
-        v->cap = new_cap; \
-    } \
-    v->data[v->len++] = item; \
-} \
-static inline void N##_array_append(N##_array *v, size_t num, T item) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_append: uninitialised array\n"); \
-        exit(1); \
-    } \
-    for (size_t i = 0; i < num; i++) { \
-        N##_array_push(v, item); \
-    } \
-} \
-static inline void N##_array##_free(N##_array *v) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_free: uninitialised array\n"); \
-        exit(1); \
-    } \
-    v->len = v->cap = 0; \
-} \
-static inline T N##_array##_at(N##_array *v, size_t len) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_at: uninitialised array\n"); \
-        exit(1); \
-    } \
-    return v->data[len >= v->len ? (v->cap - 1) : len]; \
-} \
-static inline void N##_array##_resize(N##_array *v, size_t elems) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_resize: uninitialised array\n"); \
-        exit(1); \
-    } \
-    if (elems < v->cap) return; \
-    v->data = arena_realloc(v->arena, v->data, v->cap * sizeof(T), elems * sizeof(T)); \
-    if (!v->data) { \
-        fprintf(stderr, #N "_array_resize: realloc failed\n"); \
-        exit(1); \
-    } \
-    v->cap = elems; \
-} \
-static inline void N##_array_clear(N##_array *v) { \
-    if (!v->alive) { \
-        fprintf(stderr, #N "_array_clear: uninitialised array\n"); \
-        exit(1); \
-    } \
-    v->len = 0; \
-} \
+typedef struct {
+    void *data;
+    size_t T;
+
+    size_t len;
+    size_t cap;
+    bool alive;
+    Arena *arena;
+} Array;
+
+Array array_init(Arena *arena, size_t T);
+void array_push(Array *v, void *item);
+void array_append(Array *v, size_t num, void *item);
+void array_free(Array *v);
+void *array_at(Array *v, size_t len);
+void array_resize(Array *v, size_t elems);
+void array_clear(Array *v);
 
 #endif
