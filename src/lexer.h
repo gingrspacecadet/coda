@@ -15,7 +15,7 @@ typedef struct {
 typedef struct {
     Source *source;
     size_t offset, length;
-    size_t line, col;
+    size_t line, column;
 } Span;
 
 typedef enum {
@@ -139,14 +139,14 @@ typedef void (*LexerErrorFn)(
     void *userdata,
     LexerErrorKind kind,
     Span span,
-    String message,
+    String message
 );
 
 typedef struct {
     Source *source;
 
     size_t pos;
-    size_t line, col;
+    size_t line, column;
 
     LexerErrorFn error;
     void *error_userdata;
