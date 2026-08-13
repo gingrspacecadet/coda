@@ -1,0 +1,79 @@
+module std::collections;
+
+struct ArrayList<T> {
+    Allocator alloc;
+    T[] data;
+}
+
+fn ArrayList<T> | AllocationError ArrayList<T>.create(
+    Allocator alloc
+);
+
+fn none ArrayList<T>.destroy(
+    mut ArrayList<T> self
+);
+
+fn none | AllocationError ArrayList<T>.reserve(
+    mut ArrayList<T> self,
+    uint64 capacity
+);
+
+fn none | AllocationError ArrayList<T>.append(
+    mut ArrayList<T> self,
+    T value
+);
+
+fn T *ArrayList<T>.get(
+    mut ArrayList<T> self,
+    uint64 index
+);
+
+fn none ArrayList<T>.clear(
+    mut ArrayList<T> self
+);
+
+fn T[] ArrayList<T>.items(
+    ArrayList<T> self
+);
+
+struct HashMap<K, V>;
+
+fn HashMap<K,V> | AllocationError HashMap<K,V>.create(
+    Allocator alloc
+);
+
+fn none HashMap<K,V>.destroy(
+    mut Hashmap<K,V> self
+);
+
+fn none | AllocationError HashMap<K,V>.insert<K,V>(
+    mut Hashmap<K,V> self,
+    K key,
+    V value
+);
+
+fn V *HashMap<K,V>.get<K,V>(
+    mut Hashmap<K,V> self,
+    K key
+);
+
+fn bool HashMap<K,V>.contains(
+    Hashmap<K,V> self,
+    K key
+);
+
+fn none HashMap<K,V>.remove(
+    mut Hashmap<K,V> self,
+    K key
+);
+
+struct Queue<T>;
+
+fn none | AllocationError Queue<T>.push(
+    mut Queue<T> self,
+    T value
+);
+
+fn T | none Queue<T>.pop(
+    mut Queue<T> self
+);

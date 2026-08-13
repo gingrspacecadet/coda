@@ -3,11 +3,11 @@ module std::fmt;
 include std::io;
 
 interface Display {
-    fn none format(mut std::io::Writer writer);
+    fn none | std::io::IOError format(mut std::io::Writer writer);
 }
 
 interface Debug {
-    fn none debug(mut std::io::Writer writer);
+    fn none | std::io::IOError debug(mut std::io::Writer writer);
 }
 
 fn none write(mut std::io::Writer writer, string fmt, any[] args);

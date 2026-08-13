@@ -164,6 +164,25 @@ void collect_attributes(Parser *ctx, attr_array *out) {
 static bool looks_like_type_single_internal(Parser *ctx);
 static bool looks_like_type_internal(Parser *ctx);
 
+static void skip_braced_block(Parser *ctx) {
+    int depth = 1;
+
+    while (depth > 0) {
+        token_optional t = peek(ctx);
+        if (!t.has_value) {
+            error(ctx, "Unterminated '{...}' block");
+        }
+
+        if (t.value.type == TOKENTYPE_LBRACE) {
+            depth++;
+        } else if (t.value.type == TOKENTYPE_RBRACE) {
+            depth--;
+        }
+
+        consume(ctx);
+    }
+}
+
 static bool looks_like_type_single_internal(Parser *ctx) {
     token_optional t = peek(ctx);
     if (t.has_value && t.value.type == TOKENTYPE_MUT) {
@@ -171,22 +190,23 @@ static bool looks_like_type_single_internal(Parser *ctx) {
     }
 
     t = peek(ctx);
+
     if (t.has_value && t.value.type == TOKENTYPE_FN) {
         consume(ctx);
-        
+
         if (!looks_like_type_single_internal(ctx)) return false;
-        
+
         t = peek(ctx);
         if (!t.has_value || t.value.type != TOKENTYPE_LPAREN) return false;
         consume(ctx);
-        
+
         t = peek(ctx);
         while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
             while (t.has_value && t.value.type == TOKENTYPE_AT) {
                 consume(ctx);
                 t = peek(ctx);
                 if (t.has_value && t.value.type == TOKENTYPE_IDENT) consume(ctx);
-                
+
                 t = peek(ctx);
                 if (t.has_value && t.value.type == TOKENTYPE_LPAREN) {
                     consume(ctx);
@@ -201,45 +221,64 @@ static bool looks_like_type_single_internal(Parser *ctx) {
                 }
                 t = peek(ctx);
             }
-            
-            if (!looks_like_type_single_internal(ctx)) return false; 
-            
+
+            if (!looks_like_type_single_internal(ctx)) return false;
+
             t = peek(ctx);
             if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
                 consume(ctx);
                 t = peek(ctx);
             }
-            
+
             if (!t.has_value || t.value.type != TOKENTYPE_COMMA) break;
             consume(ctx);
             t = peek(ctx);
         }
-        
+
         t = peek(ctx);
         if (!t.has_value || t.value.type != TOKENTYPE_RPAREN) return false;
         consume(ctx);
-    } 
+    }
+    else if (t.has_value &&
+             (t.value.type == TOKENTYPE_STRUCT ||
+              t.value.type == TOKENTYPE_UNION ||
+              t.value.type == TOKENTYPE_ENUM)) {
+        Token kw = consume(ctx);
+
+        if (kw.type == TOKENTYPE_ENUM) {
+            t = peek(ctx);
+            if (t.has_value && t.value.type == TOKENTYPE_COLON) {
+                consume(ctx);
+                if (!looks_like_type_internal(ctx)) return false;
+            }
+        }
+
+        t = peek(ctx);
+        if (!t.has_value || t.value.type != TOKENTYPE_LBRACE) return false;
+        consume(ctx);
+        skip_braced_block(ctx);
+    }
     else if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
         consume(ctx);
 
         t = peek(ctx);
         while (t.has_value && t.value.type == TOKENTYPE_DOUBLECOLON) {
             consume(ctx);
-            
+
             t = peek(ctx);
             if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
                 return false;
             }
             consume(ctx);
-            
+
             t = peek(ctx);
         }
-        
+
         if (t.has_value && t.value.type == TOKENTYPE_LT) {
             consume(ctx);
             while (true) {
                 if (!looks_like_type_single_internal(ctx)) return false;
-                
+
                 t = peek(ctx);
                 if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
                     consume(ctx);
@@ -323,8 +362,115 @@ bool looks_like_type(Parser *ctx, token_optional *after) {
     return matched;
 }
 
+static TypeRef *parse_struct_type(Parser *ctx, Token start, bool is_mut) {
+    TypeRef *ty = arena_calloc(ctx->arena, sizeof(TypeRef));
+    ty->type = TYPEREF_STRUCT;
+    ty->token = start;
+    ty->is_mutable = is_mut;
+    ty->_struct.members = vardecls_array_init(ctx->arena);
+    ty->_struct.size = 0;
+    ty->_struct.align = 0;
+    ty->_struct.field_offsets = size_array_init(ctx->arena);
+
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        TypeRef *field_type = parse_type(ctx);
+        Token field_name = expect(ctx, TOKENTYPE_IDENT, "Expected member name");
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+
+        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->token = field_name;
+        decl->type = field_type;
+        decl->name = field_name.value.value;
+        vardecls_array_push(&ty->_struct.members, decl);
+
+        t = peek(ctx);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
+    return ty;
+}
+
+static TypeRef *parse_union_type(Parser *ctx, Token start, bool is_mut) {
+    TypeRef *ty = arena_calloc(ctx->arena, sizeof(TypeRef));
+    ty->type = TYPEREF_UNION;
+    ty->token = start;
+    ty->is_mutable = is_mut;
+    ty->_union.members = vardecls_array_init(ctx->arena);
+    ty->_union.size = 0;
+    ty->_union.align = 0;
+
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
+
+    token_optional t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        TypeRef *field_type = parse_type(ctx);
+        Token field_name = expect(ctx, TOKENTYPE_IDENT, "Expected member name");
+        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
+
+        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
+        decl->token = field_name;
+        decl->type = field_type;
+        decl->name = field_name.value.value;
+        vardecls_array_push(&ty->_union.members, decl);
+
+        t = peek(ctx);
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
+    return ty;
+}
+
+static TypeRef *parse_enum_type(Parser *ctx, Token start, bool is_mut) {
+    TypeRef *ty = arena_calloc(ctx->arena, sizeof(TypeRef));
+    ty->type = TYPEREF_ENUM;
+    ty->token = start;
+    ty->is_mutable = is_mut;
+    ty->_enum.underlying = NULL;
+    ty->_enum.variants = enumvar_array_init(ctx->arena);
+
+    token_optional t = peek(ctx);
+    if (t.has_value && t.value.type == TOKENTYPE_COLON) {
+        consume(ctx);
+        ty->_enum.underlying = parse_type(ctx);
+    }
+
+    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
+
+    t = peek(ctx);
+    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+        Token var_name = expect(ctx, TOKENTYPE_IDENT, "Expected variant name");
+
+        EnumVariant variant = {
+            .name = var_name.value.value,
+            .value = NULL,
+            .token = var_name,
+        };
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_EQ) {
+            consume(ctx);
+            variant.value = parse_expr(ctx, 0);
+        }
+
+        enumvar_array_push(&ty->_enum.variants, variant);
+
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
+            consume(ctx);
+            t = peek(ctx);
+        } else if (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
+            error(ctx, "Expected ',' or '}' after enum variant");
+        }
+    }
+
+    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
+    return ty;
+}
+
 TypeRef *parse_type_single(Parser *ctx) {
-    token_optional first = peek(ctx);
     bool is_mut = false;
 
     token_optional t = peek(ctx);
@@ -334,37 +480,45 @@ TypeRef *parse_type_single(Parser *ctx) {
     }
 
     t = peek(ctx);
-    TypeRef *base = arena_calloc(ctx->arena, sizeof(TypeRef));
-    if (t.has_value && t.value.type == TOKENTYPE_FN) {
-        // function pointer yippee!
+    if (!t.has_value) {
+        error(ctx, "Expected type");
+    }
+
+    TypeRef *base = NULL;
+
+    if (t.value.type == TOKENTYPE_FN) {
         Token start = consume(ctx);
         TypeRef *ret_type = parse_type_single(ctx);
         expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
 
+        base = arena_calloc(ctx->arena, sizeof(TypeRef));
         base->type = TYPEREF_FN;
         base->token = start;
         base->fn.params = param_array_init(ctx->arena);
         base->fn.ret_type = ret_type;
+        base->is_mutable = is_mut;
 
         t = peek(ctx);
         while (t.has_value && t.value.type != TOKENTYPE_RPAREN) {
-            start = t.value;
+            Token param_start = t.value;
             attr_array attrs = attr_array_init(ctx->arena);
             collect_attributes(ctx, &attrs);
 
             TypeRef *param_type = parse_type_single(ctx);
             t = peek(ctx);
-            Token name;
+
+            Token name = {0};
             if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
-                name = t.value;
-                consume(ctx);
+                name = consume(ctx);
+            } else {
+                error(ctx, "Expected parameter name");
             }
 
             Param p = (Param){
                 .type = param_type,
-                .name = name.value.has_value ? name.value.value : (String){},
+                .name = name.value.value,
                 .attributes = attrs,
-                .token = start
+                .token = param_start
             };
 
             param_array_push(&base->fn.params, p);
@@ -373,19 +527,31 @@ TypeRef *parse_type_single(Parser *ctx) {
             consume(ctx);
             t = peek(ctx);
         }
+
         expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
     }
-    else if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
-        error(ctx, "Expected type name");
-    } else {
+    else if (t.value.type == TOKENTYPE_STRUCT) {
+        Token start = consume(ctx);
+        base = parse_struct_type(ctx, start, is_mut);
+    }
+    else if (t.value.type == TOKENTYPE_UNION) {
+        Token start = consume(ctx);
+        base = parse_union_type(ctx, start, is_mut);
+    }
+    else if (t.value.type == TOKENTYPE_ENUM) {
+        Token start = consume(ctx);
+        base = parse_enum_type(ctx, start, is_mut);
+    }
+    else if (t.value.type == TOKENTYPE_IDENT) {
         string_array components = string_array_init(ctx->arena);
-        String first_ident = consume(ctx).value.value;
+        Token start = consume(ctx);
+        String first_ident = start.value.value;
         string_array_push(&components, first_ident);
 
         t = peek(ctx);
         while (t.has_value && t.value.type == TOKENTYPE_DOUBLECOLON) {
             consume(ctx);
-            
+
             t = peek(ctx);
             if (!t.has_value || t.value.type != TOKENTYPE_IDENT) {
                 error(ctx, "Expected identifier after '::'");
@@ -394,6 +560,10 @@ TypeRef *parse_type_single(Parser *ctx) {
             string_array_push(&components, next_ident);
             t = peek(ctx);
         }
+
+        base = arena_calloc(ctx->arena, sizeof(TypeRef));
+        base->token = start;
+        base->is_mutable = is_mut;
 
         if (components.len > 1) {
             base->type = TYPEREF_PATH;
@@ -404,24 +574,19 @@ TypeRef *parse_type_single(Parser *ctx) {
             base->named.name = components.data[0];
             base->named.generic_args = typerefs_array_init(ctx->arena);
         }
-        
-        base->is_mutable = is_mut;
-        
-        if (first.has_value) {
-            base->token = first.value;
-        }
 
-        token_optional gen_check = peek(ctx);
-        if (gen_check.has_value && gen_check.value.type == TOKENTYPE_LT) {
+        t = peek(ctx);
+        if (t.has_value && t.value.type == TOKENTYPE_LT) {
             consume(ctx);
             while (true) {
-                typerefs_array *gen_args = (base->type == TYPEREF_PATH) ? 
-                    &base->path.generic_args : &base->named.generic_args;
-                    
+                typerefs_array *gen_args = (base->type == TYPEREF_PATH)
+                    ? &base->path.generic_args
+                    : &base->named.generic_args;
+
                 typerefs_array_push(gen_args, parse_type_single(ctx));
-                
-                gen_check = peek(ctx);
-                if (gen_check.has_value && gen_check.value.type == TOKENTYPE_COMMA) {
+
+                t = peek(ctx);
+                if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
                     consume(ctx);
                     continue;
                 }
@@ -430,32 +595,39 @@ TypeRef *parse_type_single(Parser *ctx) {
             expect(ctx, TOKENTYPE_GT, "Expected '>' to close type arguments");
         }
     }
-
+    else {
+        error(ctx, "Expected type name");
+    }
 
     while (true) {
-        token_optional t = peek(ctx);
-        if (t.has_value && t.value.type != TOKENTYPE_MUT && t.value.type != TOKENTYPE_STAR && t.value.type != TOKENTYPE_LBRACK) break;
-
-        bool is_mut = false;
-        t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_MUT) {
-            consume(ctx);
-            is_mut = true;
+        token_optional next = peek(ctx);
+        if (next.has_value &&
+            next.value.type != TOKENTYPE_MUT &&
+            next.value.type != TOKENTYPE_STAR &&
+            next.value.type != TOKENTYPE_LBRACK) {
+            break;
         }
 
-        t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_STAR) {
+        bool postfix_mut = false;
+        next = peek(ctx);
+        if (next.has_value && next.value.type == TOKENTYPE_MUT) {
+            consume(ctx);
+            postfix_mut = true;
+        }
+
+        next = peek(ctx);
+        if (next.has_value && next.value.type == TOKENTYPE_STAR) {
             Token star_tok = consume(ctx);
 
             TypeRef *ptr = arena_calloc(ctx->arena, sizeof(TypeRef));
             ptr->type = TYPEREF_POINTER;
             ptr->pointer.pointee = base;
-            ptr->is_mutable = is_mut;
+            ptr->is_mutable = postfix_mut;
             ptr->token = star_tok;
 
-            t = peek(ctx);
-            if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
-                Token q = consume(ctx);
+            next = peek(ctx);
+            if (next.has_value && next.value.type == TOKENTYPE_QUESTION) {
+                consume(ctx);
                 ptr->is_optional = true;
             }
 
@@ -463,30 +635,33 @@ TypeRef *parse_type_single(Parser *ctx) {
             continue;
         }
 
-        t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_LBRACK) {
+        next = peek(ctx);
+        if (next.has_value && next.value.type == TOKENTYPE_LBRACK) {
             Token lb = consume(ctx);
             size_t length = 0;
-            t = peek(ctx);
-            if (t.has_value && (t.value.type == TOKENTYPE_INT_LIT || t.value.type == TOKENTYPE_UINT_LIT)) {
-                consume(ctx);
-                length = strtoul(t.value.value.value.data, NULL, 10);
+
+            next = peek(ctx);
+            if (next.has_value &&
+                (next.value.type == TOKENTYPE_INT_LIT || next.value.type == TOKENTYPE_UINT_LIT)) {
+                Token n = consume(ctx);
+                length = strtoul(n.value.value.data, NULL, 10);
             }
-            t = peek(ctx);
-            if (t.has_value && t.value.type != TOKENTYPE_RBRACK) {
+
+            next = peek(ctx);
+            if (!next.has_value || next.value.type != TOKENTYPE_RBRACK) {
                 error(ctx, "Expected ']'");
             }
-            Token rb = consume(ctx);
+            consume(ctx);
 
             TypeRef *array = arena_calloc(ctx->arena, sizeof(TypeRef));
             array->type = TYPEREF_ARRAY;
             array->array.elem = base;
             array->array.length = length;
-            array->is_mutable = is_mut;
+            array->is_mutable = postfix_mut;
             array->token = lb;
 
-            t = peek(ctx);
-            if (t.has_value && t.value.type == TOKENTYPE_QUESTION) {
+            next = peek(ctx);
+            if (next.has_value && next.value.type == TOKENTYPE_QUESTION) {
                 consume(ctx);
                 array->is_optional = true;
             }
@@ -1334,117 +1509,6 @@ Stmt *parse_block_stmt(Parser *ctx) {
     return s;
 }
 
-EnumDecl *parse_enum_decl(Parser *ctx) {
-    EnumDecl *en = arena_calloc(ctx->arena, sizeof(EnumDecl));
-    en->variants = enumvar_array_init(ctx->arena);
-    en->token = consume(ctx);
-    en->name = expect(ctx, TOKENTYPE_IDENT, "Expected enum name").value.value;
-
-    if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_COLON) {
-        consume(ctx);
-        en->type = parse_type(ctx);
-    }
-
-    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
-
-    token_optional t = peek(ctx);
-    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
-        Token var_name = expect(ctx, TOKENTYPE_IDENT, "Expected variant name");
-
-        EnumVariant variant = {
-            .name = var_name.value.value,
-            .token = var_name,
-            .value = NULL
-        };
-
-        t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_EQ) {
-            consume(ctx);
-            variant.value = parse_expr(ctx, 0);
-        }
-
-        enumvar_array_push(&en->variants, variant);
-
-        t = peek(ctx);
-        if (t.has_value && t.value.type == TOKENTYPE_COMMA) {
-            consume(ctx);
-            t = peek(ctx);
-        } else if (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
-            error(ctx, "Expected ',' or '}' after enum variant");
-        }
-    }
-
-    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
-
-    return en;
-}
-
-StructDecl *parse_struct_decl(Parser *ctx) {
-    StructDecl *str = arena_calloc(ctx->arena, sizeof(StructDecl));
-    str->members = vardecls_array_init(ctx->arena);
-    str->field_offsets = size_array_init(ctx->arena);
-    str->token = consume(ctx);
-
-    Token name = expect(ctx, TOKENTYPE_IDENT, "Expected struct name");
-    str->name = name.value.value;
-
-    parse_optional_generic_params(ctx, &str->generic_params);
-
-    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
-
-    token_optional t = peek(ctx);
-    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
-        TypeRef *type = parse_type(ctx);
-        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected member name");
-        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
-
-        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
-        decl->token = name;
-        decl->type = type;
-        decl->name = name.value.value;
-        vardecls_array_push(&str->members, decl);
-
-        t = peek(ctx);
-    }
-
-    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
-
-    return str;
-}
-
-UnionDecl *parse_union_decl(Parser *ctx) {
-    Token start = consume(ctx);
-    UnionDecl *un = arena_calloc(ctx->arena, sizeof(UnionDecl));
-    un->token = start;
-    un->members = vardecls_array_init(ctx->arena);
-
-    Token name = expect(ctx, TOKENTYPE_IDENT, "Expected union name");
-    un->name = name.value.value;
-
-    parse_optional_generic_params(ctx, &un->generic_params);
-
-    expect(ctx, TOKENTYPE_LBRACE, "Expected '{'");
-
-    token_optional t = peek(ctx);
-    while (t.has_value && t.value.type != TOKENTYPE_RBRACE) {
-        TypeRef *type = parse_type(ctx);
-        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected member name");
-        expect(ctx, TOKENTYPE_SEMICOLON, "Expected ';'");
-
-        VarDecl *decl = arena_calloc(ctx->arena, sizeof(VarDecl));
-        decl->token = name;
-        decl->type = type;
-        decl->name = name.value.value;
-        vardecls_array_push(&un->members, decl);
-
-        t = peek(ctx);
-    }
-
-    expect(ctx, TOKENTYPE_RBRACE, "Expected '}'");
-
-    return un;
-}
-
 FnDecl *parse_fn_signature(Parser *ctx) {
     Token start = expect(ctx, TOKENTYPE_FN, "Expected 'fn'");
     FnDecl *fn = arena_calloc(ctx->arena, sizeof(FnDecl));
@@ -1543,61 +1607,32 @@ Decl *parse_decl(Parser *ctx) {
         error(ctx, "Unexpected end of file");
     }
 
-    switch (t.value.type) {
-        // case TOKENTYPE_FN: {
-        //     d->type = DECL_FN;
-        //     d->fn = parse_fn_decl(ctx);
-        //     d->token = d->fn->token;
-        //     break;
-        // }
-        case TOKENTYPE_STRUCT: {
-            d->type = DECL_STRUCT;
-            d->_struct = parse_struct_decl(ctx);
-            d->token = d->_struct->token;
-            break;
-        }
-        case TOKENTYPE_UNION: {
-            d->type = DECL_UNION;
-            d->_union = parse_union_decl(ctx);
-            d->token = d->_union->token;
-            break;
-        }
-        case TOKENTYPE_TYPE: {
-            d->type = DECL_TYPE;
-            d->_type = parse_type_decl(ctx);
-            d->token = d->_type->token;
-            break;
-        }
-        case TOKENTYPE_ENUM: {
-            d->type = DECL_ENUM;
-            d->_enum = parse_enum_decl(ctx);
-            d->token = d->_enum->token;
-            break;
-        }
-        default: {
-            if (peek(ctx).has_value && peek(ctx).value.type == TOKENTYPE_FN) {
-                ParserCheckpoint ch = get_checkpoint(ctx);
-                consume(ctx);
-                token_optional t;
-                if (looks_like_type(ctx, &t) && t.has_value && t.value.type == TOKENTYPE_IDENT) {
-                    restore_checkpoint(ctx, ch);
-                    d->type = DECL_FN;
-                    d->fn = parse_fn_decl(ctx);
-                    d->token = d->fn->token;
-                    break;
-                }
-                
-                restore_checkpoint(ctx, ch);
-            }
-
-            d->type = DECL_VAR;
-            d->var = parse_var_stmt(ctx)->var;
-            d->token = d->var->token;
-            break;
-            error(ctx, "Expected declaration");
-        }
+    if (t.value.type == TOKENTYPE_TYPE) {
+        d->type = DECL_TYPE;
+        d->_type = parse_type_decl(ctx);
+        d->token = d->_type->token;
+        return d;
     }
 
+    if (t.value.type == TOKENTYPE_FN) {
+        ParserCheckpoint ch = get_checkpoint(ctx);
+        consume(ctx);
+
+        token_optional after;
+        if (looks_like_type(ctx, &after) && after.has_value && after.value.type == TOKENTYPE_IDENT) {
+            restore_checkpoint(ctx, ch);
+            d->type = DECL_FN;
+            d->fn = parse_fn_decl(ctx);
+            d->token = d->fn->token;
+            return d;
+        }
+
+        restore_checkpoint(ctx, ch);
+    }
+
+    d->type = DECL_VAR;
+    d->var = parse_var_stmt(ctx)->var;
+    d->token = d->var->token;
     return d;
 }
 

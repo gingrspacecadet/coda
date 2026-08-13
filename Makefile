@@ -1,12 +1,12 @@
 CC = gcc
-CFLAGS = -g -Werror -Wno-unused -MMD -MD -std=gnu23 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -g -Werror -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
 
 SRCS = $(shell find src -type f -name "*.c" ! -path "src/backends/*" 2>/dev/null)
 OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
 
 TARGET = codac
 
-BACKEND_DIRS = $(shell find src/backends -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null)
+BACKEND_DIRS = $(shell find src/backends -mindepth 1 -maxdepth 1 -type d | sed 's|.*/||')
 BACKEND_SRCS = $(shell find src/backends -type f -name "*.c" 2>/dev/null)
 BACKEND_OBJS = $(patsubst src/%.c,build/%.o,$(BACKEND_SRCS))
 BACKENDS_SO  = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
@@ -16,6 +16,7 @@ ifeq ($(OS),Windows_NT)
     SHARED_FLAGS =
     DLL_LINK = -shared
     HOST_OS = windows
+
     ifeq ($(PROCESSOR_ARCHITECTURE),AMD64)
         HOST_ARCH = x86_64
     else ifeq ($(PROCESSOR_ARCHITECTURE),ARM64)
@@ -23,12 +24,32 @@ ifeq ($(OS),Windows_NT)
     else
         HOST_ARCH = unknown
     endif
+
 else
-    SOEXT = so
-    SHARED_FLAGS = -fPIC
-    DLL_LINK = -shared
-    HOST_OS = linux
-    HOST_ARCH = $(shell uname -m)
+    UNAME_S := $(shell uname -s)
+    UNAME_M := $(shell uname -m)
+
+    ifeq ($(UNAME_S),Darwin)
+        HOST_OS = macos
+        SOEXT = dylib
+        SHARED_FLAGS = -fPIC
+        DLL_LINK = -dynamiclib -undefined dynamic_lookup
+    else
+        HOST_OS = linux
+        SOEXT = so
+        SHARED_FLAGS = -fPIC
+        DLL_LINK = -shared
+    endif
+    
+    ifeq ($(UNAME_M),x86_64)
+        HOST_ARCH = x86_64
+    else ifeq ($(UNAME_M),arm64)
+        HOST_ARCH = aarch64
+    else ifeq ($(UNAME_M),aarch64)
+        HOST_ARCH = aarch64
+    else
+        HOST_ARCH = unknown
+    endif
 endif
 
 STDLIB_CODA_SRCS = $(shell find lib -type f -name "*.coda" 2>/dev/null)

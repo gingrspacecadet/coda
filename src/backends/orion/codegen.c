@@ -68,11 +68,11 @@ static void emit_operand(FILE *out, LirOperand op, PhysReg fallback_reg, string_
         case LIR_STACK: {
             int64_t base_offset = get_vreg_offset(op.mem.base_vreg);
             if (op.mem.offset == 0) {
-                fprintf(out, "[rfp - #%d]", base_offset);
+                fprintf(out, "[rfp - #%lld]", base_offset);
             } else if (op.mem.offset > 0) {
-                fprintf(out, "[rfp - #%d + #%d]", base_offset, op.mem.offset);
+                fprintf(out, "[rfp - #%lld + #%d]", base_offset, op.mem.offset);
             } else {
-                fprintf(out, "[rfp - #%d - #%d]", base_offset, -op.mem.offset);
+                fprintf(out, "[rfp - #%lld - #%d]", base_offset, -op.mem.offset);
             }
             break;
         }

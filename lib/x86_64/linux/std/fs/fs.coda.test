@@ -10,24 +10,16 @@ fn uint64 File.seek(mut File self, std::io::SeekOrigin origin, int64 offset);
 fn uint64 File.tell(File self);
 fn none File.close(mut File self);
 
-struct FileInfo;
+fn File | IOError open(string path);
 
-struct Directory;
-
-fn File open(string path);
-
-fn File create(string path);
+fn File | IOError create(string path);
 
 fn bool exists(string path);
 
-fn none remove(string path);
+fn none | IOError remove(string path);
 
-fn none rename(string from, string to);
+fn none | IOError rename(string from, string to);
 
-fn none mkdir(string path);
+fn none | IOError mkdir(string path);
 
-fn none mkdirs(string path);
-
-fn FileInfo stat(string path);
-
-fn Directory open_dir(string path);
+fn none | IOError mkdirs(string path);

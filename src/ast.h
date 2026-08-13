@@ -13,9 +13,9 @@ typedef struct Stmt Stmt;
 typedef struct Decl Decl;
 typedef struct VarDecl VarDecl;
 typedef struct FnDecl FnDecl;
-typedef struct EnumDecl EnumDecl;
-typedef struct StructDecl StructDecl;
-typedef struct UnionDecl UnionDecl;
+typedef struct StructType StructType;
+typedef struct UnionType UnionType;
+typedef struct EnumType EnumType;
 typedef struct TypeDecl TypeDecl;
 typedef struct TypeRef TypeRef;
 typedef struct Symbol Symbol;
@@ -280,46 +280,6 @@ typedef struct {
 
 INSTANTIATE(GenericParam, genparam, ARRAY_TEMPLATE)
 
-struct TypeRef {
-    enum {
-        TYPEREF_NAMED,
-        TYPEREF_PATH,
-        TYPEREF_POINTER,
-        TYPEREF_ARRAY,
-        TYPEREF_FN,
-        TYPEREF_SUM,
-    } type;
-    union {
-        struct {
-            String name;
-            typerefs_array generic_args;
-        } named;
-        struct {
-            string_array components;
-            typerefs_array generic_args;
-        } path;
-        struct {
-            TypeRef *pointee;
-        } pointer;
-        struct {
-            TypeRef *elem;
-            size_t length;
-        } array;
-        struct {
-            TypeRef *ret_type;
-            param_array params;
-        } fn;
-        struct {
-            typerefs_array cases;
-        } sum;
-    };
-
-    bool is_mutable;
-    bool is_optional;
-    Symbol *type_symbol;
-    Token token;
-};
-
 struct VarDecl {
     TypeRef *type;
     String name;
@@ -349,21 +309,17 @@ struct Decl {
     enum {
         DECL_FN,
         DECL_VAR,
-        DECL_STRUCT,
-        DECL_UNION,
         DECL_TYPE,
-        DECL_ENUM,
         DECL_NAMESPACE,
     } type;
+
     union {
         FnDecl *fn;
         VarDecl *var;
-        StructDecl *_struct;
-        UnionDecl *_union;
         TypeDecl *_type;
-        EnumDecl *_enum;
         Module *namespace;
     };
+
     attr_array attributes;
     Symbol *symbol;
     bool is_export;
@@ -381,32 +337,75 @@ typedef struct {
 
 INSTANTIATE(EnumVariant, enumvar, ARRAY_TEMPLATE)
 
-struct EnumDecl {
-    String name;
-    enumvar_array variants;
-    Symbol *symbol;
-    Token token;
-    TypeRef *type;
-};
-
-struct StructDecl {
-    String name;
-    genparam_array generic_params;
+struct StructType {
     vardecls_array members;
-    Symbol *symbol;
     size_t size;
     size_t align;
     size_array field_offsets;
-    Token token;
 };
 
-struct UnionDecl {
-    String name;
-    genparam_array generic_params;
+struct UnionType {
     vardecls_array members;
-    Symbol *symbol;
     size_t size;
     size_t align;
+};
+
+struct EnumType {
+    enumvar_array variants;
+    TypeRef *underlying;
+};
+
+struct TypeRef {
+    enum {
+        TYPEREF_NONE,
+        TYPEREF_NAMED,
+        TYPEREF_PATH,
+        TYPEREF_POINTER,
+        TYPEREF_ARRAY,
+        TYPEREF_FN,
+        TYPEREF_SUM,
+        TYPEREF_STRUCT,
+        TYPEREF_UNION,
+        TYPEREF_ENUM,
+    } type;
+
+    union {
+        struct {
+            String name;
+            typerefs_array generic_args;
+        } named;
+
+        struct {
+            string_array components;
+            typerefs_array generic_args;
+        } path;
+
+        struct {
+            TypeRef *pointee;
+        } pointer;
+
+        struct {
+            TypeRef *elem;
+            size_t length;
+        } array;
+
+        struct {
+            TypeRef *ret_type;
+            param_array params;
+        } fn;
+
+        struct {
+            typerefs_array cases;
+        } sum;
+
+        StructType _struct;
+        UnionType _union;
+        EnumType _enum;
+    };
+
+    bool is_mutable;
+    bool is_optional;
+    Symbol *type_symbol;
     Token token;
 };
 
@@ -418,7 +417,7 @@ struct TypeDecl {
     Token token;
 };
 
-INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
+// INSTANTIATE(String, string, OPTIONAL_TEMPLATE)
 
 struct Include {
     string_array path;
@@ -459,19 +458,59 @@ struct Module {
 
 INSTANTIATE(char, char, ARRAY_TEMPLATE)
 
+static String type_to_string(TypeRef *t);
+
 static void append_string_to_char_array(char_array *cs, String s) {
     for (size_t i = 0; i < s.length; ++i) {
         char_array_push(cs, s.data[i]);
     }
 }
 
+static void append_type_to_char_array(char_array *cs, TypeRef *t) {
+    append_string_to_char_array(cs, type_to_string(t));
+}
+
+static void append_type_list_to_char_array(char_array *cs, typerefs_array *types) {
+    for (size_t i = 0; i < types->len; ++i) {
+        append_type_to_char_array(cs, types->data[i]);
+        if (i + 1 < types->len) char_array_push(cs, ',');
+    }
+}
+
+static void append_vardecls_to_char_array(char_array *cs, vardecls_array *members) {
+    for (size_t i = 0; i < members->len; ++i) {
+        VarDecl *v = members->data[i];
+        if (v->name.data && v->name.length) {
+            append_string_to_char_array(cs, v->name);
+            char_array_push(cs, ':');
+            char_array_push(cs, ' ');
+        }
+        append_string_to_char_array(cs, type_to_string(v->type));
+        if (i + 1 < members->len) {
+            append_string_to_char_array(cs, string_make(", "));
+        }
+    }
+}
+
+static void append_enum_variants_to_char_array(char_array *cs, enumvar_array *variants) {
+    for (size_t i = 0; i < variants->len; ++i) {
+        EnumVariant *v = &variants->data[i];
+        append_string_to_char_array(cs, v->name);
+        if (v->value) {
+            append_string_to_char_array(cs, string_make(" = "));
+            append_string_to_char_array(cs, type_to_string(v->value->resolved_type));
+        }
+        if (i + 1 < variants->len) {
+            append_string_to_char_array(cs, string_make(", "));
+        }
+    }
+}
+
 static String type_to_string(TypeRef *t) {
-    if (!t) return string_make("(null)"); // keep existing behavior for null
+    if (!t) return string_make("(null)");
 
     if (t->type == TYPEREF_NAMED) {
-        if (t->type_symbol) {
-            return t->type_symbol->name;
-        }
+        if (t->type_symbol) return t->type_symbol->name;
         return t->named.name;
     }
 
@@ -484,50 +523,58 @@ static String type_to_string(TypeRef *t) {
         char_array_push(&cs, '*');
         if (t->is_optional) char_array_push(&cs, '?');
         return (String){ .data = cs.data, .length = cs.len };
-    }
-    else if (t->type == TYPEREF_ARRAY) {
+    } else if (t->type == TYPEREF_ARRAY) {
         String base = type_to_string(t->array.elem);
         append_string_to_char_array(&cs, base);
         char_array_push(&cs, '[');
-
         char buf[32];
         int n = snprintf(buf, sizeof buf, "%zu", t->array.length);
         if (n > 0) {
             for (int i = 0; i < n; ++i) char_array_push(&cs, buf[i]);
         }
-
         char_array_push(&cs, ']');
         return (String){ .data = cs.data, .length = cs.len };
-    }
-    else if (t->type == TYPEREF_FN) {
-        char_array_push(&cs, 'f');
-        char_array_push(&cs, 'n');
-        char_array_push(&cs, ' ');
-
-        String ret = type_to_string(t->fn.ret_type);
-        append_string_to_char_array(&cs, ret);
-
+    } else if (t->type == TYPEREF_FN) {
+        append_string_to_char_array(&cs, string_make("fn "));
+        append_string_to_char_array(&cs, type_to_string(t->fn.ret_type));
         char_array_push(&cs, '(');
-        // TODO: append parameters here, using the same pattern
+        for (size_t i = 0; i < t->fn.params.len; ++i) {
+            Param *p = &t->fn.params.data[i];
+            append_string_to_char_array(&cs, type_to_string(p->type));
+            if (i + 1 < t->fn.params.len) append_string_to_char_array(&cs, string_make(", "));
+        }
         char_array_push(&cs, ')');
-
         return (String){ .data = cs.data, .length = cs.len };
-    }
-    else if (t->type == TYPEREF_SUM) {
+    } else if (t->type == TYPEREF_SUM) {
         for (size_t i = 0; i < t->sum.cases.len; ++i) {
             TypeRef *case_t = t->sum.cases.data[i];
-            String cs_str = type_to_string(case_t);
-            append_string_to_char_array(&cs, cs_str);
+            append_string_to_char_array(&cs, type_to_string(case_t));
             if (i + 1 < t->sum.cases.len) char_array_push(&cs, '|');
         }
         return (String){ .data = cs.data, .length = cs.len };
-    }
-    else if (t->type == TYPEREF_PATH) {
+    } else if (t->type == TYPEREF_PATH) {
         for (size_t i = 0; i < t->path.components.len; ++i) {
-            String cs_str = t->path.components.data[i];
-            append_string_to_char_array(&cs, cs_str);
-            if (i + 1 < t->path.components.len) { char_array_push(&cs, ':'); char_array_push(&cs, ':'); }
+            append_string_to_char_array(&cs, t->path.components.data[i]);
+            if (i + 1 < t->path.components.len) {
+                char_array_push(&cs, ':');
+                char_array_push(&cs, ':');
+            }
         }
+        return (String){ .data = cs.data, .length = cs.len };
+    } else if (t->type == TYPEREF_STRUCT) {
+        append_string_to_char_array(&cs, string_make("struct { "));
+        append_vardecls_to_char_array(&cs, &t-> _struct.members);
+        append_string_to_char_array(&cs, string_make(" }"));
+        return (String){ .data = cs.data, .length = cs.len };
+    } else if (t->type == TYPEREF_UNION) {
+        append_string_to_char_array(&cs, string_make("union { "));
+        append_vardecls_to_char_array(&cs, &t-> _union.members);
+        append_string_to_char_array(&cs, string_make(" }"));
+        return (String){ .data = cs.data, .length = cs.len };
+    } else if (t->type == TYPEREF_ENUM) {
+        append_string_to_char_array(&cs, string_make("enum { "));
+        append_enum_variants_to_char_array(&cs, &t-> _enum.variants);
+        append_string_to_char_array(&cs, string_make(" }"));
         return (String){ .data = cs.data, .length = cs.len };
     }
 

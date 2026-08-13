@@ -1,7 +1,22 @@
 module std::mem;
 
+interface Allocator {
+    fn byte[] allocate(
+        mut self,
+        uint64 size,
+        uint64 alignment
+    );
+
+    fn none deallocate(
+        mut self,
+        byte[] memory
+    );
+}
+
+// source and destination must not overlap
 fn none copy(mut byte[] dst, byte[] src);
 
+// source and destination may overlap
 fn none move(mut byte[] dst, byte[] src);
 
 fn none fill(mut byte[] dst, byte value);

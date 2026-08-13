@@ -96,7 +96,7 @@ MirOperand mir_lower_lvalue(MirBuilder *ctx, HirExpr *hir) {
                 emit(ctx, MIR_OP_COPY, addr_tmp, base, null_op());
                 return addr_tmp;
             }
-            break;
+            return (MirOperand){0};
         }
         case HIR_EXPR_VAR:
             return make_symbol(hir->var.symbol);
@@ -292,36 +292,38 @@ MirOperand mir_lower_expr(MirBuilder *ctx, HirExpr *hir) {
 static TypeRef *get_init_field_type(TypeRef *target_type, size_t index, string_optional name) {
     if (!target_type) return NULL;
 
+    target_type = resolve_type_alias(target_type);
+    if (!target_type) return NULL;
+
     if (target_type->type == TYPEREF_ARRAY) {
         return target_type->array.elem;
     }
 
-    if (target_type->type == TYPEREF_NAMED && target_type->type_symbol && target_type->type_symbol->decl) {
-        if (target_type->type_symbol->decl->type == DECL_STRUCT) {
-            StructDecl *str = target_type->type_symbol->decl->_struct;
-            if (name.has_value) {
-                for (size_t i = 0; i < str->members.len; i++) {
-                    if (string_eq(str->members.data[i]->name, name.value)) {
-                        return str->members.data[i]->type;
-                    }
+    if (target_type->type == TYPEREF_STRUCT) {
+        if (name.has_value) {
+            for (size_t i = 0; i < target_type->_struct.members.len; i++) {
+                if (string_eq(target_type->_struct.members.data[i]->name, name.value)) {
+                    return target_type->_struct.members.data[i]->type;
                 }
-            }
-            if (index < str->members.len) {
-                return str->members.data[index]->type;
             }
         }
-        if (target_type->type_symbol->decl->type == DECL_UNION) {
-            UnionDecl *un = target_type->type_symbol->decl->_union;
-            if (name.has_value) {
-                for (size_t i = 0; i < un->members.len; i++) {
-                    if (string_eq(un->members.data[i]->name, name.value)) {
-                        return un->members.data[i]->type;
-                    }
+
+        if (index < target_type->_struct.members.len) {
+            return target_type->_struct.members.data[index]->type;
+        }
+    }
+
+    if (target_type->type == TYPEREF_UNION) {
+        if (name.has_value) {
+            for (size_t i = 0; i < target_type->_union.members.len; i++) {
+                if (string_eq(target_type->_union.members.data[i]->name, name.value)) {
+                    return target_type->_union.members.data[i]->type;
                 }
             }
-            if (index < un->members.len) {
-                return un->members.data[index]->type;
-            }
+        }
+
+        if (index < target_type->_union.members.len) {
+            return target_type->_union.members.data[index]->type;
         }
     }
 
@@ -331,39 +333,35 @@ static TypeRef *get_init_field_type(TypeRef *target_type, size_t index, string_o
 static size_t get_init_field_offset(TypeRef *target_type, size_t index, string_optional name) {
     if (!target_type) return 0;
 
+    target_type = resolve_type_alias(target_type);
+    if (!target_type) return 0;
+
     if (target_type->type == TYPEREF_ARRAY) {
         return get_type_size(target_type->array.elem) * index;
     }
 
-    if (target_type->type == TYPEREF_POINTER && target_type->pointer.pointee) {
-        target_type = target_type->pointer.pointee;
+    if (target_type->type == TYPEREF_STRUCT) {
+        if (name.has_value) {
+            for (size_t i = 0; i < target_type->_struct.members.len; i++) {
+                if (string_eq(target_type->_struct.members.data[i]->name, name.value)) {
+                    if (target_type->_struct.field_offsets.len > i) {
+                        return target_type->_struct.field_offsets.data[i];
+                    }
+                    return i * 8;
+                }
+            }
+        }
+
+        if (index < target_type->_struct.members.len) {
+            if (target_type->_struct.field_offsets.len > index) {
+                return target_type->_struct.field_offsets.data[index];
+            }
+            return index * 8;
+        }
     }
 
-    if (target_type->type == TYPEREF_NAMED && target_type->type_symbol && target_type->type_symbol->decl) {
-        if (target_type->type_symbol->decl->type == DECL_STRUCT) {
-            StructDecl *str = target_type->type_symbol->decl->_struct;
-            
-            if (name.has_value) {
-                for (size_t i = 0; i < str->members.len; i++) {
-                    if (string_eq(str->members.data[i]->name, name.value)) {
-                        if (str->field_offsets.len > i) {
-                            return str->field_offsets.data[i];
-                        }
-                        return i * 8;
-                    }
-                }
-            }
-            
-            if (index < str->members.len) {
-                if (str->field_offsets.len > index) {
-                    return str->field_offsets.data[index];
-                }
-                return index * 8;
-            }
-        }
-        if (target_type->type_symbol->decl->type == DECL_UNION) {
-            return 0;
-        }
+    if (target_type->type == TYPEREF_UNION) {
+        return 0;
     }
 
     return 0;
@@ -656,7 +654,7 @@ static void print_operand(MirOperand op) {
     switch (op.type) {
         case MIR_VAL_LIT:
             if (op.lit.type == LITERAL_INT) {
-                printf("%ld", op.lit._int);
+                printf("%lld", op.lit._int);
             } else if (op.lit.type == LITERAL_STRING) {
                 printf("\"%.*s (id:%zu)\"", string_fmt(op.lit.string), op.lit.str_id);
             } else if (op.lit.type == LITERAL_NULL) {
@@ -677,9 +675,9 @@ static void print_operand(MirOperand op) {
             break;
         case MIR_VAL_MEM:
             if (op.base_symbol) {
-                printf("mem(sym=%.*s, off=%ld)", string_fmt(op.base_symbol->name), op.offset);
+                printf("mem(sym=%.*s, off=%lld)", string_fmt(op.base_symbol->name), op.offset);
             } else {
-                printf("mem(tmp=t%d, off=%ld)", op.base_temp, op.offset);
+                printf("mem(tmp=t%d, off=%lld)", op.base_temp, op.offset);
             }
             break;
         case MIR_VAL_LABEL:

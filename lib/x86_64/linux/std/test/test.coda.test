@@ -1,0 +1,7 @@
+module std::test;
+
+fn none assert(bool condition);
+
+fn none fail(string message);
+
+fn none run();

@@ -1,0 +1,26 @@
+module core::build;
+
+include std::process;
+
+type Command = std::process::Command;
+
+fn Command command(string executable);
+
+fn none Command.arg(
+    mut Command self,
+    string arg
+);
+
+fn none Command.args(
+    mut Command self,
+    string[] args
+);
+
+fn bool Command.run(
+    Command self
+);
+
+fn bool needs_rebuild(
+    string output,
+    string[] inputs
+);

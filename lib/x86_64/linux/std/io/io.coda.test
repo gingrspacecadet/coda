@@ -1,11 +1,13 @@
 module std::io;
 
+enum IOError;
+
 interface Reader {
-    fn uint64 read(mut self, mut byte[] dst);
+    fn uint64 | IOError read(mut self, mut byte[] dst);
 }
 
 interface Writer {
-    fn uint64 write(mut self, byte[] src);
+    fn uint64 | IOError write(mut self, byte[] src);
 }
 
 interface Seeker {
@@ -23,11 +25,11 @@ enum SeekOrigin {
     End
 }
 
-fn uint64 copy(mut Reader src, mut Writer dst);
+fn uint64 | IOError copy(mut Reader src, mut Writer dst);
 
-fn uint64 copy_n(mut Reader src, mut Writer dst, uint64 count);
+fn uint64 | IOError copy_n(mut Reader src, mut Writer dst, uint64 count);
 
-fn none write_all(mut Writer dst, byte[] bytes);
+fn none | IOError write_all(mut Writer dst, byte[] bytes);
 
 fn none read_exact(mut Reader src, mut byte[] bytes);
 

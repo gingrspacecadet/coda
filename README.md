@@ -1,6 +1,6 @@
 # Coda
 
-Coda is a systems programming language designed from first principles.
+Coda is a systems programming language exploring a simpler approach to low-level programming: explicit resources, predictable behaviour, and a small language core.
 
 It aims to provide:
 
@@ -15,11 +15,11 @@ It aims to provide:
 ```coda
 module main;
 
-include std::debug;
+include std::debug = dbg;
 
 @export
 fn int main() {
-    std::debug::println("Hello, world!");
+    dbg::println("Hello, world!");
     return 0;
 }
 ```
