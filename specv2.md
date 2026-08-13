@@ -1215,15 +1215,677 @@ Explicit casts may request conversions not permitted implicitly.
 
 ## 7. Expressions
 
-Expressions compute values and may have compile-time or runtime evaluation.
+An expression produces a value.
 
-Every expression has a type.
+Every expression has a type. An expression may also be designated for compile-time evaluation by the `$` prefix.
 
-The syntax and semantics of operators, calls, conversions, indexing, member access, initialization, and compile-time expressions are defined in this section.
+Expressions are evaluated according to the rules in this section and the applicable type and execution rules.
 
-## 8. Statements
+### 7.1 Literals
 
+Literal expressions produce the value represented by the corresponding literal.
 
+Integer and floating-point literals are initially untyped. Their type is determined by the surrounding context when required.
+
+A literal whose value cannot be represented by the required type is invalid.
+
+### 7.2 Identifiers
+
+An identifier expression refers to a declaration visible from the current scope.
+
+```coda
+int x = 42;
+
+fn none foo() {
+    x;
+}
+```
+
+The meaning of an identifier is determined by name resolution.
+
+If no declaration is visible with the given name, compilation fails.
+
+### 7.3 Paths
+
+A path expression refers to a declaration through one or more namespace components.
+
+```coda
+math::sin(x);
+```
+
+Paths are resolved according to module and declaration visibility.
+
+### 7.4 Function Calls
+
+A function call consists of a callable expression followed by zero or more arguments.
+
+```coda
+foo(a, b);
+```
+
+Arguments are evaluated according to the evaluation-order rules of this specification.
+
+The number and types of arguments must be compatible with the function's parameters.
+
+A function requiring a mutable argument must receive an expression that is permitted to be modified according to the mutability rules.
+
+### 7.5 Generic Function Calls
+
+Generic arguments may be supplied explicitly:
+
+```coda
+foo<int32>(x);
+```
+
+Generic arguments precede the ordinary argument list.
+
+A generic function may also permit the compiler to infer generic arguments from the call.
+
+The rules governing inference and constraints are specified in the Generics section.
+
+### 7.6 Member Access
+
+A member expression accesses a field or method associated with an expression's type.
+
+```coda
+point.x;
+point.length();
+```
+
+Field lookup and method lookup are distinct semantic operations.
+
+A member name is resolved according to the nominal type of the receiver and the applicable visibility rules.
+
+### 7.7 Indexing
+
+An indexing expression accesses an element of an array or slice.
+
+```coda
+array[index]
+```
+
+For a slice, the index must be within the slice's bounds.
+
+The compiler must reject an access whose invalidity can be established at compile time.
+
+Runtime bounds checks are not implicitly inserted.
+
+If the compiler cannot prove that a runtime index is valid, the program may require `unsafe` according to the memory-safety rules.
+
+### 7.8 Address-of
+
+The address-of operator produces a pointer to an addressable object.
+
+```coda
+int x;
+int* p = &x;
+```
+
+The resulting pointer has the appropriate type and validity properties of the referenced object.
+
+Taking the address of a temporary or otherwise non-addressable object is invalid in safe Coda.
+
+Such an operation may be permitted in `unsafe` code where explicitly specified.
+
+### 7.9 Dereference
+
+The dereference operator accesses the object referred to by a pointer.
+
+```coda
+int* p = ...;
+int x = *p;
+```
+
+Dereferencing a nullable pointer requires first establishing that the pointer is not `none`.
+
+Dereferencing an invalid pointer is invalid.
+
+### 7.10 Unary Operators
+
+Coda provides unary operators including:
+
+```text
+-
++
+!
+~
+*
+&
+```
+
+The operand type must support the selected operation.
+
+The unary `*` operator dereferences a pointer.
+
+The unary `&` operator produces a pointer to an addressable object.
+
+The semantics of the remaining unary operators are defined by the operand's type.
+
+### 7.11 Binary Operators
+
+Binary expressions have a left operand, an operator, and a right operand.
+
+Coda provides arithmetic, comparison, logical, bitwise, and shift operators.
+
+The language does not provide user-defined operator overloading.
+
+Operators operate according to the types of their operands.
+
+### 7.12 Logical Operators
+
+`&&` and `||` are short-circuiting logical operators.
+
+For:
+
+```coda
+a && b
+```
+
+`b` is evaluated only if `a` evaluates to a value that requires evaluating the right operand.
+
+For:
+
+```coda
+a || b
+```
+
+`b` is evaluated only if `a` evaluates to a value that requires evaluating the right operand.
+
+Conditions need not have type `bool`. The truth value of an expression is determined according to the language's condition rules.
+
+### 7.13 Assignment
+
+Assignment is an expression and produces the assigned value.
+
+```coda
+x = 42;
+```
+
+is therefore both a statement and an expression.
+
+The left operand must designate a mutable object.
+
+The right operand must be assignable to the left operand's type.
+
+Assignment is evaluated from right to left where nested assignment expressions require an order.
+
+### 7.14 Compound Assignment
+
+Coda provides compound assignment operators.
+
+A compound assignment is equivalent to applying the corresponding operation to the current value and assigning the result back to the left operand.
+
+For example:
+
+```coda
+x += y;
+```
+
+is equivalent in effect to:
+
+```coda
+x = x + y;
+```
+
+The left operand is evaluated only once.
+
+The complete set of compound operators is specified by the operator table.
+
+Compound operators which combine existing operations are defined in terms of those operations rather than through operator overloading.
+
+### 7.15 Increment and Decrement
+
+If supported, increment and decrement operations are defined in terms of mutation of an integer or pointer value.
+
+Their exact syntax and value semantics are specified by the operator table.
+
+### 7.16 Cast Expressions
+
+An explicit cast converts an expression to a specified type.
+
+```coda
+int32 x = (int32)value;
+```
+
+A cast does not imply that the conversion is safe.
+
+Conversions which are not permitted implicitly may be requested explicitly where permitted by the language.
+
+Conversions involving pointers, integers, signedness changes, and representation changes are subject to the memory and type-conversion rules.
+
+### 7.17 Initializer Expressions
+
+An initializer expression constructs a value from a sequence of field or element initializers.
+
+```coda
+Vec2 v = {
+    .x = 10,
+    .y = 20,
+};
+```
+
+The fields or elements supplied by an initializer must correspond to the constructed type.
+
+The compiler rejects duplicate, nonexistent, or otherwise invalid initializers.
+
+### 7.18 Conditional Expressions
+
+A conditional expression evaluates one of multiple expressions based on a condition where such a form is provided by the grammar.
+
+The condition is evaluated first.
+
+Only the selected branch is evaluated.
+
+### 7.19 Error Propagation
+
+The `?` operator propagates an error value out of the current function.
+
+When applied to a sum-type expression representing success or failure:
+
+* a success value is unwrapped and produced as the result of the expression;
+* a failure value causes the current function to return that failure immediately.
+
+The expression must have a type for which propagation is defined.
+
+For example:
+
+```coda
+fn (int | FileError) read_file() {
+    File file = open()?;
+    return file.read()?;
+}
+```
+
+The `?` operator does not represent nullable-pointer propagation. Nullable pointers use `T*?`, while optional values are represented using sum types.
+
+### 7.20 Compile-Time Expressions
+
+An expression preceded by `$` is evaluated during compilation.
+
+```coda
+int x = $square(10);
+```
+
+The expression must be valid for compile-time evaluation.
+
+A compile-time expression may produce an ordinary Coda value which is embedded into the resulting program.
+
+A compile-time expression may also produce a compiler-defined value such as a code object.
+
+### 7.21 Compiler Intrinsic Expressions
+
+Expressions beginning with `#` invoke compiler-defined operations or refer to compiler-defined compile-time values.
+
+For example:
+
+```coda
+#sizeof(int)
+```
+
+and:
+
+```coda
+#fields(T)
+```
+
+are compiler intrinsic expressions.
+
+The set and semantics of compiler intrinsics are defined by this specification and its compiler-facing extensions where applicable.
+
+### 7.22 Code Splices
+
+Inside a code quotation, `#(expression)` denotes a splice.
+
+The expression is evaluated during compile-time expansion.
+
+The resulting value must be a code value compatible with the syntactic position containing the splice.
+
+For example:
+
+```coda
+$fn #code::ident uppercase(#code::ident id) {
+    id.name = $string::upper(id.name);
+    return id;
+}
+```
+
+may be used to transform an identifier before the generated code is inserted.
+
+Splicing does not perform textual substitution.
+
+### 7.23 Lambda Expressions
+
+A lambda expression creates an anonymous function.
+
+```coda
+fn int(int x) {
+    return x + 1;
+}
+```
+
+A lambda has:
+
+* zero or more parameters;
+* a return type;
+* a body.
+
+A lambda may capture values according to the capture and lifetime rules specified by the language.
+
+### 7.24 Evaluation Order
+
+Coda specifies evaluation order where observable effects could otherwise differ between implementations.
+
+Operands of operators and arguments of function calls must be evaluated in the order specified by the relevant expression rule.
+
+The implementation must not reorder evaluations in a manner observable through defined Coda behaviour.
+
+The exact ordering rules are specified by the operator and call semantics.
+
+---
+
+# 8. Statements
+
+A statement performs an action or controls execution.
+
+A statement may be preceded by `$`, in which case it is executed during compile time rather than runtime.
+
+## 8.1 Expression Statements
+
+An expression followed by `;` forms an expression statement.
+
+```coda
+foo();
+x = 42;
+```
+
+The resulting value is discarded unless the expression itself has relevant side effects.
+
+## 8.2 Blocks
+
+A block contains zero or more statements:
+
+```coda
+{
+    int x = 1;
+    foo(x);
+}
+```
+
+A block introduces a lexical scope.
+
+Names declared within a block are not visible outside it.
+
+## 8.3 Return Statements
+
+A return statement terminates execution of the current function.
+
+```coda
+return;
+```
+
+or:
+
+```coda
+return value;
+```
+
+A returned value must be compatible with the function's return type.
+
+A function returning `none` may return without a value.
+
+A `return` statement in a compile-time function terminates that compile-time invocation.
+
+## 8.4 If Statements
+
+An if statement conditionally executes one of two branches.
+
+```coda
+if (condition) {
+    foo();
+} else {
+    bar();
+}
+```
+
+The condition is evaluated before either branch.
+
+Only the selected branch is executed.
+
+Conditions need not have type `bool`.
+
+## 8.5 While Statements
+
+A while statement repeatedly executes its body while its condition is true.
+
+```coda
+while (condition) {
+    step();
+}
+```
+
+The condition is evaluated before each iteration.
+
+## 8.6 For Statements
+
+A for statement iterates according to the form defined by the Coda grammar.
+
+The loop variable, iteration expression, and body each have their own applicable lexical scope.
+
+The exact forms of `for` iteration are specified in the grammar and iteration semantics.
+
+## 8.7 Match Statements
+
+A match statement selects a branch based on the value of an expression.
+
+```coda
+match (value) {
+    ...
+}
+```
+
+Each match arm contains a pattern and an associated body.
+
+The compiler verifies that a match is exhaustive where exhaustiveness can be determined from the matched type.
+
+An incomplete match is rejected unless an explicit catch-all pattern is present.
+
+## 8.8 Break Statements
+
+`break` terminates the nearest enclosing loop.
+
+```coda
+break;
+```
+
+A `break` may not appear outside a loop.
+
+## 8.9 Continue Statements
+
+`continue` skips the remainder of the current iteration of the nearest enclosing loop.
+
+```coda
+continue;
+```
+
+A `continue` may not appear outside a loop.
+
+## 8.10 Defer Statements
+
+A defer statement schedules a statement for execution when the current scope is exited.
+
+```coda
+defer close(file);
+```
+
+The deferred statement executes when control leaves the scope containing the `defer`, regardless of whether the scope is exited normally or by `return`, `break`, `continue`, or another control-flow operation covered by the defer semantics.
+
+A deferred statement executes according to the lexical order of registered defers.
+
+Multiple deferred statements execute in reverse registration order.
+
+`defer` is a source-level lifetime/control-flow construct. It does not survive as a distinct construct into later compiler representations.
+
+## 8.11 Variable Declaration Statements
+
+A variable declaration may appear as a statement within a block.
+
+```coda
+{
+    int x = 42;
+    foo(x);
+}
+```
+
+The declaration introduces a name into the current lexical scope.
+
+## 8.12 Compile-Time Statements
+
+A statement preceded by `$` executes during compilation.
+
+```coda
+$foo();
+
+$if (condition) {
+    ...
+}
+```
+
+The syntax and semantic validity of the underlying statement are the same as for its runtime form unless otherwise specified.
+
+The resulting effects occur during compilation rather than runtime.
+
+## 8.13 Compile-Time Blocks
+
+A compile-time block executes a sequence of statements during compilation:
+
+```coda
+${
+    int x = compute();
+    println(x);
+}
+```
+
+A compile-time block introduces a compile-time execution context.
+
+Values created solely within a compile-time block cease to exist when the compile-time execution completes unless their results are explicitly materialized into the program.
+
+---
+
+# 9. Functions
+
+## 9.1 Function Parameters
+
+A function parameter has a type and a name.
+
+```coda
+fn none foo(int x, string y) {
+    ...
+}
+```
+
+Parameters are immutable unless their declared type permits mutation.
+
+A parameter is initialized when control enters the function.
+
+## 9.2 Function Return Types
+
+Every function has an explicit return type.
+
+```coda
+fn int add(int a, int b) {
+    return a + b;
+}
+```
+
+A function returning `none` does not produce a value:
+
+```coda
+fn none log(string message) {
+    ...
+}
+```
+
+## 9.3 Function Bodies
+
+A function with a body executes its statements when called.
+
+```coda
+fn int square(int x) {
+    return x * x;
+}
+```
+
+A function without a body must satisfy the requirements of the applicable external declaration mechanism.
+
+## 9.4 Methods
+
+Methods are associated with nominal types.
+
+```coda
+fn int Vec2.length(Vec2 self) {
+    ...
+}
+```
+
+A method may be called using member syntax:
+
+```coda
+v.length();
+```
+
+or using the corresponding callable representation where permitted.
+
+Method lookup is based on the receiver's nominal type.
+
+## 9.5 Compile-Time Functions
+
+A compile-time function is declared with `$fn`.
+
+```coda
+$fn int square(int x) {
+    return x * x;
+}
+```
+
+It may be invoked from compile-time contexts.
+
+A compile-time function may return an ordinary value:
+
+```coda
+int x = $square(4);
+```
+
+or a compiler-defined compile-time object such as a code object:
+
+```coda
+#{generate_function();}
+```
+
+A returned code object is not automatically inserted merely because its type is a code type. Code insertion occurs when the expression is used in a code-expansion context such as `#{...}`.
+
+## 9.6 Function Calls and Side Effects
+
+Calling a runtime function executes its body at runtime.
+
+Calling a compile-time function from a compile-time context executes its body during compilation.
+
+The same function definition is not simultaneously a runtime function and compile-time function unless explicitly declared as such by the language.
+
+## 9.7 Function Pointers
+
+A function may be converted to a function pointer where the target representation and calling convention permit it.
+
+Function pointers may be stored, passed to functions, and called according to the function type.
+
+The ABI section defines representation and calling convention requirements.
+
+## 9.8 No Operator Overloading
+
+Operators cannot be overloaded by user-defined functions.
+
+The meaning of each operator is determined by the operand types and the built-in operator rules.
+
+Compiler intrinsics may expose additional low-level operations without constituting operator overloading.
 
 ## 9. Functions
 
