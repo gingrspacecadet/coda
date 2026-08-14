@@ -1,0 +1,270 @@
+module std::collections;
+
+include std::constraints : _;
+
+// idea:
+// two types, SmallString and BigString
+// they are sized as to occupy the same amount of memory
+// a SmallString stores it in the bytes that the BigString would use for the len, capacity, and pointer
+// a BigString stores it as a length, capacity, and pointer
+// the capacity is always a power of two, this means allocation calls are always powers of two
+
+type SmallString<T: AnyUint> = struct {
+    mut uint8 len;
+    mut T data;
+};
+
+@inline
+fn T SmallString<T>._get(mut SmallString* this, uint8 index) {
+    unsafe {
+        // this is gonna segfault one day isn't it
+        return *(T*)((uint8*)this + #offsetof(SmallString, data) + #sizeof(T) * index);
+    }
+}
+
+@inline
+fn none SmallString<T>._set(mut SmallString* this, uint8 index, T value) {
+    unsafe {
+        *((uint8*)this + #offsetof(SmallString, data) + #sizeof(T) * index) = value;
+    }
+}
+
+$fn #code::expr get_max_small_string_size(#code::type T) {
+    return #{#sizeof(BigString) / #sizeof(#(T))};
+}
+
+type BigString<T: AnyUint> = struct {
+    mut usize len;
+    mut usize capacity;
+    mut T mut* data;
+}
+
+@export
+type String<T: AnyIntOrUint = char> = (SmallString | BigString);
+
+@export
+fn String<T> create_string_from_len<T: AnyIntOrUint>(usize len) {
+    String<T> mut* out = malloc(#sizeof(String));
+    if (str.len * #sizeof(T) < get_max_small_string_size(T)) {
+        *out = (SmallString){};
+        out->len = str.len;
+    } else {
+        *out = (BigString){};
+        out->len = str.len;
+        out->capacity = #inline(round_up_to_nearest_power_of_two(str.len));
+        out->data = malloc(out->capacity * #sizeof(T));
+    }
+    return out;
+}
+
+@export
+fn String<T> create_string_from_str<T: AnyIntOrUint>(T[] str) {
+    String<T> mut* out = malloc(#sizeof(String));
+    if (str.len * #sizeof(T) < get_max_small_string_size(T)) {
+        *out = (SmallString){};
+        out->len = str.len;
+        for (mut uint8 i = 0; i < str.len; i++) {
+            out->_set(i, str[i]);
+        }
+    } else {
+        *out = (BigString){};
+        out->len = str.len;
+        out->capacity = #inline(round_up_to_nearest_power_of_two(str.len));
+        out->data = malloc(out->capacity * #sizeof(T));
+        for (mut usize i = 0; i < out->len; i++) {
+            out->data[i] = str[i];
+        }
+    }
+    return out;
+}
+
+@export
+fn none String<T>.destroy<T>(mut String<T>* this) {
+    match (this) {
+        BigString {
+            free(this->data);
+        }
+    }
+    free(this);
+}
+
+@export
+fn usize String<T>.len<T>(String<T>* this) {
+    match (this) {
+        SmallString {
+            return this->len;
+        }
+        BigString {
+            return this->len;
+        }
+    }
+}
+
+@export
+fn T String<T>._unsafe_get<T>(String<T>* this, usize index) {
+    match (this) {
+        SmallString {
+            return this->_get(index);
+        }
+        BigString {
+            return this->data[index];
+        }
+    }
+}
+
+@export
+fn none String<T>._unsafe_set(String* this, usize index, T value) {
+    match (this) {
+        SmallString {
+            this->_set(index, value);
+        }
+        BigString {
+            this->data[index] = value;
+        }
+    }
+}
+
+@export
+fn none String<T>.set_len(String<T>* this, usize new_len) {
+    if (new_len * sizeof(#T) < get_max_small_string_size(T)) {
+        match (this) {
+            SmallString {
+                // we can't just change the len
+                // if the len is increasing we should zero out the bytes
+                // for predictable behavior
+                if (new_len > this->len) {
+                    for (mut usize i = this->len; i < new_len; i++) {
+                        this->_set(i, 0);
+                    }
+                }
+                this->len = new_len;
+            }
+            BigString {
+                // if we need to convert a BigString to a SmallString
+                // the len will always be decreasing
+                mut T[] temp_str = malloc(new_len * #sizeof(T));
+                for (mut usize i = 0; i < new_len; i++) {
+                    temp_str[i] = this->data[i];
+                }
+                *this = (SmallString){};
+                this->len = new_len;
+                for (mut usize i = 0; i < new_len; i++) {
+                    this->_set(i, temp_str[i]);
+                }
+                free(temp_str);
+            }
+        }
+    } else {
+        match (this) {
+            SmallString {
+                // if we need to convert a SmallString to a BigString
+                // the len will always be increasing
+                mut T[] temp_str = malloc(this->len * #sizeof(T));
+                for (mut usize i = 0; i < this->len; i++) {
+                    temp_str[i] = this->_get(i);
+                }
+                *this = (BigString){};
+                this->len = new_len;
+                this->capacity = #inline(round_up_to_nearest_power_of_two(this->len));
+                this->data = malloc(this->capacity * #sizeof(T));
+                for (mut usize i = 0; i < new_len; i++) {
+                    this->_set(i, temp_str[i]);
+                }
+                free(temp_str);
+            }
+            BigString {
+                if (new_len < this->len) {
+                    // no need to do anything if the new_len is smaller
+                } else if (new_len < this->capacity) {
+                    // all we need to do here is zero out the bytes
+                    // for predictable behavior
+                    for (mut usize i = this->len; i < new_len; i++) {
+                        this->_set(i, 0);
+                    }
+                } else {
+                    // we need to increase the memory
+                    this->capacity = #inline(round_up_to_nearest_power_of_two(new_len));
+                    this->data = realloc(this->data, new_capacity);
+                }
+                this->len = new_len;
+            }
+        }
+    }
+}
+
+@export
+fn T String<T>.get<T>(String<T>* this, usize index) {
+    match (this) {
+        SmallString {
+            if (index > this->len) {
+                fatal_error("String index out of range");
+            } else {
+                return this->_get(index);
+            }
+        }
+        BigString {
+            if (index > this->len) {
+                fatal_error("String index out of range");
+            } else {
+                return this->data[index];
+            }
+        }
+    }
+}
+
+@export
+fn none String<T>.set<T>(String<T>* this, usize index, T value) {
+    match (this) {
+        SmallString {
+            if (index > this->len) {
+                fatal_error("String index out of range");
+            } else {
+                this->_set(index, value);
+            }
+        }
+        BigString {
+            if (index > this->len) {
+                fatal_error("String index out of range");
+            } else {
+                this->data[index] = value;
+            }
+        }
+    }
+}
+
+@export
+fn none String<T>.set_expand(String<T>* this, usize index, T value) {
+    if (index > #inline(this->len())) {
+        this->set_len(index + 1);
+    }
+    this->_unsafe_set(index, value);
+}
+
+@export
+fn bool String<T>.get_array<T>(String<T>* this, T[] out) {
+    usize len = #inline(this->len());
+    if (len > out.len) {
+        return false;
+    }
+    for (mut usize i = 0; i < len; i++) {
+        out[i] = #inline(this->_unsafe_get(i));
+    }
+    return true;
+}
+
+@export
+fn none String<T>.set_array<T>(String<T>* this, T[] str) {
+    #inline(this->set_len(str.len));
+    for (mut usize i = 0; i < str.len; i++) {
+        #inline(this->_unsafe_set(i, str[i]));
+    }
+}
+
+@export
+fn none String<T>.set_from<T, U>(String<T>* this, String<U>* other) {
+    usize other_len = #inline(other->len());
+    #inline(this->set_len(other_len));
+    for (mut usize i = 0; i < other_len; i++) {
+        #inline(this->_unsafe_set(i, (T)#inline(other->get(i))));
+    }
+}
