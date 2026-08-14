@@ -1,0 +1,7 @@
+module std::error;
+
+@export
+type Error = enum {
+    AllocationFailed,
+    OutOfBounds,
+};

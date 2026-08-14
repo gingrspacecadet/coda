@@ -1,0 +1,443 @@
+module std::collections;
+
+include std::constraints : _;
+include std::error::Error : Error;
+
+// to replace with actual allocator once those exist
+Allocator allocator;
+
+// put this somewhere else eventually
+@inline
+fn usize round_up_to_nearest_power_of_two<T: AnyIntOrUint>(T value) {
+    T out = 0;
+    while (out < len) {
+        out *= 2;
+    }
+    return out;
+}
+
+@export
+type List<T> = struct {
+    usize len;
+    usize capacity;
+    T* data;
+}
+
+@export
+type String = List<char>;
+
+@export
+fn (none | Error::AllocationFailed) init<T>(mut List<T>* this, usize len) {
+    this->len = len;
+    this->capacity = round_up_to_nearest_power_of_two(len);
+    this->data = allocator.alloc<T>(len);
+}
+
+@export
+fn none List<T>.destroy<T>(mut List<T>* this) {
+    allocator.free(this->data);
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new_len) {
+    this->len = new_len;
+    usize new_capacity = round_up_to_nearest_power_of_two(new_len);
+    if (this->capacity = new_capacity) {
+        return;
+    }
+    this->capacity = new_capacity;
+    this->data = allocator.realloc(this->data, new_capacity)?;
+}
+
+@inline
+@export
+fn (usize | Error::OutOfBounds) List<T>.resolve_index<T>(usize index) {
+    if (index < 0) {
+        index += this->len;
+        if (index < 0) {
+            return Error::OutOfBounds;
+        }
+    } else if (index >= this->len) {
+        return Error::OutOfBounds;
+    }
+    return index;
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.get<T>(List<T>* this, usize index) {
+    return this->data[this->resolve_index(index)?];
+}
+
+@export
+fn (none | Error::OutOfBounds) List<T>.set<T>(mut List<T>* this, usize index, T value) {
+    this->data[this->resolve_index(index)?] = value;
+}
+
+@export
+fn (none | Error::OutOfBounds) List<T>.to_array<T>(List<T>* this, mut T[] out) {
+    if (this->len > out.len) {
+        return Error::OutOfBounds;
+    }
+    for (mut usize i = 0; i < len; i++) {
+        out[i] = this->data[i];
+    }
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.from_array<T>(mut List<T>* this, T[] value) {
+    this->set_len(value.len)?;
+    for (mut usize i = 0; i < str.len; i++) {
+        this->data[i] = value[i];
+    }
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.copy_from<T>(mut List<T>* this, List<T>* value) {
+    this->set_len(value->len)?;
+    for (mut usize i = 0; i < value->len; i++) {
+        this->data[i] = value->data[i];
+    }
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.copy_to<T>(List<T>* this, mut List<T>* value) {
+    value->set_len(this->len)?;
+    for (mut usize i = 0; i < this->len; i++) {
+        value->data[i] = this->data[i];
+    }
+}
+
+@export
+fn (usize | none) List<T>.index_of(List<T>* this, T value) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (this->data[i] == value) {
+            return i;
+        }
+    }
+}
+
+@export
+fn (usize | none) List<T>.last_index_of(List<T>* this, T value) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        if (this->data[i] == value) {
+            return i;
+        }
+    }
+}
+
+@export
+fn bool List<T>.contains(List<T>* this, T value) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (this->data[i] == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.push<T>(mut List<T>* this, T value) {
+    this->set_len(this->len + 1)?;
+    this->data[this->len - 1] = value;
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.pop<T>(mut List<T>* this) {
+    if (this->len == 0) {
+        return Error.OutOfBounds;
+    }
+    this->len--;
+    return this->data[this->len];
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.shift<T>(mut List<T>* this) {
+    if (this->len == 0) {
+        return Error.OutOfBounds;
+    }
+    T out = this->data[0];
+    this->len--;
+    for (mut usize i = 0; i < this->len; i++) {
+        this->data[i] = this->data[i + 1];
+    }
+    return out;
+}
+
+@export
+fn (T | Error::AllocationFailed) List<T>.unshift<T>(mut List<T>* this, T value) {
+    this->set_len(this->len + 1)?;
+    this->data[i] = this->data[i + 1];
+    for (mut usize i = 0; i < this->len; i++) {
+        this->data[i + 1] = this->data[i];
+    }
+    return out;
+}
+
+@export
+fn (none | Error::AllocationFailed | Error::OutOfBounds) List<T>.insert<T>(mut List<T>* this, usize index, T value) {
+    index = this->resolve_index(index)?;
+    this->set_len(this->len + 1);
+    for (mut usize i = index; i < this->len - 1; i++) {
+        this->data[i + 1] = this->data[i];
+    }
+    this->data[index] = value;
+}
+
+@export
+fn (none | Error::AllocationFailed | Error::OutOfBounds) List<T>.insert_list<T>(mut List<T>* this, usize index, List<T>* values) {
+    index = this->resolve_index(index)?;
+    usize old_len = this->len;
+    this->set_len(this->len + values->len);
+    for (mut usize i = old_len; i >= index; i--) {
+        this->data[i + values->len] = this->data[i];
+    }
+    mut usize loc = index;
+    for (mut usize i = 0; i < values->len; i++) {
+        this->data[loc] = values->data[i];
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::AllocationFailed | Error::OutOfBounds) List<T>.insert_array<T>(mut List<T>* this, usize index, T[] data) {
+    index = this->resolve_index(index)?;
+    usize old_len = this->len;
+    this->set_len(this->len + values.len);
+    for (mut usize i = old_len; i >= index; i--) {
+        this->data[i + values.len] = this->data[i];
+    }
+    mut usize loc = index;
+    for (mut usize i = 0; i < values.len; i++) {
+        this->data[loc] = values->data[i];
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) List<T>.remove<T>(mut List<T>* this, usize index) {
+    index = this->resolve_index(index)?;
+    this->len--;
+    for (mut usize i = index; i < this->len; i++) {
+        this->data[i] = this->data[i + 1];
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) List<T>.remove_slice<T>(mut List<T>* this, usize start, usize end) {
+    start = this->resolve_index(start)?;
+    end = this->resolve_index(end)?;
+    usize deleted = end - start;
+    this->len -= deleted;
+    for (mut usize i = start; i < this->len; i++) {
+        this->data[i] = this->data[i + deleted];
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds | Error::AllocationFailed) List<T>.slice<T>(List<T>* this, mut List<T>* out, usize start, usize end) {
+    start = this->resolve_index(start)?;
+    end = this->resolve_index(end)?;
+    out->set_len(end - start)?;
+    mut usize loc = 0;
+    for (mut usize i = start; i < end; i++) {
+        out->data[loc] = this->data[i];
+        loc++;
+    }
+    return out;
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.concat<T>(mut List<T>* this, List<T>* values) {
+    mut usize loc = this->len;
+    this->set_len(this->len + values->len)?;
+    for (mut usize i = 0; i < values->len; i++) {
+        this->data[loc] = values->data[i];
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::AllocationFailed) List<T>.concat_array<T>(mut List<T>* this, T[] values) {
+    mut usize loc = this->len;
+    this->set_len(this->len + values.len)?;
+    for (mut usize i = 0; i < values.len; i++) {
+        this->data[loc] = values[i];
+        loc++;
+    }
+}
+
+@export
+fn none List<T>.fill<T>(mut List<T>* this, T value) {
+    for (mut usize i = 0; i < this->len; i++) {
+        this->data[i] = value;
+    }
+}
+
+@export
+fn none List<T>.reverse<T>(mut List<T>* this) {
+    for (mut usize i = 0; i <= this->len / 2; i++) {
+        T temp = this->data[i];
+        this->data[i] = this->data[this->len - 1 - i];
+        this->data[this->len - 1 - i] = temp;
+    }
+}
+
+@export
+fn none List<T>.map<T>(mut List<T>* this, (fn T(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        this->data[i] = func(this->data[i]);
+    }
+}
+
+@export
+fn none List<T>.filter<T>(mut List<T>* this, (fn bool(T value))* func) {
+    usize loc = 0;    
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i])) {
+            this->data[loc] = this->data[i];
+            loc++;
+        }
+    }
+    this->len = loc;
+}
+
+@export
+fn none List<T>.filter_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    usize loc = 0;
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i], i)) {
+            this->data[loc] = this->data[i];
+            loc++;
+        }
+    }
+    this->len = loc;
+}
+
+@export
+fn bool List<T>.every<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (!func(this->data[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+@export
+fn bool List<T>.every_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (!func(this->data[i], i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+@export
+fn bool List<T>.some<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn bool List<T>.some_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i], i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn bool List<T>.reduce<T, U>(List<T>* this, U start, (fn bool(U a, T b))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        start = func(start, this->data[i]);
+    }
+    return start;
+}
+
+@export
+fn bool List<T>.reduce_right<T, U>(List<T>* this, U start, (fn bool(U a, T b))* func) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        start = func(start, this->data[i]);
+    }
+    return start;
+}
+
+@export
+fn (none | T) List<T>.find_value<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i])) {
+            return this->data[i];
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_value_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i], i)) {
+            return this->data[i];
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_index<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i])) {
+            return i;
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_index_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->data[i], i)) {
+            return i;
+        }
+    }
+}
+
+
+@export
+fn (none | T) List<T>.find_last_value<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        if (func(this->data[i])) {
+            return this->data[i];
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_last_value_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        if (func(this->data[i], i)) {
+            return this->data[i];
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_last_index<T>(List<T>* this, (fn bool(T value))* func) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        if (func(this->data[i])) {
+            return i;
+        }
+    }
+}
+
+@export
+fn (none | T) List<T>.find_last_index_with_index<T>(List<T>* this, (fn bool(T value, usize index))* func) {
+    for (mut usize i = this->len - 1; i >= 0; i--) {
+        if (func(this->data[i], i)) {
+            return i;
+        }
+    }
+}
