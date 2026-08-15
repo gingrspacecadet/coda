@@ -142,11 +142,54 @@ fn (none | Error::AllocationFailed) List<T>.push<T>(mut List<T>* this, T value) 
 }
 
 @export
+fn (none | Error::AllocationFailed) List<T>.push_to<T>(List<T>* this, mut List<T>* out, T value) {
+    out->set_len(this->len + 1)?;
+    for (mut usize i = 0; i < this->len; i++) {
+        out->data[i] = this->data[i];
+    }
+    out->data[this->len] = value;
+}
+
+@export
+fn (none | Error::OutOfBounds) List<T>.push_to_array<T>(List<T>* this, mut List<T>* out, T value) {
+    if (out.len < this.len + 1) {
+        return Error.OutOfBounds;
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out[i] = this->data[i];
+    }
+    out[this->len] = value;
+}
+
+@export
 fn (T | Error::OutOfBounds) List<T>.pop<T>(mut List<T>* this) {
     if (this->len == 0) {
         return Error.OutOfBounds;
     }
     this->len--;
+    return this->data[this->len];
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.pop_to<T>(List<T>* this, mut List<T>* out) {
+    if (this->len == 0) {
+        return Error.OutOfBounds;
+    }
+    value->set_len(this->len - 1)?;
+    for (mut usize i = 0; i < value->len; i++) {
+        value->data[i] = this->data[i];
+    }
+    return this->data[this->len];
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.pop_to_array<T>(List<T>* this, mut T[] out) {
+    if (this->len == 0 || out.len < this.len - 1) {
+        return Error.OutOfBounds;
+    }
+    for (mut usize i = 0; i < this->len - 1; i++) {
+        value[i] = this->data[i];
+    }
     return this->data[this->len];
 }
 
@@ -164,6 +207,29 @@ fn (T | Error::OutOfBounds) List<T>.shift<T>(mut List<T>* this) {
 }
 
 @export
+fn (T | Error::OutOfBounds) List<T>.shift_to<T>(mut List<T>* this, mut List<T>* out) {
+    if (this->len == 0) {
+        return Error.OutOfBounds;
+    }
+    value->set_len(this->len - 1)?;
+    for (mut usize i = 1; i < value->len; i++) {
+        value->data[i - 1] = this->data[i];
+    }
+    return this->data[0];
+}
+
+@export
+fn (T | Error::OutOfBounds) List<T>.shift_to_array<T>(mut List<T>* this, mut T[] out) {
+    if (this->len == 0 || out.len < this.len - 1) {
+        return Error.OutOfBounds;
+    }
+    for (mut usize i = 1; i < this->len; i++) {
+        value[i] = this->data[i];
+    }
+    return this->data[0];
+}
+
+@export
 fn (T | Error::AllocationFailed) List<T>.unshift<T>(mut List<T>* this, T value) {
     this->set_len(this->len + 1)?;
     this->data[i] = this->data[i + 1];
@@ -172,6 +238,8 @@ fn (T | Error::AllocationFailed) List<T>.unshift<T>(mut List<T>* this, T value) 
     }
     return out;
 }
+
+// TODO: unshift_to, unshift_to_array
 
 @export
 fn (none | Error::AllocationFailed | Error::OutOfBounds) List<T>.insert<T>(mut List<T>* this, usize index, T value) {
@@ -234,7 +302,7 @@ fn (none | Error::OutOfBounds) List<T>.remove_slice<T>(mut List<T>* this, usize 
 }
 
 @export
-fn (none | Error::OutOfBounds | Error::AllocationFailed) List<T>.slice<T>(List<T>* this, mut List<T>* out, usize start, usize end) {
+fn (none | Error::AllocationFailed | Error::OutOfBounds) List<T>.slice<T>(List<T>* this, mut List<T>* out, usize start, usize end) {
     start = this->resolve_index(start)?;
     end = this->resolve_index(end)?;
     out->set_len(end - start)?;
