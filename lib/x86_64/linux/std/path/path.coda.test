@@ -15,5 +15,6 @@ fn bool is_absolute(string);
 fn bool is_relative(string);
 
 fn string normalise(string);
+fn string normalize(string);
 
 fn string absolute(string);

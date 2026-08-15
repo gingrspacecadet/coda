@@ -1,0 +1,5 @@
+module std::path::posix;
+module std::path;
+
+@export
+string sep = "/";

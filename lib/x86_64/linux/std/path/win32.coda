@@ -1,0 +1,4 @@
+module std::path::win32;
+
+@export
+string sep = "\\";
