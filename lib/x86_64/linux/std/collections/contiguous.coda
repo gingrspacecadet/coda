@@ -1221,6 +1221,16 @@ fn (none | usize) Contiguous<T>.find_last_index_in_slice<T>(Contiguous<T>* this,
 }
 
 @export
+fn bool Contiguous<T>.contains_fn(Contiguous<T>* this, (fn T(T value))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->ptr[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
 fn none Contiguous<T>.map_with_index<T>(mut Contiguous<T>* this, (fn T(T value, usize index))* func) {
     for (mut usize i = 0; i < this->len; i++) {
         this->ptr[i] = func(this->ptr[i], i);
@@ -1561,4 +1571,14 @@ fn (none | usize) Contiguous<T>.find_with_index_last_index_in_slice<T>(Contiguou
             return i;
         }
     }
+}
+
+@export
+fn bool Contiguous<T>.contains_fn_with_index(Contiguous<T>* this, (fn T(T value, usize index))* func) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->ptr[i], i)) {
+            return true;
+        }
+    }
+    return false;
 }
