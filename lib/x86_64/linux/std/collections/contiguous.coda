@@ -9,7 +9,7 @@ constraint Contiguous<T> = struct {
 };
 
 @export
-constraint VarLenContiguous<T> = struct {
+constraint VarLenContiguous<T> = struct: Contiguous<T> {
     usize len;
     T* ptr;
     fn (none | Error::AllocationFailed) set_len(usize new_len);

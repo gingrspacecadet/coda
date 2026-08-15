@@ -1,14 +1,16 @@
 module std::collections;
 
 include std::error::Error : Error;
+include std::mem : _;
+include std::collections::VarLenContiguous : VarLenContiguous;
 
 // to replace with actual allocator once those exist
 Allocator allocator;
 
 // put this somewhere else eventually
 @inline
-fn usize round_up_to_nearest_power_of_two<T: AnyIntOrUint>(T value) {
-    T out = 0;
+fn usize normalize_capacity(usize len) {
+    mut usize out = 4;
     while (out < len) {
         out *= 2;
     }
@@ -16,16 +18,16 @@ fn usize round_up_to_nearest_power_of_two<T: AnyIntOrUint>(T value) {
 }
 
 @export
-type List<T> = struct {
+type List<T> = struct: VarLenContiguous<T> {
     usize len;
     usize capacity;
     T* data;
 }
 
 @export
-fn (none | Error::AllocationFailed) init<T>(mut List<T>* this, usize len) {
+fn (none | Error::AllocationFailed) List<T>.init<T>(mut List<T>* this, usize len) {
     this->len = len;
-    this->capacity = round_up_to_nearest_power_of_two(len);
+    this->capacity = normalize_capacity(len);
     this->data = allocator.alloc<T>(len);
 }
 
@@ -40,7 +42,7 @@ fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new
         return;
     }
     this->len = new_len;
-    usize new_capacity = round_up_to_nearest_power_of_two(new_len);
+    usize new_capacity = normalize_capacity(new_len);
     if (this->capacity = new_capacity) {
         return;
     }
@@ -50,10 +52,54 @@ fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new
 
 @export
 fn (none | Error::AllocationFailed) List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
-    usize new_capacity = round_up_to_nearest_power_of_two(this->len);
+    usize new_capacity = normalize_capacity(this->len);
     if (this->capacity = new_capacity) {
         return;
     }
     this->capacity = new_capacity;
     this->data = allocator.realloc(this->data, new_capacity)?;
+}
+
+@export
+type AllocatorList<T> = struct: VarLenContiguous<T> {
+    Allocator* allocator;
+    usize len;
+    usize capacity;
+    T* data;
+}
+
+@export
+fn (none | Error::AllocationFailed) AllocatorList<T>.init<T>(mut List<T>* this, usize len) {
+    this->len = len;
+    this->capacity = normalize_capacity(len);
+    this->data = this->allocator->alloc<T>(len);
+}
+
+@export
+fn none AllocatorList<T>..destroy<T>(mut List<T>* this) {
+    this->allocator->free(this->data);
+}
+
+@export
+fn (none | Error::AllocationFailed) AllocatorList<T>.set_len(mut List<T>* this, usize new_len) {
+    if (new_len < this->len) {
+        return;
+    }
+    this->len = new_len;
+    usize new_capacity = normalize_capacity(new_len);
+    if (this->capacity = new_capacity) {
+        return;
+    }
+    this->capacity = new_capacity;
+    this->data = this->allocator->realloc(this->data, new_capacity)?;
+}
+
+@export
+fn (none | Error::AllocationFailed) AllocatorList<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
+    usize new_capacity = normalize_capacity(this->len);
+    if (this->capacity = new_capacity) {
+        return;
+    }
+    this->capacity = new_capacity;
+    this->data = this->allocator->realloc(this->data, new_capacity)?;
 }
