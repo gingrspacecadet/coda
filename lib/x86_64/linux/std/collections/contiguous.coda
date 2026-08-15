@@ -1,6 +1,6 @@
 module std::collections;
 
-include std::error::Error : Error;
+include std::error : _;
 
 @export
 constraint Contiguous<T> = struct {

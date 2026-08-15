@@ -2,7 +2,6 @@ module std::collections;
 
 include std::error::Error : Error;
 include std::mem : _;
-include std::collections::VarLenContiguous : VarLenContiguous;
 
 // put this somewhere else eventually
 @inline
