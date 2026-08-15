@@ -1231,6 +1231,16 @@ fn bool Contiguous<T>.contains_fn(Contiguous<T>* this, (fn T(T value))* func) {
 }
 
 @export
+fn bool Contiguous<T>.contains_fn_arg<T, U>(Contiguous<T>* this, (fn T(T value, U arg))* func, U arg) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->ptr[i], arg)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
 fn none Contiguous<T>.map_with_index<T>(mut Contiguous<T>* this, (fn T(T value, usize index))* func) {
     for (mut usize i = 0; i < this->len; i++) {
         this->ptr[i] = func(this->ptr[i], i);
@@ -1574,9 +1584,19 @@ fn (none | usize) Contiguous<T>.find_with_index_last_index_in_slice<T>(Contiguou
 }
 
 @export
-fn bool Contiguous<T>.contains_fn_with_index(Contiguous<T>* this, (fn T(T value, usize index))* func) {
+fn bool Contiguous<T>.contains_fn_with_index<T>(Contiguous<T>* this, (fn T(T value, usize index))* func) {
     for (mut usize i = 0; i < this->len; i++) {
         if (func(this->ptr[i], i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn bool Contiguous<T>.contains_fn_arg_with_index<T, U>(Contiguous<T>* this, (fn T(T value, usize index, U arg))* func, U arg) {
+    for (mut usize i = 0; i < this->len; i++) {
+        if (func(this->ptr[i], i, arg)) {
             return true;
         }
     }
