@@ -4,9 +4,6 @@ include std::error::Error : Error;
 include std::mem : _;
 include std::collections::VarLenContiguous : VarLenContiguous;
 
-// to replace with actual allocator once those exist
-Allocator allocator;
-
 // put this somewhere else eventually
 @inline
 fn usize normalize_capacity(usize len) {
@@ -19,6 +16,7 @@ fn usize normalize_capacity(usize len) {
 
 @export
 type List<T> = struct: VarLenContiguous<T> {
+    Allocator* allocator;
     usize len;
     usize capacity;
     T* data;
@@ -28,12 +26,12 @@ type List<T> = struct: VarLenContiguous<T> {
 fn (none | Error::AllocationFailed) List<T>.init<T>(mut List<T>* this, usize len) {
     this->len = len;
     this->capacity = normalize_capacity(len);
-    this->data = allocator.alloc<T>(len);
+    this->data = this->allocator->alloc<T>(len);
 }
 
 @export
-fn none List<T>.destroy<T>(mut List<T>* this) {
-    allocator.free(this->data);
+fn none List<T>..destroy<T>(mut List<T>* this) {
+    this->allocator->free(this->data);
 }
 
 @export
@@ -47,7 +45,7 @@ fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new
         return;
     }
     this->capacity = new_capacity;
-    this->data = allocator.realloc(this->data, new_capacity)?;
+    this->data = this->allocator->realloc(this->data, new_capacity)?;
 }
 
 @export
@@ -57,49 +55,8 @@ fn (none | Error::AllocationFailed) List<T>.shrink_to_fit(mut List<T>* this, usi
         return;
     }
     this->capacity = new_capacity;
-    this->data = allocator.realloc(this->data, new_capacity)?;
-}
-
-@export
-type AllocatorList<T> = struct: VarLenContiguous<T> {
-    Allocator* allocator;
-    usize len;
-    usize capacity;
-    T* data;
-}
-
-@export
-fn (none | Error::AllocationFailed) AllocatorList<T>.init<T>(mut List<T>* this, usize len) {
-    this->len = len;
-    this->capacity = normalize_capacity(len);
-    this->data = this->allocator->alloc<T>(len);
-}
-
-@export
-fn none AllocatorList<T>..destroy<T>(mut List<T>* this) {
-    this->allocator->free(this->data);
-}
-
-@export
-fn (none | Error::AllocationFailed) AllocatorList<T>.set_len(mut List<T>* this, usize new_len) {
-    if (new_len < this->len) {
-        return;
-    }
-    this->len = new_len;
-    usize new_capacity = normalize_capacity(new_len);
-    if (this->capacity = new_capacity) {
-        return;
-    }
-    this->capacity = new_capacity;
     this->data = this->allocator->realloc(this->data, new_capacity)?;
 }
 
 @export
-fn (none | Error::AllocationFailed) AllocatorList<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
-    usize new_capacity = normalize_capacity(this->len);
-    if (this->capacity = new_capacity) {
-        return;
-    }
-    this->capacity = new_capacity;
-    this->data = this->allocator->realloc(this->data, new_capacity)?;
-}
+type String = List<char>;
