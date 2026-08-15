@@ -1,5 +1,31 @@
 module std::path::posix;
-module std::path;
+
+include std::
+include std::collections : _;
 
 @export
 string sep = "/";
+@export
+string delimiter = ":";
+
+String normalise<T: Contiguous<uint8>>(Allocator allocator, T* path) {
+    String<String> data;
+    path.split(data, sep);
+    String<String> out;
+    out.init(allocator, 0);
+    for (mut usize i = 0; i < data.len; i++) {
+        String part = data.get(i);
+        if (part.eq("") && i > 0) {
+            continue;
+        } else if (part.eq(".") && i > 0) {
+            continue;
+        } else if (part.eq("..") && i > 0) {
+            out.pop();
+        } else {
+            out.push(part);
+        }
+    }
+    String real_out;
+    out.join(real_out, sep);
+    return real_out;
+}

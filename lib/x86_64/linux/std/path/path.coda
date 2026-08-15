@@ -1,0 +1,4 @@
+module std::path;
+
+@export
+include std::path::posix : _;

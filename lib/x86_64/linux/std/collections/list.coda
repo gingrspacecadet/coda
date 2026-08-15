@@ -22,7 +22,7 @@ type List<T> = struct: VarLenContiguous<T> {
 }
 
 @export
-fn (none | Error::AllocationFailed) List<T>.init<T>(mut List<T>* this, usize len) {
+fn none List<T>.init<T>(mut List<T>* this, usize len) {
     this->len = len;
     this->capacity = normalize_capacity(len);
     this->data = this->allocator->alloc<T>(len);
@@ -34,7 +34,7 @@ fn none List<T>..destroy<T>(mut List<T>* this) {
 }
 
 @export
-fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new_len) {
+fn none List<T>.set_len(mut List<T>* this, usize new_len) {
     if (new_len < this->len) {
         return;
     }
@@ -48,7 +48,7 @@ fn (none | Error::AllocationFailed) List<T>.set_len(mut List<T>* this, usize new
 }
 
 @export
-fn (none | Error::AllocationFailed) List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
+fn none List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
     usize new_capacity = normalize_capacity(this->len);
     if (this->capacity = new_capacity) {
         return;
