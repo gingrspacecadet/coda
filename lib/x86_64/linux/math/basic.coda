@@ -4,10 +4,16 @@ fn T abs<T: Signed>(T value) {
     return value < 0 ? -value : value;
 }
 
-fn T gcd<T: Unsigned>(mut T a, mut T b) {
-    while (a != b) {
-        if (a > b) {
-            
-        }
+fn T gcd<T: Unsigned>(mut T x, mut T y) {
+    while (y != 0) {
+        T temp = y;
+        y = x % y;
+        x = temp;
     }
+    return y;
+}
+
+fn T lcm<T: Unsigned>(mut T x, mut T y) {
+    // the order is to ensure no overflow
+    return (x / gcd(x, y)) * y;
 }
