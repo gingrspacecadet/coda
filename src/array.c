@@ -1,14 +1,12 @@
 #include "array.h"
 
-Array array_init(Arena *arena, size_t T) {
-    Array v = {};
-    v.data = arena_calloc(arena, T);
-    v.T = T;
-    v.len = 0;
-    v.cap = 1;
-    v.alive = true;
-    v.arena = arena;
-    return v;
+void array_init(Array *array, Arena *arena, size_t T) {
+    array->data = arena_calloc(arena, T);
+    array->T = T;
+    array->len = 0;
+    array->cap = 1;
+    array->alive = true;
+    array->arena = arena;
 }
 
 void array_push(Array *v, void *item) {

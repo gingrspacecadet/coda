@@ -1,6 +1,7 @@
 #ifndef DIAG_H
 #define DIAG_H
 
+#include <stdint.h>
 #include "source.h"
 #include "array.h"
 
