@@ -226,7 +226,7 @@ fn T inv_sqrt<T: Float>(T value) {
     } else if (T == float64) {
         out = #bit_cast<float64>(0x5fe6eb50c7b537aa - (#bit_cast<uint64>(value) >> 1));
     }
-    float32 prev = out;
+    T prev = out;
     while (out != prev) {
         prev = out;
         out = out * (1.5 - (value * 0.5 * out * out));
