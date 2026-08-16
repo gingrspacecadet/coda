@@ -19,6 +19,9 @@ constraint AllocatorContiguous<T> = struct: Contiguous<T> {
     fn none shrink_to_fit(mut AllocatorContiguous* this);
 };
 
+@export
+constraint NonAllocatorContiguous<T> = Contiguous<T> && !AllocatorContiguous<T>;
+
 @inline
 @export
 fn (usize | Error::OutOfBounds) Contiguous<T>.resolve_index(Contiguous<T>* this, ssize index) {
@@ -40,8 +43,8 @@ fn (T | Error::OutOfBounds) Contiguous<T>.get<T>(Contiguous<T>* this, ssize inde
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.get_slice<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > out->len) {
         return Error::OutOfBounds;
     }
@@ -54,8 +57,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.get_slice<T>(Contiguous<T>* this, m
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.get_slice_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -104,8 +107,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.set_to_alloc<T>(Contiguous<T>* this
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.set_slice<T>(mut Contiguous<T>* this, usize start_index, usize end_index, Contiguous<T>* values) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > values->len) {
         return Error::OutOfBounds;
     }
@@ -117,8 +120,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.set_slice<T>(mut Contiguous<T>* thi
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.set_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, Contiguous<T>* values) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > values->len) {
         return Error::OutOfBounds;
     }
@@ -135,9 +138,9 @@ fn (none | Error::OutOfBounds) Contiguous<T>.set_slice_to<T>(Contiguous<T>* this
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.set_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, Contiguous<T>* values) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+fn (none | Error::OutOfBounds) Contiguous<T>.set_slice_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, usize start_index, usize end_index, Contiguous<T>* values) {
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > values->len) {
         return Error::OutOfBounds;
     }
@@ -152,39 +155,13 @@ fn (none | Error::OutOfBounds) Contiguous<T>.set_slice_to<T>(Contiguous<T>* this
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.copy_to<T, U: Contiguous<T>>(Contiguous<T>* this, mut U* out) {
-    if (this->len > out->len) {
+fn (T[] | Error::OutOfBounds) Contiguous<T>.view(Contiguous<T>* this, ssize start_index, ssize end_index) {
+    usize start = this->resolve_index(start_index);
+    usize end = this->resolve_index(end_index);
+    if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = 0; i < this->len; i++) {
-        out->ptr[i] = this->ptr[i];
-    }
-}
-
-@export
-fn none Contiguous<T>.copy_to_alloc<T, U: Contiguous<T>>(Contiguous<T>* this, mut U* out) {
-    out->set_len(this->len + 1)?;
-    for (mut usize i = 0; i < this->len; i++) {
-        out->ptr[i] = this->ptr[i];
-    }
-}
-
-@export
-fn (none | Error::OutOfBounds) Contiguous<T>.set_from<T>(mut Contiguous<T>* this, Contiguous<T>* values) {
-    if (this->len < values->len) {
-        return Error::OutOfBounds;
-    }
-    for (mut usize i = 0; i < values->len; i++) {
-        this->ptr[i] = values->ptr[i];
-    }
-}
-
-@export
-fn none AllocatorContiguous<T>.var_set_from<T>(mut AllocatorContiguous<T>* this, Contiguous<T>* values) {
-    this->set_len(values->len)?;
-    for (mut usize i = 0; i < values->len; i++) {
-        this->ptr[i] = values->ptr[i];
-    }
+    return (T[]){.len = end - start, .ptr = this->ptr + start};
 }
 
 @export
@@ -329,6 +306,42 @@ fn (usize | none) Contiguous<T>.last_index_of_slice(Contiguous<T>* this, Contigu
         if (found) {
             return i;
         }
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.copy_to<T, U: Contiguous<T>>(Contiguous<T>* this, mut U* out) {
+    if (this->len > out->len) {
+        return Error::OutOfBounds;
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = this->ptr[i];
+    }
+}
+
+@export
+fn none Contiguous<T>.copy_to_alloc<T, U: Contiguous<T>>(Contiguous<T>* this, mut U* out) {
+    out->set_len(this->len + 1)?;
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = this->ptr[i];
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.set_from<T>(mut Contiguous<T>* this, Contiguous<T>* values) {
+    if (this->len < values->len) {
+        return Error::OutOfBounds;
+    }
+    for (mut usize i = 0; i < values->len; i++) {
+        this->ptr[i] = values->ptr[i];
+    }
+}
+
+@export
+fn none AllocatorContiguous<T>.alloc_set_from<T>(mut AllocatorContiguous<T>* this, Contiguous<T>* values) {
+    this->set_len(values->len)?;
+    for (mut usize i = 0; i < values->len; i++) {
+        this->ptr[i] = values->ptr[i];
     }
 }
 
@@ -492,8 +505,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.delete_to_alloc<T>(Contiguous<T>* t
 
 @export
 fn (none | Error::OutOfBounds) AllocatorContiguous<T>.delete_slice<T>(mut AllocatorContiguous<T>* this, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -506,8 +519,8 @@ fn (none | Error::OutOfBounds) AllocatorContiguous<T>.delete_slice<T>(mut Alloca
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.delete_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -525,8 +538,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.delete_slice_to<T>(Contiguous<T>* t
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.delete_slice_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -602,8 +615,8 @@ fn (none | Error::OutOfBounds) AllocatorContiguous<T>.remove_slice<T>(mut Alloca
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, mut Contiguous<T>* out_slice, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -626,8 +639,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_to<T>(Contiguous<T>* t
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_to_alloc<T>(Contiguous<T>* this, mut Contiguous<T>* out, mut Contiguous<T>* out_slice, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -651,8 +664,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_to_alloc<T>(Contiguous
 
 @export
 fn (none | Error::OutOfBounds) AllocatorContiguous<T>.remove_slice_alloc<T>(mut AllocatorContiguous<T>* this, mut AllocatorContiguous<T>* out_slice, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -671,8 +684,8 @@ fn (none | Error::OutOfBounds) AllocatorContiguous<T>.remove_slice_alloc<T>(mut 
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_alloc_to<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out_slice, mut Contiguous<T>* out, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -696,8 +709,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_alloc_to<T>(Contiguous
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.remove_slice_alloc_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, mut Contiguous<T>* out_slice, usize start_index, usize end_index) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -890,8 +903,8 @@ fn none Contiguous<T>.fill(mut Contiguous<T>* this, T value) {
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.fill_slice(mut Contiguous<T>* this, usize start_index, usize end_index, T value) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -914,8 +927,8 @@ fn none Contiguous<T>.fill_from_slice(mut Contiguous<T>* this, Contiguous<T>* va
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.fill_slice_from_slice(mut Contiguous<T>* this, usize start_index, usize end_index, T value) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -974,8 +987,8 @@ fn none Contiguous<T>.map_to_alloc<T>(mut Contiguous<T>* this, mut AllocatorCont
 
 @export
 fn none Contiguous<T>.map_slice<T>(mut Contiguous<T>* this, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -986,8 +999,8 @@ fn none Contiguous<T>.map_slice<T>(mut Contiguous<T>* this, usize start_index, u
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > out->len) {
         return Error::OutOfBounds;
     }
@@ -1000,8 +1013,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to<T>(mut Contiguous<T>* 
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to_alloc<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1050,8 +1063,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.filter_to_alloc<T>(Contiguous<T>* t
 
 @export
 fn none Contiguous<T>.filter_slice<T>(mut Contiguous<T>* this, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1075,8 +1088,8 @@ fn none Contiguous<T>.filter_slice<T>(mut Contiguous<T>* this, usize start_index
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.filter_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1094,8 +1107,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.filter_slice_to<T>(Contiguous<T>* t
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.filter_slice_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1124,8 +1137,8 @@ fn bool Contiguous<T>.reduce_right<T, U>(Contiguous<T>* this, mut U start_value,
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_slice<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1137,8 +1150,8 @@ fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_slice<T, U>(Contiguous<T>* t
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_slice_right<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1160,8 +1173,8 @@ fn bool Contiguous<T>.every<T>(Contiguous<T>* this, (fn bool(T value))* func) {
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.every_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1185,8 +1198,8 @@ fn bool Contiguous<T>.some<T>(Contiguous<T>* this, (fn bool(T value))* func) {
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.some_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1236,8 +1249,8 @@ fn (none | usize) Contiguous<T>.find_last_index<T>(Contiguous<T>* this, (fn bool
 
 @export
 fn (none | T) Contiguous<T>.find_value_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1250,8 +1263,8 @@ fn (none | T) Contiguous<T>.find_value_in_slice<T>(Contiguous<T>* this, usize st
 
 @export
 fn (none | T) Contiguous<T>.find_last_value_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1264,8 +1277,8 @@ fn (none | T) Contiguous<T>.find_last_value_in_slice<T>(Contiguous<T>* this, usi
 
 @export
 fn (none | usize) Contiguous<T>.find_index_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1278,8 +1291,8 @@ fn (none | usize) Contiguous<T>.find_index_in_slice<T>(Contiguous<T>* this, usiz
 
 @export
 fn (none | usize) Contiguous<T>.find_last_index_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1337,8 +1350,8 @@ fn none Contiguous<T>.map_with_index_to_alloc<T>(mut Contiguous<T>* this, mut Al
 
 @export
 fn none Contiguous<T>.map_with_index_slice<T>(mut Contiguous<T>* this, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1349,8 +1362,8 @@ fn none Contiguous<T>.map_with_index_slice<T>(mut Contiguous<T>* this, usize sta
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > out->len) {
         return Error::OutOfBounds;
     }
@@ -1363,8 +1376,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to<T>(mut Cont
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to_alloc<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1413,8 +1426,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.filter_with_index_to_alloc<T>(Conti
 
 @export
 fn none Contiguous<T>.filter_with_index_slice<T>(mut Contiguous<T>* this, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1438,8 +1451,8 @@ fn none Contiguous<T>.filter_with_index_slice<T>(mut Contiguous<T>* this, usize 
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.filter_with_index_slice_to<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1457,8 +1470,8 @@ fn (none | Error::OutOfBounds) Contiguous<T>.filter_with_index_slice_to<T>(Conti
 
 @export
 fn (none | Error::OutOfBounds) Contiguous<T>.filter_with_index_slice_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1487,8 +1500,8 @@ fn bool Contiguous<T>.reduce_with_index_right<T, U>(Contiguous<T>* this, mut U s
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_with_index_slice<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1500,8 +1513,8 @@ fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_with_index_slice<T, U>(Conti
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_with_index_slice_right<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1523,8 +1536,8 @@ fn bool Contiguous<T>.every_with_index<T>(Contiguous<T>* this, (fn bool(T value,
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.every_with_index_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1548,8 +1561,8 @@ fn bool Contiguous<T>.some_with_index<T>(Contiguous<T>* this, (fn bool(T value, 
 
 @export
 fn (bool | Error::OutOfBounds) Contiguous<T>.some_with_index_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1599,8 +1612,8 @@ fn (none | usize) Contiguous<T>.find_with_index_last_index<T>(Contiguous<T>* thi
 
 @export
 fn (none | T) Contiguous<T>.find_with_index_value_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1613,8 +1626,8 @@ fn (none | T) Contiguous<T>.find_with_index_value_in_slice<T>(Contiguous<T>* thi
 
 @export
 fn (none | T) Contiguous<T>.find_with_index_last_value_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1627,8 +1640,8 @@ fn (none | T) Contiguous<T>.find_with_index_last_value_in_slice<T>(Contiguous<T>
 
 @export
 fn (none | usize) Contiguous<T>.find_with_index_index_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1641,8 +1654,8 @@ fn (none | usize) Contiguous<T>.find_with_index_index_in_slice<T>(Contiguous<T>*
 
 @export
 fn (none | usize) Contiguous<T>.find_with_index_last_index_in_slice<T>(Contiguous<T>* this, usize start_index, usize end_index, (fn bool(T value, usize index))* func) {
-    start = this->resolve_index(start_index)?;
-    end = this->resolve_index(end_index)?;
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
     if (start > end) {
         return Error::OutOfBounds;
     }
@@ -1671,6 +1684,17 @@ fn bool Contiguous<T>.contains_fn_arg_with_index<T, U>(Contiguous<T>* this, (fn 
         }
     }
     return false;
+}
+
+fn none Contiguous<T>.split<T>(Contiguous<T>* this, mut AllocatorContiguous<T[]>* out, Contiguous<T>* sep) {
+    usize current_start = 0;
+    for (mut usize i = 0; i < this->len; i++) {
+        if (this->has_slice_at(i, sep)) {
+            out.push(this->view(current_start, this->len));
+            i += sep->len - 1;
+        }
+    }
+    out.push(this->view(current_start, this->len));
 }
 
 fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<mut AllocatorContiguous<T>>* out, Contiguous<T>* sep) {
