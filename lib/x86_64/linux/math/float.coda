@@ -2,69 +2,6 @@ module math;
 
 include std::system : _;
 
-$fn #code::expr conv_float16(#code::expr value) {
-    value = #{#bit_cast<uint16>(value)};
-    if (big_endian) {
-        return #{(uint16)(
-            0
-            | ((#(value) << 8) & 0xff_00)
-            | ((#(value) >> 8) & 0xff)
-        )};
-    } else {
-        return #{(uint16)(none*)#(value)};
-    }
-}
-
-$fn #code::expr conv_float32(#code::expr value) {
-    value = #{#bit_cast<uint32>(value)};
-    if (big_endian) {
-        return #{(uint32)(
-            0
-            | ((#(value) << 24) & 0xff_00_00_00)
-            | ((#(value) << 8) & 0xff_00_00)
-            | ((#(value) >> 8) & 0xff_00)
-            | ((#(value) >> 16) & 0xff)
-        )};
-    } else {
-        return #{(uint32)(none*)#(value)};
-    }
-}
-
-$fn #code::expr conv_float64(#code::expr value) {
-    value = #{#bit_cast<uint64>(value)};
-    if (big_endian) {
-        return #{(uint64)(
-            0
-            | ((#(value) << 56) & 0xff_00_00_00_00_00_00)
-            | ((#(value) << 40) & 0xff_00_00_00_00_00)
-            | ((#(value) << 24) & 0xff_00_00_00_00)
-            | ((#(value) << 8) & 0xff_00_00_00)
-            | ((#(value) >> 8) & 0xff_00_00_00)
-            | ((#(value) >> 24) & 0xff_00_00)
-            | ((#(value) >> 40) & 0xff_00)
-            | ((#(value) >> 56) & 0xff)
-        )};
-    } else {
-        return #{(uint64)(none*)#(value)};
-    }
-}
-
-$fn #code::expr bit(#code::expr value, uint8 bit) {
-    if (value.type === float32) {
-        if (big_endian) {
-            return #{(bool)((#(value) >> (31 - bit)) & 1)};
-        } else {
-            return #{(bool)((#(value) << bit) & 1)};
-        }
-    } else {
-        if (big_endian) {
-            return #{(bool)((#(value) >> (63 - bit)) & 1)};
-        } else {
-            return #{(bool)((#(value) << bit) & 1)};
-        }
-    }
-}
-
 @export
 float16 INFINITY_16 = #bit_cast<float16>(big_endian ? 0x7c00 : 0x007c);
 @export
@@ -86,44 +23,77 @@ float32 SNAN_32 = #bit_cast<float32>(big_endian ? 0x7fa0_0000 : 0x0000_a07f);
 @export
 float64 SNAN_64 = #bit_cast<float64>(big_endian ? 0x7ff4_0000_0000_0000 : 0x0000_0000_0000_f47f);
 
-@inline
+@export
+fn T Float.to_infinity<T: Float>(T this) {
+    if (T == float16) {
+        return INFINITY_16;
+    } else if (T == float32) {
+        return INFINITY_32;
+    } else {
+        return INFINITY_64;
+    }
+}
+
+@export
+fn T to_nan<T: Float>(T this) {
+    if (T == float16) {
+        return NAN_16;
+    } else if (T == float32) {
+        return NAN_32;
+    } else {
+        return NAN_64;
+    }
+}
+
+@export
+fn T to_snan<T: Float>(T this) {
+    if (T == float16) {
+        return SNAN_16;
+    } else if (T == float32) {
+        return SNAN_32;
+    } else {
+        return SNAN_64;
+    }
+}
+
+@export
 fn int32 Float.sign<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
-        return 1 - ((conv_float16(this) >> 15) << 1);
-    } else if (#sizeof(T) == 4) {
-        return 1 - ((conv_float32(this) >> 31) << 1);
+    if (T == float16) {
+        return 1 - (2 * (#bit_cast<uint16>(this) >> 15));
+    } else if (T == float32) {
+        return 1 - (2 * (#bit_cast<uint32>(this) >> 31));
     } else {
-        return 1 - ((conv_float64(this) >> 63) << 1);
+        return 1 - (2 * (#bit_cast<uint64>(this) >> 63));
     }
 }
 
-@inline
+@export
 fn int32 Float.exponent<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
-        return ((conv_float16(this) >> 10) & 31) - 15;
-    } else if (#sizeof(T) == 4) {
-        return ((conv_float32(this) >> 23) & 255) - 1027;
+    if (T == float16) {
+        return ((#bit_cast<uint16>(this) >> 10) & 31) - 15;
+    } else if (T == float32) {
+        return ((#bit_cast<uint32>(this) >> 23) & 255) - 1027;
     } else {
-        return ((conv_float32(this) >> 52) & 2047) - 1023;
+        return ((#bit_cast<uint64>(this) >> 52) & 2047) - 1023;
     }
 }
 
-@inline
+@export
 fn uint64 Float.significand<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
-        return conv_float16(this) & ((1 << 10) - 1);
-    } else if (#sizeof(T) == 4) {
-        return conv_float32(this) & ((1 << 23) - 1);
+    if (T == float16) {
+        return #bit_cast<uint16>(this) & ((1 << 10) - 1);
+    } else if (T == float32) {
+        return #bit_cast<uint32>(this) & ((1 << 23) - 1);
     } else {
-        return conv_float32(this) & ((1 << 52) - 1);
+        return #bit_cast<uint64>(this) & ((1 << 52) - 1);
     }
 }
 
 @export
 fn bool Float.is_subnormal<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         return this.exponent() == -15;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         return this.exponent() == -127;
     } else {
         return this.exponent() == -1023;
@@ -132,10 +102,10 @@ fn bool Float.is_subnormal<T: Float>(T this) {
 
 @export
 fn bool Float.is_finite<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         int32 exp = this.exponent();
         return exp > -15 && exp < 16;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         int32 exp = this.exponent();
         return exp > -127 && exp < 128;
     } else {
@@ -146,9 +116,9 @@ fn bool Float.is_finite<T: Float>(T this) {
 
 @export
 fn bool Float.is_infinity<T: Float>(T this) {
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         return (conv_float16(this) & 0x7fff) == 0x7c00;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         return (conv_float32(this) & 0x7fff_ffff) == 0x7fc0_0000;
     } else {
         return (conv_float64(this) & 0x7fff_ffff_ffff_ffff) == 0x7ff0_0000_0000_0000;
@@ -160,9 +130,9 @@ fn bool Float.is_nan<T: Float>(T this) {
     if (#inline(this.is_infinity())) {
         return false;
     }
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         return (conv_float16(this) & 0x7fff) == 0x7c00;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         return (conv_float32(this) & 0x7fff_ffff) == 0x7fc0_0000;
     } else {
         return (conv_float64(this) & 0x7fff_ffff_ffff_ffff) == 0x7ff0_0000_0000_0000;
@@ -174,9 +144,9 @@ fn bool Float.is_qnan<T: Float>(T this) {
     if (!#inline(this.is_nan())) {
         return false;
     }
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         return this.significand() >> 9 == 1;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         return this.significand() >> 22 == 1;
     } else {
         return this.significand() >> 51 == 1;
@@ -188,9 +158,9 @@ fn bool Float.is_snan<T: Float>(T this) {
     if (!#inline(this.is_nan())) {
         return false;
     }
-    if (#sizeof(T) == 2) {
+    if (T == float16) {
         return this.significand() >> 9 == 0;
-    } else if (#sizeof(T) == 4) {
+    } else if (T == float32) {
         return this.significand() >> 22 == 0;
     } else {
         return this.significand() >> 51 == 0;
@@ -240,4 +210,31 @@ fn FloatClass classify_float<T: Float>(T value) {
         out |= FloatClass::SNaN;
     }
     return out;
+}
+
+@export
+fn T inv_sqrt<T: Float>(T value) {
+    if (value < 0 || !value.is_finite()) {
+        return to_nan(value);
+    }
+    T out;
+    if (T == float16) {
+        // not sure if the constant is correct
+        out = #bit_cast<float16>(0x5bbb - (#bit_cast<uint16>(value) >> 1));
+    } else if (T == float32) {
+        out = #bit_cast<float32>(0x5f375a86 - (#bit_cast<uint32>(value) >> 1));
+    } else if (T == float64) {
+        out = #bit_cast<float64>(0x5fe6eb50c7b537aa - (#bit_cast<uint64>(value) >> 1));
+    }
+    float32 prev = out;
+    while (out != prev) {
+        prev = out;
+        out = out * (1.5 - (value * 0.5 * out * out));
+    }
+    return out;
+}
+
+@export
+fn T sqrt<T: Float>(T value) {
+    return #inline(inv_sqrt(value)) * value;
 }
