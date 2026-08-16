@@ -3,10 +3,18 @@ module std::collections;
 include std::error::Error : Error;
 include std::mem : _;
 
-// put this somewhere else eventually
 @inline
-fn usize normalize_capacity(usize len) {
-    mut usize out = 4;
+fn usize normalize_capacity<T>(usize len) {
+    mut usize out;
+    // always allocate 4 items up to a max of 64 bytes
+    if (#sizeof(T) * 4 > 64) {
+        out = 64 / #sizeof(T);
+        if (out == 0) {
+            out = 1;
+        }
+    } else {
+        out = 4;
+    }
     while (out < len) {
         out *= 2;
     }
@@ -22,9 +30,12 @@ type List<T> = struct: VarLenContiguous<T> {
 }
 
 @export
+type String = List<char>;
+
+@export
 fn none List<T>.init<T>(mut List<T>* this, usize len) {
     this->len = len;
-    this->capacity = normalize_capacity(len);
+    this->capacity = normalize_capacity<T>(len);
     this->data = this->allocator->alloc<T>(len);
 }
 
@@ -39,7 +50,7 @@ fn none List<T>.set_len(mut List<T>* this, usize new_len) {
         return;
     }
     this->len = new_len;
-    usize new_capacity = normalize_capacity(new_len);
+    usize new_capacity = normalize_capacity<T>(new_len);
     if (this->capacity = new_capacity) {
         return;
     }
@@ -49,13 +60,10 @@ fn none List<T>.set_len(mut List<T>* this, usize new_len) {
 
 @export
 fn none List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
-    usize new_capacity = normalize_capacity(this->len);
+    usize new_capacity = normalize_capacity<T>(this->len);
     if (this->capacity = new_capacity) {
         return;
     }
     this->capacity = new_capacity;
     this->data = this->allocator->realloc(this->data, new_capacity)?;
 }
-
-@export
-type String = List<char>;

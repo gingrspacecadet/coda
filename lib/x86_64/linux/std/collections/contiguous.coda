@@ -9,6 +9,9 @@ constraint Contiguous<T> = struct {
 };
 
 @export
+type GenericString = Contiguous<char>;
+
+@export
 constraint AllocatorContiguous<T> = struct: Contiguous<T> {
     Allocator* allocator;
     usize len;
@@ -269,7 +272,7 @@ fn (usize | none) Contiguous<T>.index_of(Contiguous<T>* this, T value) {
 
 @export
 fn (usize | none) Contiguous<T>.last_index_of(Contiguous<T>* this, T value) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         if (this->ptr[i] == value) {
             return i;
         }
@@ -295,7 +298,7 @@ fn (usize | none) Contiguous<T>.index_of_slice(Contiguous<T>* this, Contiguous<T
 
 @export
 fn (usize | none) Contiguous<T>.last_index_of_slice(Contiguous<T>* this, Contiguous<T>* values) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         bool found = true;
         for (mut usize j = 0; j < value->len; j++) {
             if (this->ptr[i + j] != value->ptr[j]) {
@@ -857,7 +860,7 @@ fn (none | Error::OutOfBounds) AllocatorContiguous<T>.insert_slice<T>(mut Alloca
     usize index2 = this->resolve_index(index)?;
     usize old_len = this->len;
     this->set_len(this->len + values->len)?;
-    for (mut usize i = old_len; i >= index2; i--) {
+    for (mut ssize i = old_len; i >= index2; i--) {
         this->ptr[i + values->len] = this->ptr[i];
     }
     mut usize loc = index2;
@@ -1138,7 +1141,7 @@ fn bool Contiguous<T>.reduce<T, U>(Contiguous<T>* this, mut U start, (fn bool(U 
 
 @export
 fn bool Contiguous<T>.reduce_right<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         start_value = func(start_value, this->ptr[i]);
     }
     return start_value;
@@ -1164,7 +1167,7 @@ fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_slice_right<T, U>(Contiguous
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         start_value = func(start_value, this->ptr[i]);
     }
     return start_value;
@@ -1231,7 +1234,7 @@ fn (none | T) Contiguous<T>.find_value<T>(Contiguous<T>* this, (fn bool(T value)
 
 @export
 fn (none | T) Contiguous<T>.find_last_value<T>(Contiguous<T>* this, (fn bool(T value))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         if (func(this->ptr[i])) {
             return this->ptr[i];
         }
@@ -1249,7 +1252,7 @@ fn (none | usize) Contiguous<T>.find_index<T>(Contiguous<T>* this, (fn bool(T va
 
 @export
 fn (none | usize) Contiguous<T>.find_last_index<T>(Contiguous<T>* this, (fn bool(T value))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         if (func(this->ptr[i])) {
             return i;
         }
@@ -1277,7 +1280,7 @@ fn (none | T) Contiguous<T>.find_last_value_in_slice<T>(Contiguous<T>* this, usi
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         if (func(this->ptr[i])) {
             return this->ptr[i];
         }
@@ -1305,7 +1308,7 @@ fn (none | usize) Contiguous<T>.find_last_index_in_slice<T>(Contiguous<T>* this,
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         if (func(this->ptr[i])) {
             return i;
         }
@@ -1501,7 +1504,7 @@ fn bool Contiguous<T>.reduce_with_index<T, U>(Contiguous<T>* this, mut U start, 
 
 @export
 fn bool Contiguous<T>.reduce_with_index_right<T, U>(Contiguous<T>* this, mut U start_value, (fn bool(U prev, T value, usize index))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         start_value = func(start_value, this->ptr[i], i);
     }
     return start_value;
@@ -1527,7 +1530,7 @@ fn (bool | Error::OutOfBounds) Contiguous<T>.reduce_with_index_slice_right<T, U>
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         start_value = func(start_value, this->ptr[i], i);
     }
     return start_value;
@@ -1594,7 +1597,7 @@ fn (none | T) Contiguous<T>.find_with_index_value<T>(Contiguous<T>* this, (fn bo
 
 @export
 fn (none | T) Contiguous<T>.find_with_index_last_value<T>(Contiguous<T>* this, (fn bool(T value, usize index))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         if (func(this->ptr[i], i)) {
             return this->ptr[i];
         }
@@ -1612,7 +1615,7 @@ fn (none | usize) Contiguous<T>.find_with_index_index<T>(Contiguous<T>* this, (f
 
 @export
 fn (none | usize) Contiguous<T>.find_with_index_last_index<T>(Contiguous<T>* this, (fn bool(T value, usize index))* func) {
-    for (mut usize i = this->len - 1; i >= 0; i--) {
+    for (mut ssize i = this->len - 1; i >= 0; i--) {
         if (func(this->ptr[i], i)) {
             return i;
         }
@@ -1640,7 +1643,7 @@ fn (none | T) Contiguous<T>.find_with_index_last_value_in_slice<T>(Contiguous<T>
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         if (func(this->ptr[i], i)) {
             return this->ptr[i];
         }
@@ -1668,7 +1671,7 @@ fn (none | usize) Contiguous<T>.find_with_index_last_index_in_slice<T>(Contiguou
     if (start > end) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = end - 1; i >= start; i--) {
+    for (mut ssize i = end - 1; i >= start; i--) {
         if (func(this->ptr[i], i)) {
             return i;
         }
@@ -1695,18 +1698,44 @@ fn bool Contiguous<T>.contains_fn_arg_with_index<T, U>(Contiguous<T>* this, (fn 
     return false;
 }
 
-fn none Contiguous<T>.split<T>(Contiguous<T>* this, mut AllocatorContiguous<T[]>* out, Contiguous<T>* sep) {
+fn none Contiguous<T>.split<T>(Contiguous<T>* this, mut AllocatorContiguous<T[]>* out, T sep) {
     usize current_start = 0;
     for (mut usize i = 0; i < this->len; i++) {
-        if (this->has_slice_at(i, sep)) {
+        if (this->ptr[i] == sep) {
             out.push(this->view(current_start, this->len));
-            i += sep->len - 1;
+            current_start = i + 1;
         }
     }
     out.push(this->view(current_start, this->len));
 }
 
-fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<mut AllocatorContiguous<T>>* out, Contiguous<T>* sep) {
+fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<mut AllocatorContiguous<T>>* out, T sep) {
+    AllocatorContiguous<T> current;
+    current.init(out->allocator, 0);
+    for (mut usize i = 0; i < this->len; i++) {
+        if (this->ptr[i] == sep) {
+            out.push(current);
+            current.init(out->allocator, 0);
+        } else {
+            current.push(this->ptr[i]);
+        }
+    }
+    out.push(current);
+}
+
+fn none Contiguous<T>.split_slice<T>(Contiguous<T>* this, mut AllocatorContiguous<T[]>* out, Contiguous<T>* sep) {
+    usize current_start = 0;
+    for (mut usize i = 0; i < this->len; i++) {
+        if (this->has_slice_at(i, sep)) {
+            out.push(this->view(current_start, this->len));
+            i += sep->len - 1;
+            current_start = i + 1;
+        }
+    }
+    out.push(this->view(current_start, this->len));
+}
+
+fn none Contiguous<T>.split_slice_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<mut AllocatorContiguous<T>>* out, Contiguous<T>* sep) {
     AllocatorContiguous<T> current;
     current.init(out->allocator, 0);
     for (mut usize i = 0; i < this->len; i++) {
@@ -1721,7 +1750,25 @@ fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguou
     out.push(current);
 }
 
-fn none Contiguous<Contiguous<T>>.join<T>(Contiguous<Contiguous<T>>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
+fn none Contiguous<Contiguous<T>>.join<T>(Contiguous<Contiguous<T>>* this, mut AllocatorContiguous<T>* out, T sep) {
+    for (mut usize i = 0; i < this->len; i++) {
+        out.concat(&this->ptr[i]);
+        if (i != this->len - 1) {
+            out.push(sep);
+        }
+    }
+}
+
+fn none Contiguous<Contiguous<T>*>.join_ptr<T>(Contiguous<Contiguous<T>*>* this, mut AllocatorContiguous<T>* out, T sep) {
+    for (mut usize i = 0; i < this->len; i++) {
+        out.concat(this->ptr[i]);
+        if (i != this->len - 1) {
+            out.push(sep);
+        }
+    }
+}
+
+fn none Contiguous<Contiguous<T>>.join_slice<T>(Contiguous<Contiguous<T>>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
     for (mut usize i = 0; i < this->len; i++) {
         out.concat(&this->ptr[i]);
         if (i != this->len - 1) {
@@ -1730,7 +1777,7 @@ fn none Contiguous<Contiguous<T>>.join<T>(Contiguous<Contiguous<T>>* this, mut A
     }
 }
 
-fn none Contiguous<Contiguous<T>*>.join_ptr<T>(Contiguous<Contiguous<T>*>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
+fn none Contiguous<Contiguous<T>*>.join_slice_ptr<T>(Contiguous<Contiguous<T>*>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
     for (mut usize i = 0; i < this->len; i++) {
         out.concat(this->ptr[i]);
         if (i != this->len - 1) {

@@ -1,18 +1,22 @@
 module std::path::posix;
 
-include std::
+include std::mem : _;
 include std::collections : _;
 
 @export
 string sep = "/";
 @export
+string extsep = ".";
+@export
 string delimiter = ":";
 
-fn none normalise<T: Contiguous<char>>(mut String* out, T* path) {
+@export
+fn none normalise<T: GenericString>(mut String* out, T* path) {
     List<string> data;
-    path.split(data, sep);
+    path.split(data, '/');
     List<string*> parts;
     parts.init(out->allocator, 0);
+    defer parts.destroy();
     for (mut usize i = 0; i < data.len; i++) {
         string part = data->ptr[i];
         if (part.eq("") && i > 0) {
@@ -26,5 +30,82 @@ fn none normalise<T: Contiguous<char>>(mut String* out, T* path) {
         }
     }
     out.clear();
-    parts.join_ptr(out, sep);
+    parts.join_ptr(out, '/');
+}
+
+@export
+fn none join<T: Contiguous<GenericString>>(mut String* out, T* path) {
+    mut String* temp;
+    temp.init(out->allocator, 0);
+    defer temp.destroy();
+    for (mut usize i = 0; i < out->len; i++) {
+        temp.concat(path->ptr[i]);
+        temp.push('/');
+    }
+    normalise(out, temp);
+}
+
+@export
+fn string dirname<T: GenericString>(T* path) {
+    bool is_at_start = true;
+    // end at 1 to turn "/" into "/", not "/"
+    for (mut usize i = out->len - 1; i >= 1; i--) {
+        if (path->ptr[i] === '/') {
+            if (!is_at_start) {
+                return path->view(0, i - 1);
+            }
+        } else {
+            is_at_start = false;
+        }
+    }
+    if (path->len > 0 && path->ptr[0] == '/') {
+        return "/";
+    } else {
+        return ".";
+    }
+}
+
+@export
+fn string filename<T: GenericString>(T* path) {
+    bool is_at_start = true;
+    for (mut ssize i = out->len - 2; i >= 0; i--) {
+        if (path->ptr[i] === '/') {
+            if (!is_at_start) {
+                return path->view(i + 1, path->len);
+            }
+        } else {
+            is_at_start = false;
+        }
+    }
+    return path->view(0, path->len);
+}
+
+@export
+fn string stem<T: GenericString>(T* path) {
+    for (mut usize i = out->len - 2; i >= 1; i--) {
+        if (path->ptr[i] === '.') {
+            return path->view(0, i - 1);
+        }
+    }
+    return path->view(0, path->len);
+}
+
+@export
+fn string extension<T: GenericString>(T* path) {
+    for (mut ssize i = out->len - 2; i >= 0; i--) {
+        if (path->ptr[i] === '.') {
+            return path->view(i, path->len);
+        }
+    }
+    return path->view(0, path->len);
+}
+
+@export
+fn bool is_absolute<T: GenericString>(T* path) {
+    return path->len > 0 && path->ptr[0] == '/';
+}
+
+@export
+fn bool is_relative<T: GenericString>(T* path) {
+    return !@inline(is_absolute(path));
 }
