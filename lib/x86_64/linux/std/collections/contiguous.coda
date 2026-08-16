@@ -346,6 +346,15 @@ fn none AllocatorContiguous<T>.alloc_set_from<T>(mut AllocatorContiguous<T>* thi
 }
 
 @export
+fn none AllocatorContiguous<T>.clear<T>(mut AllocatorContiguous<T>* this) {
+    if (this->len == 0) {
+        return;
+    }
+    this->destroy();
+    this->init(this->allocator, 0);
+}
+
+@export
 fn none AllocatorContiguous<T>.push<T>(mut AllocatorContiguous<T>* this, T value) {
     this->set_len(this->len + 1)?;
     this->ptr[this->len - 1] = value;
@@ -1713,6 +1722,15 @@ fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguou
 }
 
 fn none Contiguous<Contiguous<T>>.join<T>(Contiguous<Contiguous<T>>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
+    for (mut usize i = 0; i < this->len; i++) {
+        out.concat(&this->ptr[i]);
+        if (i != this->len - 1) {
+            out.concat(sep);
+        }
+    }
+}
+
+fn none Contiguous<Contiguous<T>*>.join_ptr<T>(Contiguous<Contiguous<T>*>* this, mut AllocatorContiguous<T>* out, Contiguous<T>* sep) {
     for (mut usize i = 0; i < this->len; i++) {
         out.concat(this->ptr[i]);
         if (i != this->len - 1) {
