@@ -1,0 +1,13 @@
+module math;
+
+fn T abs<T: Signed>(T value) {
+    return value < 0 ? -value : value;
+}
+
+fn T gcd<T: Unsigned>(mut T a, mut T b) {
+    while (a != b) {
+        if (a > b) {
+            
+        }
+    }
+}

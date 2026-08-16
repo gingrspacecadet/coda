@@ -1,0 +1,12 @@
+module math;
+
+@export
+constraint Signed = int8 || int16 || int32 || int64;
+@export
+constraint Unsigned = uint8 || uint16 || uint32 || uint64;
+@export
+constraint Integral = AnyInt || AnyUint;
+@export
+constraint Float = float32 || float64;
+@export
+constraint Number = Integral || Float;
