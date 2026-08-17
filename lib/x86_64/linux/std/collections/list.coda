@@ -30,9 +30,6 @@ type List<T> = struct: VarLenContiguous<T> {
 }
 
 @export
-type String = List<char>;
-
-@export
 fn none List<T>.init<T>(mut List<T>* this, usize len) {
     this->len = len;
     this->capacity = normalize_capacity<T>(len);

@@ -784,11 +784,11 @@ fn none Contiguous<T>.concat_to_alloc<T>(Contiguous<T>* this, mut AllocatorConti
 fn none AllocatorContiguous<T>.concat_start<T>(mut AllocatorContiguous<T>* this, Contiguous<T>* values) {
     mut usize loc = this->len;
     this->set_len(this->len + values->len)?;
-    for (mut usize i = values->len; i < this->len; i++) {
-        this->ptr[i] = this->ptr[i - values->len];
-    }
     for (mut usize i = 0; i < values->len; i++) {
         this->ptr[i] = values->ptr[i];
+    }
+    for (mut usize i = values->len; i < this->len; i++) {
+        this->ptr[i] = this->ptr[i - values->len];
     }
 }
 
@@ -797,22 +797,22 @@ fn (none | Error::OutOfBounds) Contiguous<T>.concat_start_to<T>(Contiguous<T>* t
     if (this->len + values->len > out->len) {
         return Error::OutOfBounds;
     }
-    for (mut usize i = 0; i < this->len; i++) {
-        out->ptr[i + values->len] = this->ptr[i];
-    }
     for (mut usize i = 0; i < values->len; i++) {
         out->ptr[i] = values->ptr[i];
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i + values->len] = this->ptr[i];
     }
 }
 
 @export
 fn none Contiguous<T>.concat_start_to_alloc<T>(Contiguous<T>* this, mut AllocatorContiguous<T>* out, T value) {
     out->set_len(this->len + values->len)?;
-    for (mut usize i = 0; i < this->len; i++) {
-        out->ptr[i + values->len] = this->ptr[i];
-    }
     for (mut usize i = 0; i < values->len; i++) {
         out->ptr[i] = values->ptr[i];
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i + values->len] = this->ptr[i];
     }
 }
 

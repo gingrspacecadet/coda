@@ -1,65 +1,7 @@
 module math;
 
+include std::types : _;
 include std::system : _;
-
-@export
-float16 INFINITY_16 = #bit_cast<float16>(0x7c00);
-@export
-float32 INFINITY_32 = #bit_cast<float32>(0x7f800000);
-@export
-float64 INFINITY_64 = #bit_cast<float64>(0x7ff0000000000000);
-
-@export
-fn T get_infinity<T: Float>(T this) {
-    if (T == float16) {
-        return INFINITY_16;
-    } else if (T == float32) {
-        return INFINITY_32;
-    } else {
-        return INFINITY_64;
-    }
-}
-
-@export
-float16 NAN_16 = #bit_cast<float16>(0x7e00);
-@export
-float32 NAN_32 = #bit_cast<float32>(0x7fc0_0000);
-@export
-float64 NAN_64 = #bit_cast<float64>(0x7ff8000000000000);
-
-@export
-fn T get_nan<T: Float>(T this) {
-    if (T == float16) {
-        return NAN_16;
-    } else if (T == float32) {
-        return NAN_32;
-    } else {
-        return NAN_64;
-    }
-}
-
-@export
-float16 SNAN_16 = #bit_cast<float16>(0x7d00);
-@export
-float32 SNAN_32 = #bit_cast<float32>(0x7fa0_0000);
-@export
-float64 SNAN_64 = #bit_cast<float64>(0x7ff4_0000_0000_0000);
-
-@export
-fn T get_snan<T: Float>(T this) {
-    if (T == float16) {
-        return SNAN_16;
-    } else if (T == float32) {
-        return SNAN_32;
-    } else {
-        return SNAN_64;
-    }
-}
-
-@export
-float64 LN2 = #bit_cast<float64>(0x3fe62e42fefa39ef);
-@export
-
 
 @export
 fn int32 Float.sign<T: Float>(T this) {
@@ -222,25 +164,25 @@ int32 MAX_ITERATIONS = 64;
 @export
 fn T inv_sqrt<T: Float>(T value) {
     if (value < 0 || !value.is_finite()) {
-        return to_nan(value);
+        return get_nan(value);
     }
-    T y;
+    T out;
     $if (T == float16) {
         // not sure if the constant is correct
-        y = #bit_cast<float16>(0x5bbb - (#bit_cast<uint16>(value) >> 1));
+        out = #bit_cast<float16>(0x5bbb - (#bit_cast<uint16>(value) >> 1));
     } $else $if (T == float32) {
-        y = #bit_cast<float32>(0x5f375a86 - (#bit_cast<uint32>(value) >> 1));
+        out = #bit_cast<float32>(0x5f375a86 - (#bit_cast<uint32>(value) >> 1));
     } $else $if (T == float64) {
-        y = #bit_cast<float64>(0x5fe6eb50c7b537aa - (#bit_cast<uint64>(value) >> 1));
+        outy = #bit_cast<float64>(0x5fe6eb50c7b537aa - (#bit_cast<uint64>(value) >> 1));
     }
-    T prev = y;
+    T prev = out;
     int32 i = 0;
-    while (y != prev && i < MAX_ITERATIONS) {
-        prev = y;
-        y = y * (1.5 - (value * 0.5 * y * y));
+    while (out != prev && i < MAX_ITERATIONS) {
+        prev = out;
+        out = out * (1.5 - (value * 0.5 * out * out));
         i++;
     }
-    return y;
+    return out;
 }
 
 @export
@@ -250,11 +192,7 @@ fn T sqrt<T: Float>(T value) {
 
 @export
 fn T exp<T: Float>(T value) {
-    int32 mul = 0;
-    while (value > 2) {
-        value /= 2;
-    }
-    T prev = 0;
+    T prev = get_nan(value);
     T out = 1;
     T term = 1;
     uint32 i = 1;
@@ -269,7 +207,7 @@ fn T exp<T: Float>(T value) {
 
 @export
 fn T expm1<T: Float>(T value) {
-    T prev = 0;
+    T prev = get_nan(value);
     T out = 0;
     T term = 1;
     uint32 i = 1;
@@ -283,22 +221,64 @@ fn T expm1<T: Float>(T value) {
 }
 
 @export
-fn T log2<T: Float>(T value) {
-    T y = value.exponent();
-    T prev = y;
+fn T log<T: Float>(T value) {
+    if (value < -1 || !value.is_finite()) {
+        return get_nan(value);
+    }
+    T prev = get_nan(value);
+    T out = value.exponent() * LN2;
     int32 i = 0;
-    while (prev > 0 && i < MAX_ITERATIONS) {
-        prev = y;
-        y = 
+    while (out != prev && i < MAX_ITERATIONS) {
+        prev = out;
+        out = out + 2 * (value - exp(y))/(value + exp(y));
         i++;
     }
+    return out;
 }
 
 @export
-fn T pow<T: Number>(T x, T y) {
-    if (T : Integral) {
+fn T log1p<T: Float>(T value) {
+    if (value < -1 || !value.is_finite()) {
+        return get_nan(value);
+    }
+    T prev = get_nan(value);
+    T out = (value + 1).exponent() * LN2;
+    int32 i = 0;
+    while (out != prev && i < MAX_ITERATIONS) {
+        prev = out;
+        out = out + 2 * (value - expm1(y))/(value + expm1(y));
+        i++;
+    }
+    return out;
+}
 
-    } else {
+fn T integer_pow<T: Number, U: Integer>(T x, U y) {
+    T out = 1;
+    while (y > 0) {
+        if (y & 1) {
+            out *= 2;
+        }
+        x *= x;
+        y >>= 1;
+    }
+    return out;
+}
 
+@export
+fn T pow<T: Number, U: Number>(T x, U y) {
+    $if (U : Integer) {
+        if (y < 0) {
+            $if (T : Integer) {
+                return (T)integer_pow(1 / (float64)x, -(float64)y);
+            } $else {
+                return integer_pow(1 / (U)x, -y);
+            }
+        } else {
+            return integer_pow(x, y);
+        }
+    } $else $if (T: Integer) {
+        return exp(y * log((U)x));
+    } $else {
+        return exp(y * log(x));
     }
 }
