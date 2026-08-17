@@ -9,9 +9,6 @@ constraint Contiguous<T> = struct {
 };
 
 @export
-type GenericString = Contiguous<char>;
-
-@export
 constraint AllocatorContiguous<T> = struct: Contiguous<T> {
     Allocator* allocator;
     usize len;

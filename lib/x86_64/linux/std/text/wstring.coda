@@ -3,7 +3,9 @@ module std::text;
 include std::collections : _;
 
 @export
-type AbstractWString = Contiguous<wchar>;
+constraint GenericWString = Contiguous<wchar>;
+@export
+constraint GenericAllocatorWString = AllocatorContiguous<wchar>;
 
 @export
 type WString = List<wchar>;

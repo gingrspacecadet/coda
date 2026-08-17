@@ -4,23 +4,25 @@ include std::error : _;
 include std::collections : _;
 
 @export
-constraint AbstractString = Contiguous<char>;
+constraint GenericString = Contiguous<char>;
+@export
+constraint GenericAllocatorString = AllocatorContiguous<char>;
 
 @export
 type String = List<char>;
 
 @export
-fn none AbstractString.to_lower(mut AbstractString* this) {
+fn none GenericString.to_lower(mut GenericString* this) {
     #inline(this->map(to_lower));
 }
 
 @export
-fn none AbstractString.to_upper(mut AbstractString* this) {
+fn none GenericString.to_upper(mut GenericString* this) {
     #inline(this->map(to_upper));
 }
 
 @export
-fn none AbstractString.capitalize(mut AbstractString* this) {
+fn none GenericString.capitalize(mut GenericString* this) {
     if (this->len == 0) {
         return;
     }
@@ -28,7 +30,7 @@ fn none AbstractString.capitalize(mut AbstractString* this) {
 }
 
 @export
-fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut AbstractWString* out) {
+fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut GenericWString* out) {
     mut usize loc = 0;
     for (mut usize i = 0; i < this->len; i++) {
         wchar value = this->ptr[i];
@@ -86,7 +88,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
 }
 
 @export
-fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut AbstractWString* out) {
+fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut GenericAllocatorWString* out) {
     for (mut usize i = 0; i < this->len; i++) {
         wchar value = this->ptr[i];
         if (value < 0x80) {
