@@ -168,6 +168,11 @@ fn (T[] | Error::OutOfBounds) Contiguous<T>.view(Contiguous<T>* this, ssize star
 }
 
 @export
+fn T[] Contiguous<T>.full_view(Contiguous<T>* this) {
+    return (T[]){.len = end - start, .ptr = this->ptr + start};
+}
+
+@export
 fn bool Contiguous<T>.eq<T>(Contiguous<T>* this, Contiguous<T>* value) {
     if (this->len != value->len) {
         return false;
