@@ -4,4 +4,5 @@ module std::error;
 type Error = enum {
     AllocationFailed,
     OutOfBounds,
+    InvalidEncoding,
 };

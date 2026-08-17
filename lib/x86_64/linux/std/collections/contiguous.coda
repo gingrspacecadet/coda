@@ -349,6 +349,100 @@ fn none AllocatorContiguous<T>.alloc_set_from<T>(mut AllocatorContiguous<T>* thi
 }
 
 @export
+fn (none | Error::OutOfBounds) Contiguous<T>.cast_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out) {
+    if (this->len > out->len) {
+        return Error::OutOfBounds;
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = (U)(this->ptr[i]);
+    }
+}
+
+@export
+fn none Contiguous<T>.cast_to_alloc<T, U>(mut Contiguous<T>* this, mut AllocatorContiguous<U>* out) {
+    out->set_len(this->len)?;
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = (U)(this->ptr[i]);
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.cast_slice_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index) {
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
+    if (start > end || end - start > out->len) {
+        return Error::OutOfBounds;
+    }
+    mut usize loc = 0;
+    for (mut usize i = start; i < end; i++) {
+        out->ptr[loc] = (U)(this->ptr[i]);
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.cast_slice_to_alloc<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index) {
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
+    if (start > end) {
+        return Error::OutOfBounds;
+    }
+    out->set_len(this->len)?;
+    mut usize loc = 0;
+    for (mut usize i = start; i < end; i++) {
+        out->ptr[loc] = (U)(this->ptr[i]);
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.bit_cast_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out) {
+    if (this->len > out->len) {
+        return Error::OutOfBounds;
+    }
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = #bit_cast<U>(this->ptr[i]);
+    }
+}
+
+@export
+fn none Contiguous<T>.bit_cast_to_alloc<T, U>(mut Contiguous<T>* this, mut AllocatorContiguous<U>* out) {
+    out->set_len(this->len)?;
+    for (mut usize i = 0; i < this->len; i++) {
+        out->ptr[i] = #bit_cast<U>(this->ptr[i]);
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.bit_cast_slice_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index) {
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
+    if (start > end || end - start > out->len) {
+        return Error::OutOfBounds;
+    }
+    mut usize loc = 0;
+    for (mut usize i = start; i < end; i++) {
+        out->ptr[loc] = #bit_cast<U>(this->ptr[i]);
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::OutOfBounds) Contiguous<T>.bit_cast_slice_to_alloc<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index) {
+    usize start = this->resolve_index(start_index)?;
+    usize end = this->resolve_index(end_index)?;
+    if (start > end) {
+        return Error::OutOfBounds;
+    }
+    out->set_len(this->len)?;
+    mut usize loc = 0;
+    for (mut usize i = start; i < end; i++) {
+        out->ptr[loc] = #bit_cast<U>(this->ptr[i]);
+        loc++;
+    }
+}
+
+@export
 fn none AllocatorContiguous<T>.clear<T>(mut AllocatorContiguous<T>* this) {
     if (this->len == 0) {
         return;
@@ -980,7 +1074,7 @@ fn none Contiguous<T>.map<T>(mut Contiguous<T>* this, (fn T(T value))* func) {
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, (fn T(T value))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, (fn U(T value))* func) {
     if (this->len > out->len) {
         return Error::OutOfBounds;
     }
@@ -990,7 +1084,7 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_to<T>(mut Contiguous<T>* this, 
 }
 
 @export
-fn none Contiguous<T>.map_to_alloc<T>(mut Contiguous<T>* this, mut AllocatorContiguous<T>* out, (fn T(T value))* func) {
+fn none Contiguous<T>.map_to_alloc<T, U>(mut Contiguous<T>* this, mut AllocatorContiguous<U>* out, (fn U(T value))* func) {
     out->set_len(this->len)?;
     for (mut usize i = 0; i < this->len; i++) {
         out->ptr[i] = func(this->ptr[i]);
@@ -1010,7 +1104,7 @@ fn none Contiguous<T>.map_slice<T>(mut Contiguous<T>* this, usize start_index, u
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index, (fn U(T value))* func) {
     usize start = this->resolve_index(start_index)?;
     usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > out->len) {
@@ -1024,7 +1118,7 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to<T>(mut Contiguous<T>* 
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to_alloc<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_slice_to_alloc<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index, (fn U(T value))* func) {
     usize start = this->resolve_index(start_index)?;
     usize end = this->resolve_index(end_index)?;
     if (start > end) {
@@ -1343,7 +1437,7 @@ fn none Contiguous<T>.map_with_index<T>(mut Contiguous<T>* this, (fn T(T value, 
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, (fn T(T value, usize index))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, (fn U(T value, usize index))* func) {
     if (this->len > out->len) {
         return Error::OutOfBounds;
     }
@@ -1353,7 +1447,7 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_to<T>(mut Contiguous
 }
 
 @export
-fn none Contiguous<T>.map_with_index_to_alloc<T>(mut Contiguous<T>* this, mut AllocatorContiguous<T>* out, (fn T(T value, usize index))* func) {
+fn none Contiguous<T>.map_with_index_to_alloc<T, U>(mut Contiguous<T>* this, mut AllocatorContiguous<U>* out, (fn U(T value, usize index))* func) {
     out->set_len(this->len)?;
     for (mut usize i = 0; i < this->len; i++) {
         out->ptr[i] = func(this->ptr[i], i);
@@ -1373,7 +1467,7 @@ fn none Contiguous<T>.map_with_index_slice<T>(mut Contiguous<T>* this, usize sta
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index, (fn U(T value, usize index))* func) {
     usize start = this->resolve_index(start_index)?;
     usize end = this->resolve_index(end_index)?;
     if (start > end || end - start > out->len) {
@@ -1387,7 +1481,7 @@ fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to<T>(mut Cont
 }
 
 @export
-fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to_alloc<T>(mut Contiguous<T>* this, mut Contiguous<T>* out, usize start_index, usize end_index, (fn T(T value, usize index))* func) {
+fn (none | Error::OutOfBounds) Contiguous<T>.map_with_index_slice_to_alloc<T, U>(mut Contiguous<T>* this, mut Contiguous<U>* out, usize start_index, usize end_index, (fn U(T value, usize index))* func) {
     usize start = this->resolve_index(start_index)?;
     usize end = this->resolve_index(end_index)?;
     if (start > end) {

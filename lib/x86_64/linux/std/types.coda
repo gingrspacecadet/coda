@@ -1,6 +1,13 @@
 module std::types;
 
-include std::system;
+@__global
+type char = uint8;
+@__global
+type string = char[];
+@__global
+type wchar = uint32;
+@__global
+type wstring = wchar[];
 
 @export
 constraint Signed = int8 || int16 || int32 || int64;

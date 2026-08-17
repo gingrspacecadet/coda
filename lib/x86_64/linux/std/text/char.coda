@@ -1,0 +1,73 @@
+module std::text;
+
+type Flags = enum: uint8 {
+    Uppercase = 1,
+    Lowercase = 2,
+    Digit = 4,
+    HexDigit = 8,
+    Symbol = 16,
+    Whitespace = 32,
+    Control = 64,
+};
+
+Flags[256] value = {64, 64, 64, 64, 64, 64, 64, 64, 64, 96, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 32, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 16, 16, 16, 16, 16, 16, 9, 9, 9, 9, 9, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16, 16, 16, 16, 16, 10, 10, 10, 10, 10, 10, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+@export
+fn bool char.is_upper(char this) {
+    return value[this] & Flags::Uppercase;
+}
+
+@export
+fn bool char.is_lower(char this) {
+    return value[this] & Flags::Lowercase;
+}
+
+@export
+fn bool char.is_digit(char this) {
+    return value[this] & Flags::Digit;
+}
+
+@export
+fn bool char.is_hex_digit(char this) {
+    return value[this] & Flags::HexDigit;
+}
+
+@export
+fn bool char.is_symbol(char this) {
+    return value[this] & Flags::Symbol;
+}
+
+@export
+fn bool char.is_whitespace(char this) {
+    return value[this] & Flags::Whitespace;
+}
+
+@export
+fn bool char.is_control(char this) {
+    return value[this] & Flags::Control;
+}
+
+@export
+fn bool char.is_letter(char this) {
+    return value[this] & (Flags::Uppercase | Flags::Lowercase);
+}
+
+@export
+fn bool char.is_alnum(char this) {
+    return value[this] & (Flags::Uppercase | Flags::Lowercase | Flags::Digit);
+}
+
+@export
+fn bool char.is_printable(char this) {
+    return value[this] & (Flags::Uppercase | Flags::Lowercase | Flags::Digit | Flags::Symbol | Flags::Whitespace);
+}
+
+@export
+fn char char.to_upper(char this) {
+    return #inline(this.is_lower()) ? this - 32 : this;
+}
+
+@export
+fn char char.to_lower(char this) {
+    return #inline(this.is_upper()) ? this + 32 : this;
+}

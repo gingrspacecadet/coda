@@ -1,0 +1,6 @@
+module std::text;
+
+include std::collections : _;
+
+@export
+type WString = List<wchar>;

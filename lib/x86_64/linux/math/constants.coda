@@ -33,7 +33,7 @@ $fn #code::decl[] create_constant(#code::ident name, #code::num_literal value16,
 }
 
 create_constant(INFINITY, 0x7c00, 0x7f800000, 0x7ff0000000000000);
-create_constant(NAN, 0x7e00, 0x7fc00000, 0x7ff8000000000000)
+create_constant(NAN, 0x7e00, 0x7fc00000, 0x7ff8000000000000);
 create_constant(SNAN, 0x7d00, 0x7fa00000, 0x7ff4000000000000);
 create_constant(E, 0x4170, 0x402df854, 0x4005bf0a8b145769);
 create_constant(LOG2E, 0x3dc5, 0x3fb8aa3b, 0x3ff71547652b82fe);

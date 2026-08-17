@@ -1,0 +1,128 @@
+module std::text;
+
+include std::error : _;
+include std::collections : _;
+
+@export
+type String = List<char>;
+
+@export
+fn none Contiguous<char>.to_lower(mut Contiguous<char>* this) {
+    #inline(this->map(to_lower));
+}
+
+@export
+fn none Contiguous<char>.to_upper(mut Contiguous<char>* this) {
+    #inline(this->map(to_upper));
+}
+
+@export
+fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut Contiguous<wchar>* out) {
+    mut usize loc = 0;
+    for (mut usize i = 0; i < this->len; i++) {
+        wchar value = this->ptr[i];
+        if (value < 0x80) {
+            // do nothing
+        } else if (value < 0xc0) {
+            // unexpected continuation byte
+            return Error::InvalidEncoding;
+        } else if (value < 0xe0) {
+            // one continuation byte
+            value = (value & 0x1f) << 6;
+            uint8 a = this->ptr[i + 1];
+            i++;
+            if (!(a >= 0x80 && a < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f);
+        } else if (value < 0xf0) {
+            // two continuation bytes
+            value = (value & 0x1f) << 12;
+            uint8 a = this->ptr[i + 1];
+            uint8 b = this->ptr[i + 2];
+            i += 2;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f) << 6;
+            value |= (b & 0x3f);
+        } else if (value < 0xf7) {
+            // three continuation bytes
+            value = (value & 0x1f) << 18;
+            uint8 a = this->ptr[i + 1];
+            uint8 b = this->ptr[i + 2];
+            uint8 c = this->ptr[i + 3];
+            i += 3;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f) << 12;
+            value |= (b & 0x3f) << 6;
+            value |= (c & 0x3f);
+        } else {
+            // invalid byte
+            return Error::InvalidEncoding;
+        }
+        if (loc >= out->len) {
+            return Error::OutOfBounds;
+        }
+        out->data[loc] = value;
+        loc++;
+    }
+}
+
+@export
+fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut Contiguous<wchar>* out) {
+    for (mut usize i = 0; i < this->len; i++) {
+        wchar value = this->ptr[i];
+        if (value < 0x80) {
+            // do nothing
+        } else if (value < 0xc0) {
+            // unexpected continuation byte
+            return Error::InvalidEncoding;
+        } else if (value < 0xe0) {
+            // one continuation byte
+            value = (value & 0x1f) << 6;
+            uint8 a = this->ptr[i + 1];
+            i++;
+            if (!(a >= 0x80 && a < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f);
+        } else if (value < 0xf0) {
+            // two continuation bytes
+            value = (value & 0x1f) << 12;
+            uint8 a = this->ptr[i + 1];
+            uint8 b = this->ptr[i + 2];
+            i += 2;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f) << 6;
+            value |= (b & 0x3f);
+        } else if (value < 0xf7) {
+            // three continuation bytes
+            value = (value & 0x1f) << 18;
+            uint8 a = this->ptr[i + 1];
+            uint8 b = this->ptr[i + 2];
+            uint8 c = this->ptr[i + 3];
+            i += 3;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
+                // not a continuation byte
+                return Error::InvalidEncoding;
+            }
+            value |= (a & 0x3f) << 12;
+            value |= (b & 0x3f) << 6;
+            value |= (c & 0x3f);
+        } else {
+            // invalid byte
+            return Error::InvalidEncoding;
+        }
+        out->push(value);
+    }
+}
