@@ -266,9 +266,11 @@ fn T integer_pow<T: Number, U: Integer>(T x, U y) {
 
 @export
 fn T pow<T: Number, U: Number>(T x, U y) {
-    $if (U : Integer) {
+    // $if (U : Integer) {
+    $if (U == uint8 || U == int8 || U == uint16 || U == int16 || U == uint32 || U == int32 || U == uint64 || U == int64) {
         if (y < 0) {
-            $if (T : Integer) {
+            // $if (T : Integer) {
+            $if (T == uint8 || T == int8 || T == uint16 || T == int16 || T == uint32 || T == int32 || T == uint64 || T == int64) {
                 return (T)integer_pow(1 / (float64)x, -(float64)y);
             } $else {
                 return integer_pow(1 / (U)x, -y);
@@ -276,7 +278,8 @@ fn T pow<T: Number, U: Number>(T x, U y) {
         } else {
             return integer_pow(x, y);
         }
-    } $else $if (T: Integer) {
+    // } $else $if (T : Integer) {
+    } $else $if (T == uint8 || T == int8 || T == uint16 || T == int16 || T == uint32 || T == int32 || T == uint64 || T == int64) {
         return exp(y * log((U)x));
     } $else {
         return exp(y * log(x));
