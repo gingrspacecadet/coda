@@ -1,0 +1,12 @@
+module std;
+
+@export
+$fn #code::stmt assert(#code::expr expr) {
+    return #{
+        {
+            if (!#(expr)) {
+                printf("Assertion failed: "#(expr.raw));
+            }
+        }
+    };
+}
