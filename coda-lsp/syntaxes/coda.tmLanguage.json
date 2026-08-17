@@ -30,10 +30,19 @@
             "include": "#comments"
         },
         {
+            "include": "#intrinsics"
+        },
+        {
             "include": "#attributes"
         },
         {
+            "include": "#constants"
+        },
+        {
             "include": "#types"
+        },
+        {
+            "include": "#variables"
         }
     ],
     "repository": {
@@ -69,11 +78,11 @@
             "patterns": [
                 {
                     "name": "keyword.control.coda",
-                    "match": "\\b(if|else|while|for|return|enum|union|struct|fn|module|include|mut|defer|match|type)\\b"
+                    "match": "\\b(if|else|while|for|break|continue|fn|return|mut|struct|union|enum|type|constraint|defer|match|unsafe|module|include|\\$)\\b"
                 },
                 {
                     "name": "support.type.primitive.coda",
-                    "match": "\\b(u?int(8|16|32|64)?|char|string|bool|any)\\b"
+                    "match": "\\b(none|u?int(8|16|32|64)|float(16|32|64)|bool|usize|ssize|w?char|w?string)\\b"
                 },
                 {
                     "name": "constant.language.boolean.coda",
@@ -81,7 +90,11 @@
                 },
                 {
                     "name": "constant.language.null.coda",
-                    "match": "\\b(null|none)\\b"
+                    "match": "\\b(null)\\b"
+                },
+                {
+                    "name": "constant.language.this.coda",
+                    "match": "\\b(this)\\b"
                 }
             ]
         },
@@ -128,7 +141,7 @@
         },
         "functions": {
             "name": "entity.name.function.coda",
-            "match": "\\b(?:[a-z_]\\w*\\s*(?=[\\(<])|[A-Z]\\w*\\s*(?=\\())"
+            "match": "\\b(?:[a-z_]\\w*\\s*(?=\\(|<\\s*([A-Z]|none|u?int(8|16|32|64)|float(16|32|64)|bool|usize|ssize|char|string))|[A-Z]\\w*\\s*(?=\\())"
         },
         "namespaces": {
             "patterns": [
@@ -167,7 +180,7 @@
                 },
                 {
                     "name": "constant.numeric.integer.coda",
-                    "match": "\\b\\d+(?:_\\d+)*([uU])?\\b",
+                    "match": "\\b\\d+(?:_\\d+)*(?:[eE]\\d+)?([uU])?\\b",
                     "captures": {
                         "1": {
                             "name": "keyword.other.unit.suffix.integer.coda"
@@ -225,14 +238,49 @@
                 {
                     "name": "comment.line.coda",
                     "match": "//.*"
+                },
+                {
+                "name": "comment.block.coda",
+                    "begin": "/\\*",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.begin"
+                        }
+                    },
+                    "end": "\\*/",
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.end"
+                        }
+                    }
+                }
+            ]
+        },
+        "intrinsics": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.expression.coda",
+                    "match": "#[a-zA-Z_]\\w*"
+                },
+                {
+                    "name": "keyword.control.coda",
+                    "match": "#(?=[{(])"
                 }
             ]
         },
         "attributes": {
             "patterns": [
                 {
-                    "name": "keyword.operator.coda",
-                    "match": "@[a-zA-Z]+(\\([\\(]*\\))?"
+                    "name": "storage.modifier.coda",
+                    "match": "@[a-zA-Z_]\\w*(\\([\\(]*\\))?"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "variable.other.constant.coda",
+                    "match": "\\b_*[A-Z][A-Z0-9_]+\\b"
                 }
             ]
         },
@@ -240,7 +288,15 @@
             "patterns": [
                 {
                     "name": "entity.name.type.coda",
-                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+                    "match": "\\b_*[A-Z](?![A-Z0-9_]+\\b)\\w*\\b"
+                }
+            ]
+        },
+        "variables": {
+            "patterns": [
+                {
+                    "name": "variable.coda",
+                    "match": "\\b[a-z]\\w*\\b"
                 }
             ]
         }
