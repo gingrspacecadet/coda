@@ -20,6 +20,14 @@ fn none AbstractString.to_upper(mut AbstractString* this) {
 }
 
 @export
+fn none AbstractString.capitalize(mut AbstractString* this) {
+    if (this->len == 0) {
+        return;
+    }
+    this->ptr[0] = this->ptr[0].to_upper();
+}
+
+@export
 fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut AbstractWString* out) {
     mut usize loc = 0;
     for (mut usize i = 0; i < this->len; i++) {
