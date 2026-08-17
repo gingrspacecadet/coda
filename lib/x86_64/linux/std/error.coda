@@ -5,4 +5,5 @@ type Error = enum {
     AllocationFailed,
     OutOfBounds,
     InvalidEncoding,
+    IsEmpty,
 };

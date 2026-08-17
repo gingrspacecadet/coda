@@ -4,20 +4,23 @@ include std::error : _;
 include std::collections : _;
 
 @export
+constraint AbstractString = Contiguous<char>;
+
+@export
 type String = List<char>;
 
 @export
-fn none Contiguous<char>.to_lower(mut Contiguous<char>* this) {
+fn none AbstractString.to_lower(mut AbstractString* this) {
     #inline(this->map(to_lower));
 }
 
 @export
-fn none Contiguous<char>.to_upper(mut Contiguous<char>* this) {
+fn none AbstractString.to_upper(mut AbstractString* this) {
     #inline(this->map(to_upper));
 }
 
 @export
-fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut Contiguous<wchar>* out) {
+fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut AbstractWString* out) {
     mut usize loc = 0;
     for (mut usize i = 0; i < this->len; i++) {
         wchar value = this->ptr[i];
@@ -75,7 +78,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
 }
 
 @export
-fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut Contiguous<wchar>* out) {
+fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut AbstractWString* out) {
     for (mut usize i = 0; i < this->len; i++) {
         wchar value = this->ptr[i];
         if (value < 0x80) {

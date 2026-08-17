@@ -1,9 +1,127 @@
 module math;
 
-fn T abs<T: Signed>(T value) {
-    return value < 0 ? -value : value;
+include std::error;
+include std::collections : _;
+
+@export
+fn T T.abs<T: Unsigned>(T this) {
+    return this;
 }
 
+@export
+fn uint8 int8.abs(int8 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn uint16 int16.abs(int16 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn uint32 int32.abs(int32 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn uint64 int64.abs(int64 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn float16 float16.abs(float16 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn float32 float32.abs(float32 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn float64 float64.abs(float64 this) {
+    return this < 0 ? -this : this;
+}
+
+@export
+fn T T.real_mod<T: Unsigned>(T this, T other) {
+    return this % other;
+}
+
+@export
+fn uint8 int8.real_mod(int8 this, int8 other) {
+    int8 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint16 int16.real_mod(int16 this, int16 other) {
+    int16 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint32 int32.real_mod(int32 this, int32 other) {
+    int32 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint64 int64.real_mod(int64 this, int64 other) {
+    int64 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn T T.real_mod<T: Float>(T this, T other) {
+    T out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn (T | Error::IsEmpty) min<T: Number>(Contiguous<T>* data) {
+    if (data->len == 0) {
+        return Error::IsEmpty;
+    }
+    T out = data->ptr[0];
+    for (mut usize i = 1; i < data->len; i++) {
+        if (data->ptr[i] < out) {
+            out = data->ptr[i];
+        }
+    }
+    return out;
+}
+
+@export
+fn (T | Error::IsEmpty) max<T: Number>(Contiguous<T>* data) {
+    if (data->len == 0) {
+        return Error::IsEmpty;
+    }
+    T out = data->ptr[0];
+    for (mut usize i = 1; i < data->len; i++) {
+        if (data->ptr[i] > out) {
+            out = data->ptr[i];
+        }
+    }
+    return out;
+}
+
+@export
 fn T gcd<T: Unsigned>(mut T x, mut T y) {
     while (y != 0) {
         T temp = y;
@@ -13,6 +131,7 @@ fn T gcd<T: Unsigned>(mut T x, mut T y) {
     return y;
 }
 
+@export
 fn T lcm<T: Unsigned>(mut T x, mut T y) {
     // the order is to ensure no overflow
     return (x / gcd(x, y)) * y;
