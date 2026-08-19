@@ -12,7 +12,6 @@ typedef struct {
 typedef struct {
     Source *source;
     size_t offset, length;
-    size_t line, column;
 } Span;
 
 #endif
