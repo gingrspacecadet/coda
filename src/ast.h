@@ -31,19 +31,36 @@ typedef struct {
 } AstName;
 
 typedef struct {
-    Array /* String */ parts;
+    Array(String) parts;
 } Path;
 
 typedef struct {
     Span span;
     String name;
-    Array /* Expr * */ args;
+    Array(Expr *) args;
 } Attribute;
+
+typedef enum {
+    CONSTRAINT_NONE,
+    CONSTRAINT_NAMED,
+    CONSTRAINT_INLINE,
+} ConstraintRefKind;
+
+typedef struct {
+    Span span;
+
+    ConstraintRefKind kind;
+
+    union {
+        Path path;
+        ConstraintDecl *_inline;
+    };
+} ConstraintRef;
 
 typedef struct {
     Span span;
     AstName name;
-    Array /* Path */ constraints;
+    Array(ConstraintRef) constraints;
 } GenericParam;
 
 typedef struct {
@@ -71,37 +88,33 @@ typedef enum {
 struct Type {
     Span span;
     TypeKind kind;
+    bool mutable;
 
     union {
         struct {
             Path path;
-            Array /* Type * */ args;
+            Array(Type *) args;
         } named;
 
         struct {
             Type *pointee;
-            bool mutable;
             bool optional;
         } pointer;
 
         struct {
             Type *element;
 
-            /*
-             * false: T[]
-             * true:  T[n]
-             */
             bool sized;
             Expr *length;
         } array;
 
         struct {
             Type *ret;
-            Array /* Type * */ params;
+            Array(Type *) params;
         } fn;
 
         struct {
-            Array /* Type * */ members;
+            Array(Type *) members;
         } sum;
 
         struct {
@@ -212,9 +225,6 @@ typedef enum {
 struct Expr {
     Span span;
 
-    /*
-     * `$expr`
-     */
     bool comptime;
 
     ExprKind kind;
@@ -246,12 +256,8 @@ struct Expr {
         struct {
             Expr *callee;
 
-            /*
-             * foo(x)
-             * foo<int>(x)
-             */
-            Array /* Type * */ generic_args;
-            Array /* Expr * */ args;
+            Array(Type *) generic_args;
+            Array(Expr *) args;
         } call;
 
         struct {
@@ -271,7 +277,7 @@ struct Expr {
 
         struct {
             Path name;
-            Array /* Expr * */ args;
+            Array(Expr *) args;
         } intrinsic;
 
         struct {
@@ -279,20 +285,12 @@ struct Expr {
         } bubble;
 
         struct {
-            /*
-             * e.g.:
-             *
-             * Foo {
-             *     x = 1,
-             *     y = 2,
-             * }
-             */
-            Array /* InitField */ fields;
+            Array(InitField) fields;
         } init;
 
         struct {
-            Array /* GenericParam */ generics;
-            Array /* Param */ params;
+            Array(GenericParam) generics;
+            Array(Param) params;
             Type *ret;
             Stmt *body;
         } lambda;
@@ -327,9 +325,6 @@ typedef enum {
 struct Stmt {
     Span span;
 
-    /*
-     * `$stmt`
-     */
     bool comptime;
 
     StmtKind kind;
@@ -344,7 +339,7 @@ struct Stmt {
         } expr;
 
         struct {
-            Array /* Stmt * */ stmts;
+            Array(Stmt *) stmts;
         } block;
 
         struct {
@@ -371,7 +366,7 @@ struct Stmt {
 
         struct {
             Expr *expr;
-            Array /* MatchCase */ cases;
+            Array(MatchCase) cases;
         } match;
 
         struct {
@@ -404,7 +399,7 @@ struct TypeDecl {
     Span span;
 
     AstName name;
-    Array /* GenericParam */ generics;
+    Array(GenericParam) generics;
 
     TypeDefKind kind;
 
@@ -412,16 +407,16 @@ struct TypeDecl {
         Type *alias;
 
         struct {
-            Array /* Field */ fields;
+            Array(Field) fields;
         } structure;
 
         struct {
-            Array /* Field */ fields;
+            Array(Field) fields;
         } union_;
 
         struct {
             Type *underlying;
-            Array /* EnumItem */ items;
+            Array(EnumItem) items;
         } enumeration;
     };
 };
@@ -440,8 +435,8 @@ struct FnDecl {
 
     AstName name;
 
-    Array /* GenericParam */ generics;
-    Array /* Param */ params;
+    Array(GenericParam) generics;
+    Array(Param) params;
 
     Type *ret;
     Stmt *body;
@@ -460,7 +455,7 @@ struct ConstraintDecl {
 
     AstName name;
 
-    Array /* ConstraintItem */ items;
+    Array(ConstraintItem) items;
 };
 
 typedef enum {
@@ -481,20 +476,6 @@ typedef struct {
     };
 } ConstraintItem;
 
-struct ConstraintMethod {
-    AstName name;
-
-    Array /* GenericParam */ generics;
-    Array /* Param */ params;
-
-    Type *ret;
-};
-
-struct ConstraintField {
-    Type *type;
-    AstName name;
-};
-
 struct Decl {
     Span span;
 
@@ -507,7 +488,7 @@ struct Decl {
         DECL_CONSTRAINT,
     } kind;
 
-    Array /* Attribute */ attrs;
+    Array(Attribute) attrs;
 
     union {
         IncludeDecl include;
@@ -522,7 +503,7 @@ struct Module {
     Span span;
 
     Path path;
-    Array /* Decl * */ decls;
+    Array(Decl *) decls;
 };
 
 #endif /* AST_H */

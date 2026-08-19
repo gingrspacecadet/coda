@@ -63,6 +63,7 @@ static TokenType check_keyword(const char *text, size_t length) {
     KW("module", TK_KW_MODULE);
     KW("include", TK_KW_INCLUDE);
     KW("fn", TK_KW_FN);
+    KW("constraint", TK_KW_CONSTRAINT);
     KW("return", TK_KW_RETURN);
     KW("struct", TK_KW_STRUCT);
     KW("union", TK_KW_UNION);
