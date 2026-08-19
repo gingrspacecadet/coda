@@ -1,0 +1,177 @@
+
+module =
+    "module", path, ";",
+    { declaration }
+;
+
+declaration =
+    { attribute },
+    (
+        include_decl
+      | function_decl
+      | variable_decl
+    )
+;
+
+attribute = 
+    "@", identifier,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
+
+include_decl =
+    "include",
+    path,
+    [ "=", identifier ],
+    ";"
+;
+
+variable_decl =
+    type_expr,
+    identifier,
+    [ "=", expression ],
+    ";"
+;
+
+function_decl =
+    "fn",
+    type_expr,
+    identifier,
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    block_stmt
+;
+
+parameter_spec =
+    type_expr,
+    identifier
+;
+
+statement =
+    (
+        expression
+      | declaration
+      | block_stmt
+      | if_stmt
+      | for_stmt
+      | while_stmt
+      | break_stmt
+      | continue_stmt
+      | match_stmt
+      | defer_stmt
+    ),
+    ";"
+;
+
+block_stmt = 
+    "{", statement, "}"
+;
+
+if_stmt = 
+    "if",
+    "(", expression, ")",
+    statement,
+    [
+        "else",
+        statement
+    ]
+;
+
+for_stmt = 
+    "for",
+    "(",
+    statement,
+    expression, ";",
+    expression,
+    ")",
+    statement
+;
+
+while_stmt = 
+    "while",
+    "(", expression, ")",
+    statement
+;
+
+break_stmt = 
+    "break",
+    [ expression ]
+;
+
+continue_stmt = 
+    "break",
+    [ expression ]
+;
+
+match_stmt =
+    "match",
+    "(", expression, ")",
+    "{",
+    { match_part },
+    "}",
+;
+
+match_part =
+    type_expr,
+    [ identifier ],
+    block_stmt,
+;
+
+defer_stmt = 
+    "break",
+    [ expression ]
+;
+expression = 
+        identifier
+      | literal
+      | initializer
+      | binary_expr
+      | unary_expr
+      | conditional_expr
+      | call_expr
+      | index_expr
+      | member_expr
+      | pointer_member_expr
+      | cast_expr
+      | intrinsic_expr
+      | lambda_expr
+      | code_expr
+      | splice_expr
+;
+
+initializer = "{"
+
+literal = 
+        integer_literal
+      | float_literal
+      | boolean_literal
+      | char_literal
+      | string_literal
+;
+
+path =
+    identifier,
+    { "::", identifier }
+;
+
+identifier = (* defined in tokenisation *);
+
+integer_literal = (* defined in tokenisation *);
+
+float_literal = (* defined in tokenisation *);
+
+boolean_literal = (* defined in tokenisation *);
+
+char_literal = (* defined in tokenisation *);
+
+string_literal = (* defined in tokenisation *);

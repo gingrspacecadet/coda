@@ -261,13 +261,16 @@ Decimal literals:
 0
 42
 1_000_000
+1e6
+100e-1
 ```
 
 Hexadecimal:
 
 ```coda
 0xFF
-0xDEAD_BEEF
+-0xDEAD_BEEF
+0x1Ae2B
 ```
 
 Binary:
@@ -284,6 +287,8 @@ Octal:
 
 Underscores may separate digits but may not occur at the beginning or end of a literal, immediately after a radix prefix, or consecutively.
 
+Exponential literals may be provided using the letter "e" or "E" followed by more digits. A negative sign is permitted after the "e" if it identifies an integer.
+
 Negative integer literals are formed with the unary `-` operator. `-42` is not itself an integer literal.
 
 ### 2.12 Floating-Point Literals
@@ -295,7 +300,7 @@ A floating-point literal contains either a decimal point or an exponent.
 1.5
 3.
 1e6
-6.022e23
+6.022E23
 ```
 
 Floating-point literals are initially untyped.
@@ -425,7 +430,6 @@ declaration =
     { attribute },
     (
         include_decl
-      | type_decl
       | function_decl
       | variable_decl
     )
@@ -445,51 +449,11 @@ include_decl =
     ;
 ```
 
-### 3.4 Type Declarations
-
-```ebnf
-type_decl =
-    "type",
-    identifier,
-    [ generic_parameters ],
-    "=",
-    type_definition,
-    ";"
-    ;
-```
-
-A type declaration may introduce:
-
-```coda
-type Int = int32;
-
-type Vec = struct {
-    int32 x;
-    int32 y;
-};
-
-type Result = union {
-    int32 value;
-    Error error;
-};
-```
-
-### 3.5 Type Definitions
-
-```ebnf
-type_definition =
-      type
-    | struct_definition
-    | union_definition
-    | enum_definition
-    ;
-```
-
-### 3.6 Variables
+### 3.4 Variable Declarations
 
 ```ebnf
 variable_decl =
-    type,
+    type_expr,
     identifier,
     [ "=", expression ],
     ";"
@@ -498,21 +462,44 @@ variable_decl =
 
 Variables are immutable by default. Mutability is expressed by the type/declaration syntax defined in the Types chapter.
 
-### 3.7 Struct Definitions
-
+### 3.5 Function Declarations
 ```ebnf
-struct_definition =
-    "struct",
-    "{",
-    { field_decl },
+function_decl =
+    "fn",
+    type_expr,
+    identifier,
+    "(",
+    { parameter_spec },
+    ")",
+    "{"
+    { statement },
     "}"
     ;
 
-field_decl =
-    type,
-    identifier,
-    ";"
+parameter_spec =
+    type_expr,
+    identifier
     ;
+```
+
+### 3.6 Expressions
+
+```ebnf
+expression =
+    (
+        literal
+      | unary_expr
+      | binary_expr
+      | conditional_expr
+      | type_expr
+    )
+    ;
+```
+
+### 3.7 Struct Literals
+
+```ebnf
+
 ```
 
 ### 3.8 Union Definitions
@@ -597,8 +584,23 @@ pointer_modifier =
     ;
 
 array_modifier =
-      "[", "]"
-    | "[", integer_literal, "]"
+    [ "mut" ],
+    "[",
+    [ integer_literal ],
+    "]"
+    ;
+
+struct_literal =
+    "struct",
+    "{",
+    { field_decl },
+    "}"
+    ;
+
+field_decl =
+    type,
+    identifier,
+    ";"
     ;
 ```
 
