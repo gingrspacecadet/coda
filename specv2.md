@@ -420,7 +420,7 @@ The grammar describes syntax only. Semantic validity is specified separately.
 module =
     "module", path, ";",
     { declaration }
-    ;
+;
 ```
 
 ### 3.2 Declarations
@@ -433,12 +433,26 @@ declaration =
       | function_decl
       | variable_decl
     )
-    ;
+;
+```
+
+```ebnf
+attribute = 
+    "@", identifier,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
 ```
 
 A declaration may have zero or more attributes.
 
-### 3.3 Include Declarations
+#### 3.2.1 Include Declarations
 
 ```ebnf
 include_decl =
@@ -446,187 +460,213 @@ include_decl =
     path,
     [ "=", identifier ],
     ";"
-    ;
+;
 ```
 
-### 3.4 Variable Declarations
+#### 3.2.2 Variable Declarations
 
 ```ebnf
 variable_decl =
-    type_expr,
+    type,
     identifier,
     [ "=", expression ],
     ";"
-    ;
+;
 ```
 
 Variables are immutable by default. Mutability is expressed by the type/declaration syntax defined in the Types chapter.
 
-### 3.5 Function Declarations
+#### 3.2.3 Type Declarations
+
+```ebnf
+type_decl =
+    "type",
+    identifier,
+    [ "=", type ],
+    ";"
+;
+```
+
+#### 3.2.4 Constraint Declarations
+
+```ebnf
+constraint_decl =
+    "constraint",
+    identifier,
+    [ "=", constraint ],
+    ";"
+;
+```
+
+#### 3.2.5 Function Declarations
+
 ```ebnf
 function_decl =
+    [ "$" ],
     "fn",
-    type_expr,
+    type,
     identifier,
+    [
+        "<",
+        generic_field,
+        { ",", generic_field },
+        ">"
+    ],
     "(",
-    { parameter_spec },
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
     ")",
-    "{"
+    "{",
     { statement },
     "}"
-    ;
+;
+
+generic_field =
+    identifier,
+    [ ":", constraint ]
+;
 
 parameter_spec =
-    type_expr,
+    type,
     identifier
-    ;
+;
 ```
 
-### 3.6 Expressions
+### 3.3 Statements
 
 ```ebnf
-expression =
+statement =
+    [ "$" ],
     (
-        literal
-      | unary_expr
-      | binary_expr
-      | conditional_expr
-      | type_expr
-    )
-    ;
-```
-
-### 3.7 Struct Literals
-
-```ebnf
-
-```
-
-### 3.8 Union Definitions
-
-```ebnf
-union_definition =
-    "union",
-    "{",
-    { field_decl },
-    "}"
-    ;
-```
-
-### 3.9 Enum Definitions
-
-```ebnf
-enum_definition =
-    "enum",
-    [ ":", type ],
-    "{",
-    { enum_value },
-    "}"
-    ;
-
-enum_value =
-    identifier,
-    [ "=", expression ],
-    ","
-    ;
-```
-
-The optional underlying type specifies the representation of the enum.
-
-### 3.10 Types
-
-```ebnf
-type =
-    type_base,
-    { type_modifier }
-    ;
-
-type_base =
-      path
-    | generic_type
-    | function_type
-    ;
-
-generic_type =
-    path,
-    "<",
-    type_list,
-    ">"
-    ;
-
-type_list =
-    type,
-    { ",", type }
-    ;
-
-function_type =
-    "fn",
-    type,
-    "(",
-    [ parameter_types ],
-    ")"
-    ;
-
-parameter_types =
-    type,
-    { ",", type }
-    ;
-
-type_modifier =
-      pointer_modifier
-    | array_modifier
-    ;
-
-pointer_modifier =
-    [ "mut" ],
-    "*",
-    [ "?" ]
-    ;
-
-array_modifier =
-    [ "mut" ],
-    "[",
-    [ integer_literal ],
-    "]"
-    ;
-
-struct_literal =
-    "struct",
-    "{",
-    { field_decl },
-    "}"
-    ;
-
-field_decl =
-    type,
-    identifier,
+        expression
+      | declaration
+      | block_stmt
+      | if_stmt
+      | for_stmt
+      | while_stmt
+      | break_stmt
+      | continue_stmt
+      | match_stmt
+      | defer_stmt
+    ),
     ";"
-    ;
+;
 ```
 
-T[] denotes a slice.
+#### 3.3.1 Expression Statement
 
-T[n] denotes a fixed-size array.
-
-An optional pointer is written T*?.
-
-General optional values are represented by sum types, not by ?.
-
-For example:
-
-```coda
-(string | none)
+```ebnf
+expr_stmt =
+    expression
+;
 ```
 
-is a sum type.
+#### 3.3.2 Block Statement
 
-### 3.11 Paths
+```ebnf
+block_stmt = 
+    "{", statement, "}"
+;
+```
+
+#### 3.3.3 If Statement
+
+```ebnf
+if_stmt = 
+    "if",
+    "(", expression, ")",
+    statement,
+    [
+        "else",
+        statement
+    ]
+;
+```
+
+#### 3.3.4 For Statement
+
+```ebnf
+for_stmt = 
+    "for",
+    "(",
+    statement,
+    expression, ";",
+    expression,
+    ")",
+    statement
+;
+```
+
+#### 3.3.5 While Statement
+
+```ebnf
+while_stmt = 
+    "while",
+    "(", expression, ")",
+    statement
+;
+```
+
+#### 3.3.6 Break Statement
+
+```ebnf
+break_stmt =
+    "break",
+    [ expression ]
+;
+```
+
+#### 3.3.7 Continue Statement
+
+```ebnf
+continue_stmt =
+    "break",
+    [ expression ]
+;
+```
+
+#### 3.3.8 Match Statement
+
+```ebnf
+match_stmt =
+    "match",
+    "(", expression, ")",
+    "{",
+    { match_part },
+    "}",
+;
+
+match_part =
+    type_expr,
+    [ identifier ],
+    block_stmt,
+;
+```
+
+#### 3.3.9 Defer Statement
+
+```ebnf
+defer_stmt =
+    "defer",
+    [ expression ]
+;
+```
+
+### 3.4 Expressions
+
+### 3.5 Types
+
+### 3.6 Constraints
+
+### 3.7 Paths
 
 ```ebnf
 path =
     identifier,
     { "::", identifier }
-    ;
+;
 ```
 
 Paths are used to refer to declarations across module boundaries and to qualify names.
