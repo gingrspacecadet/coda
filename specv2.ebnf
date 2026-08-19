@@ -10,6 +10,8 @@ declaration =
         include_decl
       | function_decl
       | variable_decl
+      | type_decl
+      | constraint_decl
     )
 ;
 
@@ -39,7 +41,22 @@ variable_decl =
     ";"
 ;
 
+type_decl =
+    "type",
+    identifier,
+    [ "=", type_expr ],
+    ";"
+;
+
+constraint_decl =
+    "constraint",
+    identifier,
+    [ "=", constraint_expr ],
+    ";"
+;
+
 function_decl =
+    [ "$" ],
     "fn",
     type_expr,
     identifier,
@@ -49,7 +66,9 @@ function_decl =
         { ",", parameter_spec }
     ],
     ")",
-    block_stmt
+    "{",
+    { statement },
+    "}"
 ;
 
 parameter_spec =
@@ -103,12 +122,12 @@ while_stmt =
     statement
 ;
 
-break_stmt = 
+break_stmt =
     "break",
     [ expression ]
 ;
 
-continue_stmt = 
+continue_stmt =
     "break",
     [ expression ]
 ;
@@ -127,36 +146,253 @@ match_part =
     block_stmt,
 ;
 
-defer_stmt = 
-    "break",
+defer_stmt =
+    "defer",
     [ expression ]
 ;
 expression = 
-        identifier
-      | literal
+        literal
       | initializer
-      | binary_expr
+      | parenthesised_expr
       | unary_expr
+      | binary_expr
       | conditional_expr
       | call_expr
       | index_expr
       | member_expr
-      | pointer_member_expr
       | cast_expr
       | intrinsic_expr
       | lambda_expr
       | code_expr
       | splice_expr
+      (* | type_expr *)
+      (* | constraint_expr *)
 ;
 
-initializer = "{"
-
 literal = 
-        integer_literal
+        keyword_literal
+      | integer_literal
       | float_literal
       | boolean_literal
       | char_literal
       | string_literal
+      (* these would go in type_expr *)
+      | struct_literal
+      | union_literal
+      | enum_literal
+;
+
+(* to make it easier to change later *)
+type_expr = expression;
+constraint_expr = expression;
+
+keyword_literal = 
+        "null"
+      | "true" | "false"
+      (* these would go in type_expr *)
+      | "none"
+      | "bool"
+      | integer_type_literal
+      | "float16" | "float32" | "float64"
+      | "any"
+;
+
+integer_type_literal =
+      | "int8" | "int16" | "int32" | "int64"
+      | "uint8" | "uint16" | "uint32" | "uint64"
+;
+
+struct_literal = 
+    "struct",
+    [ ":", constraint_expr ],
+    "{",
+    { struct_field },
+    "}"
+;
+
+struct_field = 
+    type_expr,
+    identifier
+;
+
+union_literal = 
+    "union",
+    "{",
+    { struct_field },
+    "}"
+;
+
+union_field = 
+    type_expr,
+    identifier
+;
+
+enum_literal = 
+    "enum",
+    [ ":", integer_type_literal ],
+    "{",
+    { enum_value },
+    "}"
+;
+
+enum_value =
+    identifier,
+    [ "=", expression ]
+;
+
+initializer = 
+    "{", { init_field }, "}"
+;
+
+init_field = 
+    [
+        ".",
+        ( 
+            identifier
+            |
+            "[", expression, "]"
+        ),
+        "="
+    ],
+    expression
+;
+
+parenthesised_expr =
+    "(", expression, ")"
+;
+
+unary_expr =
+        prefix_unary_expr
+      | postfix_unary_expr
+;
+
+prefix_unary_expr = 
+    prefix_unary_op, expression
+;
+
+prefix_unary_op =
+        "+" | "-"
+      | "++" | "--"
+      | "~"
+      | "!"
+      | "*" | "&"
+      | "mut"
+;
+
+postfix_unary_expr = 
+    expression, postfix_unary_op
+;
+
+postfix_unary_op =
+        "++"
+      | "--"
+      | "?"
+      | (
+            [ "mut" ],
+            "*",
+        )
+      | (
+            [ "mut" ],
+            "[",
+            [ expression ],
+            "]"
+        )
+;
+
+binary_expr =
+    expression,
+    binary_op,
+    expression
+;
+
+binary_op = 
+        "+" | "-" | "*" | "/" | "%"
+      | "&" | "|" | "^" | "~&" | "~|" | "<<" | ">>" | ">>>"
+      | "&&" | "||" | "!&" | "!|"
+      | "==" | "!=" | "<" | "<=" | ">" | ">="
+      | "="
+      | "+=" | "-=" | "*=" | "/=" | "%="
+      | "&=" | "|=" | "^=" | "~&=" | "~|=" | "<<=" | ">>=" | ">>>="
+      | "&&=" | "||=" | "!&=" | "!|="
+;
+
+conditional_expr =
+    expression,
+    "?",
+    expression,
+    ":",
+    expression
+;
+
+call_expr = 
+    expression,
+    "(",
+    [
+        expression,
+        { ",", expression }
+    ],
+    ")"
+;
+
+index_expr = 
+    expression,
+    "[",
+    expression,
+    "]"
+;
+
+member_expr =
+    expression,
+    ".",
+    identifier
+;
+
+cast_expr =
+    "(",
+    type_expr,
+    ")",
+    expression,
+;
+
+intrinsic_expr =
+    "#",
+    path,
+    "(",
+    [
+        expression,
+        { ",", expression }
+    ],
+    ")"
+;
+
+lambda_expr =
+    [ "$" ],
+    "fn",
+    type_expr,
+    identifier,
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    "{",
+    { statement },
+    "}"
+;
+
+code_expr = 
+    "#",
+    "{",
+    (* tbd *)
+    "}"
+;
+
+splice_expr = 
+    "#",
+    "(",
+    expression,
+    ")"
 ;
 
 path =
@@ -164,14 +400,16 @@ path =
     { "::", identifier }
 ;
 
-identifier = (* defined in tokenisation *);
+identifier = ? defined in lexing ?;
 
-integer_literal = (* defined in tokenisation *);
+null_literal = ? defined in lexing ?;
 
-float_literal = (* defined in tokenisation *);
+integer_literal = ? defined in lexing ?;
 
-boolean_literal = (* defined in tokenisation *);
+float_literal = ? defined in lexing ?;
 
-char_literal = (* defined in tokenisation *);
+boolean_literal = ? defined in lexing ?;
 
-string_literal = (* defined in tokenisation *);
+char_literal = ? defined in lexing ?;
+
+string_literal = ? defined in lexing ?;
