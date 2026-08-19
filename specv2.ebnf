@@ -181,6 +181,7 @@ expression =
       | index_expr
       | member_expr
       | cast_expr
+      | deref_expr
       | intrinsic_expr
       | bubble_expr
       | lambda_expr
@@ -221,14 +222,15 @@ parenthesised_expr =
 ;
 
 unary_expr =
-    unary_op, expression
+    unary_op,
+    expression
 ;
 
 unary_op =
         "+" | "-"
       | "~"
       | "!"
-      | "*" | "&"
+      | "&"
 ;
 
 binary_expr =
@@ -261,6 +263,7 @@ lvalue =
         identifier
       | member_expr
       | index_expr
+      | deref_expr
 ;
 
 conditional_expr =
@@ -299,6 +302,11 @@ cast_expr =
     type,
     ")",
     expression,
+;
+
+deref_expr = 
+    "*",
+    expression
 ;
 
 intrinsic_expr =
