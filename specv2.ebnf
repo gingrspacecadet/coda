@@ -44,6 +44,7 @@ variable_decl =
 type_decl =
     "type",
     identifier,
+    [ generic_decl_item ],
     [ "=", type ],
     ";"
 ;
@@ -51,6 +52,7 @@ type_decl =
 constraint_decl =
     "constraint",
     identifier,
+    [ generic_decl_item ],
     [ "=", constraint ],
     ";"
 ;
@@ -60,12 +62,7 @@ function_decl =
     "fn",
     type,
     identifier,
-    [
-        "<",
-        generic_field,
-        { ",", generic_field },
-        ">"
-    ],
+    [ generic_decl_item ],
     "(",
     [
         parameter_spec,
@@ -77,14 +74,24 @@ function_decl =
     "}"
 ;
 
-generic_field =
-    identifier,
-    [ ":", constraint ]
-;
-
 parameter_spec =
     type,
     identifier
+;
+
+generic_decl_item = 
+    "<",
+    generic_field,
+    { ",", generic_field },
+    ">"
+;
+
+generic_field = 
+    identifier,
+    [
+        ":",
+        constraint,
+    ]
 ;
 
 statement =
@@ -199,6 +206,18 @@ literal =
       | char_literal
       | string_literal
 ;
+
+null_literal = ? defined in tokenisation ?;
+
+integer_literal = ? defined in tokenisation ?;
+
+float_literal = ? defined in tokenisation ?;
+
+boolean_literal = ? defined in tokenisation ?;
+
+char_literal = ? defined in tokenisation ?;
+
+string_literal = ? defined in tokenisation ?;
 
 initializer = 
     "{", { init_field }, "}"
@@ -329,13 +348,7 @@ lambda_expr =
     [ "$" ],
     "fn",
     type,
-    identifier,
-    [
-        "<",
-        generic_field,
-        { ",", generic_field },
-        ">"
-    ],
+    [ generic_decl_item ],
     "(",
     [
         parameter_spec,
@@ -363,10 +376,13 @@ splice_expr =
 
 type =
         type_literal
+      | identifier
+      | generic_type
       | intrinsic_type
       | mutable_type
       | pointer_type
       | array_type
+      | function_type
       | struct_type
       | union_type
       | enum_type
@@ -384,6 +400,14 @@ type_literal =
 integer_type_literal =
       | "int8" | "int16" | "int32" | "int64"
       | "uint8" | "uint16" | "uint32" | "uint64"
+;
+
+generic_type =
+    type,
+    "<",
+    type,
+    { ",", type },
+    ">"
 ;
 
 intrinsic_type =
@@ -409,6 +433,18 @@ array_type =
     "[",
     [ expression ],
     "]"
+;
+
+function_type =
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
 ;
 
 struct_type = 
@@ -450,14 +486,6 @@ enum_value =
     [ "=", expression ]
 ;
 
-generic_type =
-    type,
-    "<",
-    type,
-    { ",", type },
-    ">"
-;
-
 constraint = ? tbd ?;
 
 path =
@@ -466,15 +494,3 @@ path =
 ;
 
 identifier = ? defined in tokenisation ?;
-
-null_literal = ? defined in tokenisation ?;
-
-integer_literal = ? defined in tokenisation ?;
-
-float_literal = ? defined in tokenisation ?;
-
-boolean_literal = ? defined in tokenisation ?;
-
-char_literal = ? defined in tokenisation ?;
-
-string_literal = ? defined in tokenisation ?;
