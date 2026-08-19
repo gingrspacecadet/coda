@@ -386,7 +386,7 @@ type =
       | struct_type
       | union_type
       | enum_type
-      | generic_type
+      | sum_type
 ;
 
 type_literal =
@@ -484,6 +484,12 @@ enum_type =
 enum_value =
     identifier,
     [ "=", expression ]
+;
+
+sum_type =
+    type,
+    "|", type,
+    { "|", type}
 ;
 
 constraint = ? tbd ?;

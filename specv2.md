@@ -957,7 +957,7 @@ type =
       | struct_type
       | union_type
       | enum_type
-      | generic_type
+      | sum_type
 ;
 ```
 
@@ -1095,6 +1095,16 @@ enum_type =
 enum_value =
     identifier,
     [ "=", expression ]
+;
+```
+
+#### 3.5.11 Sum Types
+
+```ebnf
+sum_type =
+    type,
+    "|", type,
+    { "|", type}
 ;
 ```
 
@@ -1466,12 +1476,18 @@ uint8
 uint16
 uint32
 uint64
+
+float16
+float32
+float64
 ```
 
 The language also provides:
 
 ```text
+none
 bool
+any
 ```
 
 Additional implementation-defined integer types may be provided by a target or standard library where specified.
