@@ -378,6 +378,11 @@ integer_type_literal =
       | "uint8" | "uint16" | "uint32" | "uint64"
 ;
 
+intrinsic_type =
+    "#",
+    path
+;
+
 mutable_type = 
     "mut",
     type
