@@ -107,5 +107,5 @@ fn bool is_absolute<T: GenericString>(T* path) {
 
 @export
 fn bool is_relative<T: GenericString>(T* path) {
-    return !@inline(is_absolute(path));
+    return !#inline(is_absolute(path));
 }
