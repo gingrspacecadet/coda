@@ -157,14 +157,12 @@ Fields:
 
 Fields:
 
-uint8 backing_type;
+#type* backing_type;
 (struct {
     string* name;
     backing_type value;
 })[] members;
 ```
-
-The `backing_type` is specified the same as the type kinds, it must represent a primitive integer type, so one of 0x02 to 0x0E.
 
 ### Sum types
 
