@@ -451,11 +451,11 @@ struct_type =
     "struct",
     [ ":", constraint ],
     "{",
-    { struct_type_field },
+    { struct_member },
     "}"
 ;
 
-struct_type_field = 
+struct_member = 
     type,
     identifier,
     ";"
@@ -464,11 +464,11 @@ struct_type_field =
 union_type = 
     "union",
     "{",
-    { union_type_field },
+    { union_member },
     "}"
 ;
 
-union_type_field = 
+union_member = 
     type,
     identifier
 ;
@@ -492,7 +492,33 @@ sum_type =
     { "|", type}
 ;
 
-constraint = ? tbd ?;
+constraint =
+    "{",
+    {
+        constraint_member
+      | constraint_method
+      | ( expression, "," )
+    }
+;
+
+constraint_member = 
+    type,
+    identifier,
+    ";"
+;
+
+constraint_method =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ":"
+;
 
 path =
     identifier,

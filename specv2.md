@@ -693,7 +693,6 @@ expression =
       | code_expr
       | splice_expr
       | type
-      | constraint
 ;
 ```
 
@@ -1109,6 +1108,36 @@ sum_type =
 ```
 
 ### 3.6 Constraints
+
+```ebnf
+constraint =
+    "{",
+    {
+        constraint_member
+      | constraint_method
+      | ( expression, "," )
+    }
+;
+
+constraint_member = 
+    type,
+    identifier,
+    ";"
+;
+
+constraint_method =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ":"
+;
+```
 
 ### 3.7 Paths
 
