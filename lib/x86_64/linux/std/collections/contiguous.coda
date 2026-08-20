@@ -155,7 +155,7 @@ fn (T[] | Error::OutOfBounds) Contiguous<T>.view(Contiguous<T>* this, ssize star
 }
 
 @export
-fn T[] Contiguous<T>.items(Contiguous<T>* this) {
+fn T[] Contiguous<T>.to_array(Contiguous<T>* this) {
     return (T[]){.len = end - start, .ptr = this.ptr + start};
 }
 

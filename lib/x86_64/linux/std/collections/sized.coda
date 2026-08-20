@@ -3,5 +3,5 @@ module std::collections;
 @export
 constraint Sized<T> = {
     usize len;
-    fn T[] items();
+    fn T[] to_array();
 };
