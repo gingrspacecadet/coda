@@ -15,7 +15,7 @@ declaration =
     )
 ;
 
-attribute = 
+attribute =
     "@", identifier,
     [
         "(",
@@ -89,14 +89,14 @@ parameter_spec =
     identifier
 ;
 
-generic_decl_item = 
+generic_decl_item =
     "<",
     generic_field,
     { ",", generic_field },
     ">"
 ;
 
-generic_field = 
+generic_field =
     identifier,
     [
         ":",
@@ -125,11 +125,11 @@ expr_stmt =
     expression
 ;
 
-block_stmt = 
+block_stmt =
     "{", statement, "}"
 ;
 
-if_stmt = 
+if_stmt =
     "if",
     "(", expression, ")",
     statement,
@@ -139,7 +139,7 @@ if_stmt =
     ]
 ;
 
-for_stmt = 
+for_stmt =
     "for",
     "(",
     statement,
@@ -149,7 +149,7 @@ for_stmt =
     statement
 ;
 
-while_stmt = 
+while_stmt =
     "while",
     "(", expression, ")",
     statement
@@ -185,7 +185,7 @@ defer_stmt =
 ;
 
 
-expression = 
+expression =
         literal
       | identifier
       | initializer
@@ -208,7 +208,7 @@ expression =
       | constraint
 ;
 
-literal = 
+literal =
         null_literal
       | integer_literal
       | float_literal
@@ -229,11 +229,11 @@ char_literal = ? defined in tokenisation ?;
 
 string_literal = ? defined in tokenisation ?;
 
-initializer = 
+initializer =
     "{", { init_field }, "}"
 ;
 
-init_field = 
+init_field =
     [
         ".",
         ( 
@@ -268,7 +268,7 @@ binary_expr =
     expression
 ;
 
-binary_op = 
+binary_op =
         "+" | "-" | "*" | "/" | "%"
       | "&" | "|" | "^" | "~&" | "~|" | "<<" | ">>" | ">>>"
       | "&&" | "||" | "!&" | "!|"
@@ -303,7 +303,7 @@ conditional_expr =
     expression
 ;
 
-call_expr = 
+call_expr =
     expression,
     "(",
     [
@@ -313,7 +313,7 @@ call_expr =
     ")"
 ;
 
-index_expr = 
+index_expr =
     expression,
     "[",
     expression,
@@ -333,7 +333,7 @@ cast_expr =
     expression,
 ;
 
-deref_expr = 
+deref_expr =
     "*",
     expression
 ;
@@ -349,7 +349,7 @@ intrinsic_expr =
     ")"
 ;
 
-bubble_expr = 
+bubble_expr =
     expression,
     "?"
 ;
@@ -370,14 +370,14 @@ lambda_expr =
     "}"
 ;
 
-code_expr = 
+code_expr =
     "#",
     "{",
     (* tbd *)
     "}"
 ;
 
-splice_expr = 
+splice_expr =
     "#",
     "(",
     expression,
@@ -387,8 +387,8 @@ splice_expr =
 type =
         type_literal
       | identifier
-      | generic_type
       | intrinsic_type
+      | generic_type
       | mutable_type
       | pointer_type
       | array_type
@@ -401,6 +401,7 @@ type =
 
 type_literal =
         "none"
+      | "null"
       | "bool"
       | integer_type_literal
       | "float16" | "float32" | "float64"
@@ -410,6 +411,12 @@ type_literal =
 integer_type_literal =
       | "int8" | "int16" | "int32" | "int64"
       | "uint8" | "uint16" | "uint32" | "uint64"
+      | "ssize" | "usize"
+;
+
+intrinsic_type =
+    "#",
+    path
 ;
 
 generic_type =
@@ -420,24 +427,19 @@ generic_type =
     ">"
 ;
 
-intrinsic_type =
-    "#",
-    path
-;
-
-mutable_type = 
+mutable_type =
     "mut",
     type
 ;
 
-pointer_type = 
+pointer_type =
     type,
     [ "mut" ],
     "*",
     [ "?" ]
 ;
 
-array_type = 
+array_type =
     type,
     [ "mut" ],
     "[",
@@ -457,7 +459,7 @@ function_type =
     ")",
 ;
 
-struct_type = 
+struct_type =
     "struct",
     [ ":", constraint ],
     "{",
@@ -465,25 +467,25 @@ struct_type =
     "}"
 ;
 
-struct_member = 
+struct_member =
     type,
     identifier,
     ";"
 ;
 
-union_type = 
+union_type =
     "union",
     "{",
     { union_member },
     "}"
 ;
 
-union_member = 
+union_member =
     type,
     identifier
 ;
 
-enum_type = 
+enum_type =
     "enum",
     [ ":", integer_type_literal ],
     "{",
@@ -525,7 +527,7 @@ constraint =
     )
 ;
 
-constraint_member = 
+constraint_member =
     type,
     identifier,
     ";"

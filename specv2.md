@@ -437,7 +437,7 @@ declaration =
 ```
 
 ```ebnf
-attribute = 
+attribute =
     "@", identifier,
     [
         "(",
@@ -539,14 +539,14 @@ parameter_spec =
 #### 3.2.6 Generic Declaration Items
 
 ```ebnf
-generic_decl_item = 
+generic_decl_item =
     "<",
     generic_field,
     { ",", generic_field },
     ">"
 ;
 
-generic_field = 
+generic_field =
     identifier,
     [
         ":",
@@ -587,7 +587,7 @@ expr_stmt =
 #### 3.3.2 Block Statement
 
 ```ebnf
-block_stmt = 
+block_stmt =
     "{", statement, "}"
 ;
 ```
@@ -595,7 +595,7 @@ block_stmt =
 #### 3.3.3 If Statement
 
 ```ebnf
-if_stmt = 
+if_stmt =
     "if",
     "(", expression, ")",
     statement,
@@ -609,7 +609,7 @@ if_stmt =
 #### 3.3.4 For Statement
 
 ```ebnf
-for_stmt = 
+for_stmt =
     "for",
     "(",
     statement,
@@ -623,7 +623,7 @@ for_stmt =
 #### 3.3.5 While Statement
 
 ```ebnf
-while_stmt = 
+while_stmt =
     "while",
     "(", expression, ")",
     statement
@@ -678,7 +678,7 @@ defer_stmt =
 ### 3.4 Expressions
 
 ```ebnf
-expression = 
+expression =
         literal
       | identifier
       | initializer
@@ -704,7 +704,7 @@ expression =
 #### 3.4.1 Literals
 
 ```ebnf
-literal = 
+literal =
         null_literal
       | integer_literal
       | float_literal
@@ -730,11 +730,11 @@ string_literal = ? defined in tokenisation ?;
 
 ```ebnf
 
-initializer = 
+initializer =
     "{", { init_field }, "}"
 ;
 
-init_field = 
+init_field =
     [
         ".",
         ( 
@@ -781,7 +781,7 @@ binary_expr =
     expression
 ;
 
-binary_op = 
+binary_op =
         "+" | "-" | "*" | "/" | "%"
       | "&" | "|" | "^" | "~&" | "~|" | "<<" | ">>" | ">>>"
       | "&&" | "||" | "!&" | "!|"
@@ -828,7 +828,7 @@ conditional_expr =
 #### 3.4.8 Call Expressions
 
 ```ebnf
-call_expr = 
+call_expr =
     expression,
     "(",
     [
@@ -842,7 +842,7 @@ call_expr =
 #### 3.4.9 Index Expressions
 
 ```ebnf
-index_expr = 
+index_expr =
     expression,
     "[",
     expression,
@@ -874,7 +874,7 @@ cast_expr =
 #### 3.4.12 Dereferencing Expressions
 
 ```ebnf
-deref_expr = 
+deref_expr =
     "*",
     expression
 ;
@@ -898,7 +898,7 @@ intrinsic_expr =
 #### 3.4.14 Bubble Expressions
 
 ```ebnf
-bubble_expr = 
+bubble_expr =
     expression,
     "?"
 ;
@@ -927,7 +927,7 @@ lambda_expr =
 #### 3.4.16 Code Expressions
 
 ```ebnf
-code_expr = 
+code_expr =
     "#",
     "{",
     (* tbd *)
@@ -938,7 +938,7 @@ code_expr =
 #### 3.4.17 Splice Expressions
 
 ```ebnf
-splice_expr = 
+splice_expr =
     "#",
     "(",
     expression,
@@ -952,8 +952,8 @@ splice_expr =
 type =
         type_literal
       | identifier
-      | generic_type
       | intrinsic_type
+      | generic_type
       | mutable_type
       | pointer_type
       | array_type
@@ -979,10 +979,20 @@ type_literal =
 integer_type_literal =
       | "int8" | "int16" | "int32" | "int64"
       | "uint8" | "uint16" | "uint32" | "uint64"
+      | "ssize" | "usize"
 ;
 ```
 
-#### 3.5.2 Generic Types
+#### 3.5.2 Intrinsic Types
+
+```ebnf
+intrinsic_type =
+    "#",
+    path
+;
+```
+
+#### 3.5.3 Generic Types
 
 ```ebnf
 generic_type =
@@ -994,19 +1004,10 @@ generic_type =
 ;
 ```
 
-#### 3.5.3 Intrinsic Types
-
-```ebnf
-intrinsic_type =
-    "#",
-    path
-;
-```
-
 #### 3.5.4 Mutable Types
 
 ```ebnf
-mutable_type = 
+mutable_type =
     "mut",
     type
 ;
@@ -1015,7 +1016,7 @@ mutable_type =
 #### 3.5.5 Pointer Types
 
 ```ebnf
-pointer_type = 
+pointer_type =
     type,
     [ "mut" ],
     "*",
@@ -1026,7 +1027,7 @@ pointer_type =
 #### 3.5.6 Array Types
 
 ```ebnf
-array_type = 
+array_type =
     type,
     [ "mut" ],
     "[",
@@ -1054,7 +1055,7 @@ function_type =
 #### 3.5.8 Structure Types
 
 ```ebnf
-struct_type = 
+struct_type =
     "struct",
     [ ":", constraint ],
     "{",
@@ -1062,7 +1063,7 @@ struct_type =
     "}"
 ;
 
-struct_type_field = 
+struct_type_field =
     type,
     identifier,
     ";"
@@ -1072,14 +1073,14 @@ struct_type_field =
 #### 3.5.9 Union Types
 
 ```ebnf
-union_type = 
+union_type =
     "union",
     "{",
     { union_type_field },
     "}"
 ;
 
-union_type_field = 
+union_type_field =
     type,
     identifier
 ;
@@ -1088,7 +1089,7 @@ union_type_field =
 #### 3.5.10 Enumerated Types
 
 ```ebnf
-enum_type = 
+enum_type =
     "enum",
     [ ":", integer_type_literal ],
     "{",
@@ -1138,7 +1139,7 @@ constraint =
     )
 ;
 
-constraint_member = 
+constraint_member =
     type,
     identifier,
     ";"
