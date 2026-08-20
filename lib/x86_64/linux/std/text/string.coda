@@ -13,27 +13,27 @@ type String = List<char>;
 
 @export
 fn none GenericString.to_lower(mut GenericString* this) {
-    #inline(this->map(to_lower));
+    #inline(this.map(to_lower));
 }
 
 @export
 fn none GenericString.to_upper(mut GenericString* this) {
-    #inline(this->map(to_upper));
+    #inline(this.map(to_upper));
 }
 
 @export
 fn none GenericString.capitalize(mut GenericString* this) {
-    if (this->len == 0) {
+    if (this.len == 0) {
         return;
     }
-    this->ptr[0] = this->ptr[0].to_upper();
+    this.ptr[0] = this.ptr[0].to_upper();
 }
 
 @export
 fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut GenericWString* out) {
     mut usize loc = 0;
-    for (mut usize i = 0; i < this->len; i++) {
-        wchar value = this->ptr[i];
+    for (mut usize i = 0; i < this.len; i++) {
+        wchar value = this.ptr[i];
         if (value < 0x80) {
             // do nothing
         } else if (value < 0xc0) {
@@ -42,7 +42,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
         } else if (value < 0xe0) {
             // one continuation byte
             value = (value & 0x1f) << 6;
-            uint8 a = this->ptr[i + 1];
+            uint8 a = this.ptr[i + 1];
             i++;
             if (!(a >= 0x80 && a < 0xc0)) {
                 // not a continuation byte
@@ -52,8 +52,8 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
         } else if (value < 0xf0) {
             // two continuation bytes
             value = (value & 0x1f) << 12;
-            uint8 a = this->ptr[i + 1];
-            uint8 b = this->ptr[i + 2];
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
             i += 2;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
                 // not a continuation byte
@@ -64,9 +64,9 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
         } else if (value < 0xf7) {
             // three continuation bytes
             value = (value & 0x1f) << 18;
-            uint8 a = this->ptr[i + 1];
-            uint8 b = this->ptr[i + 2];
-            uint8 c = this->ptr[i + 3];
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            uint8 c = this.ptr[i + 3];
             i += 3;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
                 // not a continuation byte
@@ -79,18 +79,18 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
             // invalid byte
             return Error::InvalidEncoding;
         }
-        if (loc >= out->len) {
+        if (loc >= out.len) {
             return Error::OutOfBounds;
         }
-        out->data[loc] = value;
+        out.data[loc] = value;
         loc++;
     }
 }
 
 @export
 fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut GenericAllocatorWString* out) {
-    for (mut usize i = 0; i < this->len; i++) {
-        wchar value = this->ptr[i];
+    for (mut usize i = 0; i < this.len; i++) {
+        wchar value = this.ptr[i];
         if (value < 0x80) {
             // do nothing
         } else if (value < 0xc0) {
@@ -99,7 +99,7 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
         } else if (value < 0xe0) {
             // one continuation byte
             value = (value & 0x1f) << 6;
-            uint8 a = this->ptr[i + 1];
+            uint8 a = this.ptr[i + 1];
             i++;
             if (!(a >= 0x80 && a < 0xc0)) {
                 // not a continuation byte
@@ -109,8 +109,8 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
         } else if (value < 0xf0) {
             // two continuation bytes
             value = (value & 0x1f) << 12;
-            uint8 a = this->ptr[i + 1];
-            uint8 b = this->ptr[i + 2];
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
             i += 2;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
                 // not a continuation byte
@@ -121,9 +121,9 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
         } else if (value < 0xf7) {
             // three continuation bytes
             value = (value & 0x1f) << 18;
-            uint8 a = this->ptr[i + 1];
-            uint8 b = this->ptr[i + 2];
-            uint8 c = this->ptr[i + 3];
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            uint8 c = this.ptr[i + 3];
             i += 3;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
                 // not a continuation byte
@@ -136,6 +136,6 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
             // invalid byte
             return Error::InvalidEncoding;
         }
-        out->push(value);
+        out.push(value);
     }
 }

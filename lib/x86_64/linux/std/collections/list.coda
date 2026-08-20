@@ -31,36 +31,36 @@ type List<T> = struct: AllocatorContiguous<T> {
 
 @export
 fn none List<T>.init<T>(mut List<T>* this, usize len) {
-    this->len = len;
-    this->capacity = normalize_capacity<T>(len);
-    this->data = this->allocator->alloc<T>(len);
+    this.len = len;
+    this.capacity = normalize_capacity<T>(len);
+    this.data = this.allocator.alloc<T>(len);
 }
 
 @export
 fn none List<T>..destroy<T>(mut List<T>* this) {
-    this->allocator->free(this->data);
+    this.allocator.free(this.data);
 }
 
 @export
 fn none List<T>.set_len(mut List<T>* this, usize new_len) {
-    if (new_len < this->len) {
+    if (new_len < this.len) {
         return;
     }
-    this->len = new_len;
+    this.len = new_len;
     usize new_capacity = normalize_capacity<T>(new_len);
-    if (this->capacity = new_capacity) {
+    if (this.capacity = new_capacity) {
         return;
     }
-    this->capacity = new_capacity;
-    this->data = this->allocator->realloc(this->data, new_capacity)?;
+    this.capacity = new_capacity;
+    this.data = this.allocator.realloc(this.data, new_capacity)?;
 }
 
 @export
 fn none List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
-    usize new_capacity = normalize_capacity<T>(this->len);
-    if (this->capacity = new_capacity) {
+    usize new_capacity = normalize_capacity<T>(this.len);
+    if (this.capacity = new_capacity) {
         return;
     }
-    this->capacity = new_capacity;
-    this->data = this->allocator->realloc(this->data, new_capacity)?;
+    this.capacity = new_capacity;
+    this.data = this.allocator.realloc(this.data, new_capacity)?;
 }

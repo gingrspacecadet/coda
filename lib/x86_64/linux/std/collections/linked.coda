@@ -36,18 +36,18 @@ constraint DoubleLinked<T>: AllocatorIndexed<T> = {
 
 @export
 fn T Linked<T>.get(Linked<T>* this, mut ssize index) {
-    mut usize index2 = this->resolve_index(index);
+    mut usize index2 = this.resolve_index(index);
     Node<T>* node = this.first;
     while (index2 > 0) {
-        node = node->next;
+        node = node.next;
         index2--;
     }
-    return node->value;
+    return node.value;
 }
 
 @export
 fn T* Linked<T>.get_ptr(Linked<T>* this, mut ssize index) {
-    mut usize index2 = this->resolve_index(index);
+    mut usize index2 = this.resolve_index(index);
     Node<T>* node = this.first;
     while (index2 > 0) {
         node = node.next;
@@ -58,10 +58,10 @@ fn T* Linked<T>.get_ptr(Linked<T>* this, mut ssize index) {
 
 @export
 fn T Linked<T>.set(Linked<T>* this, mut ssize index, T value) {
-    mut usize index2 = this->resolve_index(index);
-    Node<T>* node = this->first;
+    mut usize index2 = this.resolve_index(index);
+    Node<T>* node = this.first;
     while (index2 > 0) {
-        node = node->next;
+        node = node.next;
         index2--;
     }
     return node;
