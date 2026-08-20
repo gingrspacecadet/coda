@@ -20,7 +20,9 @@ constraint AllocatorContiguous<T> = struct: Contiguous<T> {
 };
 
 @export
-constraint NonAllocatorContiguous<T> = Contiguous<T> && !AllocatorContiguous<T>;
+constraint NonAllocatorContiguous<T> = struct {
+    Contiguous<T> && !AllocatorContiguous<T>;
+}
 
 @inline
 @export

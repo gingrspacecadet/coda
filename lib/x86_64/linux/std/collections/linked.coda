@@ -1,0 +1,42 @@
+module std::collections;
+
+include std::error::Error : Error;
+include std::mem : _;
+
+@export
+constraint Node<T> = {
+    Node*? next;
+    T value;
+};
+
+@export
+type SingleNode<T> = struct: Node<T> {
+    SingleNode*? next;
+    T value;
+};
+
+@export
+type DoubleNode<T> = struct: Node<T> {
+    DoubleNode*? prev;
+    DoubleNode*? next;
+    T value;
+};
+
+@export
+constraint SingleLinked<T> = struct {
+    Allocator* allocator;
+    usize len;
+    Node<T>* first;
+    Node<T>* last;
+};
+
+@export
+constraint DoubleLinked<T> = struct {
+    Allocator* allocator;
+    usize len;
+    DoubleNode<T>* first;
+    DoubleNode<T>* last;
+};
+
+@export
+constraint St

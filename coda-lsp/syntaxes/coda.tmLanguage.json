@@ -217,7 +217,7 @@
                 },
                 {
                     "name": "storage.modifier.pointer.coda",
-                    "match": "\\*"
+                    "match": "\\*(\\?)?"
                 },
                 {
                     "name": "keyword.operator.address-of.coda",
