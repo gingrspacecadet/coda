@@ -173,6 +173,23 @@ fn bool Contiguous<T>.eq<T>(Contiguous<T>* this, Contiguous<T>* value) {
 }
 
 @export
+fn (bool | Error::OutOfBounds) Contiguous<T>.eq_slice(Contiguous<T>* this, ssize index, Contiguous<T>* value) {
+    usize index2 = this.resolve_index(index)?;
+    if (index2 + value.len > this.len) {
+        return false;
+    }
+    mut usize loc = index2;
+    for (mut usize i = 0; i < value.len; i += 1) {
+        if (this.ptr[loc] != value.ptr[i]) {
+            return false;
+        }
+        loc += 1;
+    }
+    return true;
+}
+
+
+@export
 fn bool Contiguous<T>.contains(Contiguous<T>* this, T value) {
     for (mut usize i = 0; i < this.len; i += 1) {
         if (this.ptr[i] == value) {
@@ -200,17 +217,23 @@ fn bool Contiguous<T>.contains_slice(Contiguous<T>* this, Contiguous<T>* value) 
 }
 
 @export
-fn (bool | Error::OutOfBounds) Contiguous<T>.has_slice_at(Contiguous<T>* this, ssize index, Contiguous<T>* value) {
-    usize index2 = this.resolve_index(index)?;
-    if (index2 + value.len > this.len) {
-        return false;
-    }
-    mut usize loc = index2;
-    for (mut usize i = 0; i < value.len; i += 1) {
-        if (this.ptr[loc] != value.ptr[i]) {
+fn bool Contiguous<T>.all_eq<T>(Contiguous<T>* this, T value) {
+    for (mut usize i = 0; i < this.len; i += 1) {
+        if (this.ptr[i] != value) {
             return false;
         }
-        loc += 1;
+    }
+    return true;
+}
+
+@export
+fn (bool | Error::OutOfBounds) Contiguous<T>.all_eq_slice<T>(Contiguous<T>* this, ssize start_index, ssize end_index, T value) {
+    usize start = this.resolve_index(start_index)?;
+    usize end = this.resolve_index(end_index)?;
+    for (mut usize i = start; i < end; i += 1) {
+        if (this.ptr[i] != value) {
+            return false;
+        }
     }
     return true;
 }
@@ -1811,7 +1834,7 @@ fn none Contiguous<T>.split_alloc<T>(Contiguous<T>* this, mut AllocatorContiguou
 fn none Contiguous<T>.split_slice<T>(Contiguous<T>* this, mut AllocatorContiguous<T[]>* out, Contiguous<T>* sep) {
     usize current_start = 0;
     for (mut usize i = 0; i < this.len; i += 1) {
-        if (this.has_slice_at(i, sep)) {
+        if (this.eq_slice(i, sep)) {
             out.push(this.view(current_start, this.len));
             i += sep.len - 1;
             current_start = i + 1;
@@ -1824,7 +1847,7 @@ fn none Contiguous<T>.split_slice_alloc<T>(Contiguous<T>* this, mut AllocatorCon
     AllocatorContiguous<T> current;
     current.init(out.allocator, 0);
     for (mut usize i = 0; i < this.len; i += 1) {
-        if (this.has_slice_at(i, sep)) {
+        if (this.eq_slice(i, sep)) {
             i += sep.len - 1;
             out.push(current);
             current.init(out.allocator, 0);

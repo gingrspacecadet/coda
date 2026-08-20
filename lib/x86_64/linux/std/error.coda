@@ -1,5 +1,7 @@
 module std::error;
 
+include std;
+
 @export
 type Error = enum {
     AllocationFailed,
@@ -7,3 +9,32 @@ type Error = enum {
     InvalidEncoding,
     IsEmpty,
 };
+
+@export
+string[] ERROR_MEANINGS = {
+    .[Error::AllocationFailed] = "Allocation failed",
+    .[Error::OutOfBounds] = "Out of bounds",
+    .[Error::InvalidEncoding] = "Invalid encoding",
+    .[Error::IsEmpty] = "Is empty",
+};
+
+@export
+@noreturn
+fn Error.throw(Error this) {
+    // tbd
+    std::print("Error: {}", [ERROR_MEANINGS[this]]);
+    std::process::exit(std::process::EXIT_FALIURE);
+}
+
+@export
+@inline
+fn T try<T>(value: (T | Error)) {
+    match (value) {
+        Error {
+            value.throw();
+        }
+        T {
+            return value;
+        }
+    }
+}
