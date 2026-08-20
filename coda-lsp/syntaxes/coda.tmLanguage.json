@@ -296,7 +296,7 @@
             "patterns": [
                 {
                     "name": "variable.coda",
-                    "match": "\\b[a-z]\\w*\\b"
+                    "match": "\\b[a-z_]\\w*\\b"
                 }
             ]
         }
