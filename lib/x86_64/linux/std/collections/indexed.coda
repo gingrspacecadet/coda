@@ -1,0 +1,4 @@
+module std::collections;
+
+@export
+constraint Indexed<T>: Sized<T> = 
