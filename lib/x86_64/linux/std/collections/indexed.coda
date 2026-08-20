@@ -15,8 +15,8 @@ constraint AllocatorIndexed<T>: Indexed<T> = {
     fn none shrink_to_fit(mut AllocatorContiguous* this);
 };
 
-@inline
 @export
+@inline
 fn (usize | Error::OutOfBounds) Indexed<T>.resolve_index(Indexed<T>* this, usize index) {
     if (index < 0) {
         index += this.len;
