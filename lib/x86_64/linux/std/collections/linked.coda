@@ -5,31 +5,64 @@ include std::mem : _;
 
 @export
 constraint Node<T> = {
-    Node*? next;
+    Node<T>*? next;
     T value;
 };
 
 @export
 type SingleNode<T> = struct: Node<T> {
-    SingleNode*? next;
+    SingleNode<T>*? next;
     T value;
 };
 
 @export
 type DoubleNode<T> = struct: Node<T> {
-    DoubleNode*? prev;
-    DoubleNode*? next;
+    DoubleNode<T>*? prev;
+    DoubleNode<T>*? next;
     T value;
 };
 
 @export
-constraint SingleLinked<T>: AllocatorIndexed<T> = {
-    Node<T>* first;
-    Node<T>* last;
+constraint Linked<T>: AllocatorIndexed<T> = {
+    Node<T>* start;
+    Node<T>* end;
 };
 
 @export
 constraint DoubleLinked<T>: AllocatorIndexed<T> = {
-    DoubleNode<T>* first;
-    DoubleNode<T>* last;
+    DoubleNode<T>* start;
+    DoubleNode<T>* end;
 };
+
+@export
+fn T Linked<T>.get(Linked<T>* this, mut ssize index) {
+    mut usize index2 = this->resolve_index(index);
+    Node<T>* node = this.first;
+    while (index2 > 0) {
+        node = node->next;
+        index2--;
+    }
+    return node->value;
+}
+
+@export
+fn T* Linked<T>.get_ptr(Linked<T>* this, mut ssize index) {
+    mut usize index2 = this->resolve_index(index);
+    Node<T>* node = this.first;
+    while (index2 > 0) {
+        node = node.next;
+        index2--;
+    }
+    return &node.value;
+}
+
+@export
+fn T Linked<T>.set(Linked<T>* this, mut ssize index, T value) {
+    mut usize index2 = this->resolve_index(index);
+    Node<T>* node = this->first;
+    while (index2 > 0) {
+        node = node->next;
+        index2--;
+    }
+    return node;
+}
