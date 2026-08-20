@@ -45,6 +45,11 @@ type_decl =
     "type",
     identifier,
     [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
     [ "=", type ],
     ";"
 ;
@@ -53,6 +58,11 @@ constraint_decl =
     "constraint",
     identifier,
     [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
     [ "=", constraint ],
     ";"
 ;
@@ -493,12 +503,26 @@ sum_type =
 ;
 
 constraint =
-    "{",
-    {
-        constraint_member
-      | constraint_method
-      | ( expression, "," )
-    }
+    (
+        identifier,
+        [
+            "<",
+            ( type | constraint ),
+            {
+                ",",
+                ( type | constraint)
+            },
+            ">"
+        ]
+    ) | (
+        "{",
+        {
+            constraint_member
+          | constraint_method
+          | ( expression, ";" )
+        },
+        "}"
+    )
 ;
 
 constraint_member = 
@@ -517,7 +541,8 @@ constraint_method =
         parameter_spec,
         { ",", parameter_spec }
     ],
-    ":"
+    ")",
+    ";"
 ;
 
 path =
