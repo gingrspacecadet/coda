@@ -22,7 +22,7 @@ fn usize normalize_capacity<T>(usize len) {
 }
 
 @export
-type List<T> = struct: VarLenContiguous<T> {
+type List<T> = struct: AllocatorContiguous<T> {
     Allocator* allocator;
     usize len;
     usize capacity;

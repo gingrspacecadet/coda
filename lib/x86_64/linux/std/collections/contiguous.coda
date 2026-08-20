@@ -3,40 +3,18 @@ module std::collections;
 include std::error : _;
 
 @export
-constraint Contiguous<T> = {
-    usize len;
+constraint Contiguous<T>: Indexed<T> = {
     T* ptr;
 };
 
 @export
-constraint AllocatorContiguous<T> = struct: Contiguous<T> {
-    Allocator* allocator;
-    usize len;
-    T* ptr;
-    fn none init(mut AllocatorContiguous* this, Allocator* allocator, usize new_len);
-    fn none destroy();
-    fn none set_len(mut AllocatorContiguous* this, usize new_len);
-    fn none shrink_to_fit(mut AllocatorContiguous* this);
+constraint AllocatorContiguous<T>: Contiguous<T>, Allocator<T> = {
 };
 
 @export
-constraint NonAllocatorContiguous<T> = struct {
+constraint NonAllocatorContiguous<T>: Contiguous<T> = struct {
     Contiguous<T> && !AllocatorContiguous<T>;
-}
-
-@inline
-@export
-fn (usize | Error::OutOfBounds) Contiguous<T>.resolve_index(Contiguous<T>* this, ssize index) {
-    if (index < 0) {
-        index += this->len;
-        if (index < 0) {
-            return Error::OutOfBounds;
-        }
-    } else if (index >= this->len) {
-        return Error::OutOfBounds;
-    }
-    return (usize)index;
-}
+};
 
 @export
 fn (T | Error::OutOfBounds) Contiguous<T>.get<T>(Contiguous<T>* this, ssize index) {
@@ -167,7 +145,7 @@ fn (T[] | Error::OutOfBounds) Contiguous<T>.view(Contiguous<T>* this, ssize star
 }
 
 @export
-fn T[] Contiguous<T>.full_view(Contiguous<T>* this) {
+fn T[] Contiguous<T>.items(Contiguous<T>* this) {
     return (T[]){.len = end - start, .ptr = this->ptr + start};
 }
 

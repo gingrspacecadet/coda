@@ -1,4 +1,30 @@
 module std::collections;
 
 @export
-constraint Indexed<T>: Sized<T> = 
+constraint Indexed<T>: Sized<T> = {
+    fn T get(Sized<T>* this, ssize index);
+    fn T set(mut Sized<T>* this, ssize index, T value);
+};
+
+@export
+constraint AllocatorIndexed<T>: Indexed<T> = {
+    Allocator* allocator;
+    fn none init(mut AllocatorContiguous* this, Allocator* allocator, usize new_len);
+    fn none destroy();
+    fn none set_len(mut AllocatorContiguous* this, usize new_len);
+    fn none shrink_to_fit(mut AllocatorContiguous* this);
+};
+
+@inline
+@export
+fn (usize | Error::OutOfBounds) Indexed<T>.resolve_index(Indexed<T>* this, usize index) {
+    if (index < 0) {
+        index += this->len;
+        if (index < 0) {
+            return Error::OutOfBounds;
+        }
+    } else if (index >= this->len) {
+        return Error::OutOfBounds;
+    }
+    return (usize)index;
+}

@@ -4,6 +4,5 @@ module std::collections;
 @export
 constraint Sized<T> = {
     usize len;
-    fn T get(Sized<T>* this, ssize index);
-    fn T set(mut Sized<T>* this, ssize index, T value);
+    fn T[] items();
 };

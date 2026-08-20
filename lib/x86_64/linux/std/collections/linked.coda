@@ -23,20 +23,13 @@ type DoubleNode<T> = struct: Node<T> {
 };
 
 @export
-constraint SingleLinked<T> = struct {
-    Allocator* allocator;
-    usize len;
+constraint SingleLinked<T>: AllocatorIndexed<T> = {
     Node<T>* first;
     Node<T>* last;
 };
 
 @export
-constraint DoubleLinked<T> = struct {
-    Allocator* allocator;
-    usize len;
+constraint DoubleLinked<T>: AllocatorIndexed<T> = {
     DoubleNode<T>* first;
     DoubleNode<T>* last;
 };
-
-@export
-constraint St
