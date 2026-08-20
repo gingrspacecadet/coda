@@ -3,7 +3,7 @@ module std::collections;
 include std::error : _;
 
 @export
-constraint Contiguous<T> = struct {
+constraint Contiguous<T> = {
     usize len;
     T* ptr;
 };
