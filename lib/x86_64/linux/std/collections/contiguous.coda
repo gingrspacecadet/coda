@@ -457,12 +457,14 @@ fn (none | Error::OutOfBounds) Contiguous<T>.bit_cast_slice_to_alloc<T, U>(mut C
 }
 
 @export
-fn none AllocatorContiguous<T>.clear<T>(mut AllocatorContiguous<T>* this) {
-    if (this.len == 0) {
-        return;
-    }
+fn none AllocatorContiguous<T>.reset<T>(mut AllocatorContiguous<T>* this, usize len) {
     this.destroy();
-    this.init(this.allocator, 0);
+    this.init(this.allocator, len);
+}
+
+@export
+fn none AllocatorContiguous<T>.clear<T>(mut AllocatorContiguous<T>* this) {
+    #inline(this.reset(0));
 }
 
 @export
