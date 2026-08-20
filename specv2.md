@@ -483,6 +483,11 @@ type_decl =
     "type",
     identifier,
     [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
     [ "=", type ],
     ";"
 ;
@@ -495,6 +500,11 @@ constraint_decl =
     "constraint",
     identifier,
     [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
     [ "=", constraint ],
     ";"
 ;
@@ -508,12 +518,7 @@ function_decl =
     "fn",
     type,
     identifier,
-    [
-        "<",
-        generic_field,
-        { ",", generic_field },
-        ">"
-    ],
+    [ generic_decl_item ],
     "(",
     [
         parameter_spec,
@@ -1111,12 +1116,26 @@ sum_type =
 
 ```ebnf
 constraint =
-    "{",
-    {
-        constraint_member
-      | constraint_method
-      | ( expression, "," )
-    }
+    (
+        identifier,
+        [
+            "<",
+            ( type | constraint ),
+            {
+                ",",
+                ( type | constraint)
+            },
+            ">"
+        ]
+    ) | (
+        "{",
+        {
+            constraint_member
+          | constraint_method
+          | ( expression, ";" )
+        },
+        "}"
+    )
 ;
 
 constraint_member = 
