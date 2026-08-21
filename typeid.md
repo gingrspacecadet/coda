@@ -6,7 +6,7 @@ The rest of this document describes the format of a `#type`.
 
 ## Layout
 
-All fields are little endian.
+All fields are little endian and packed contiguously in memory.
 
 ```coda
 uint8 kind;
