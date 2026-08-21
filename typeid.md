@@ -130,6 +130,7 @@ Fields:
 (struct {
     string* name;
     #type* type;
+    usize align;
 })[] members;
 ```
 
@@ -142,6 +143,7 @@ Fields:
 (struct {
     string* name;
     #type* type;
+    usize align;
 })[] members;
 ```
 
