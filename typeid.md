@@ -174,7 +174,7 @@ Fields:
 ### Sum types
 
 ```
-1a - sum type
+1A - sum type
 
 Fields:
 usize size;
