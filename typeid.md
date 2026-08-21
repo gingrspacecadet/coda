@@ -2,11 +2,11 @@
 
 A runtime type is a value of type `#type*`. Types become `#type*`s at runtime. The compiler is responsible for ensuring that all identical types use the same pointers.
 
-The rest of section document describes the format of a `#type`.
+The rest of this document describes the format of a `#type`.
 
 ## Layout
 
-All fields are little endian.
+All fields are little endian and packed contiguously in memory.
 
 ```coda
 uint8 kind;
@@ -62,7 +62,6 @@ Bit 0 is the least-significant bit, bit 7 is the most-significant.
 10 - intrinsic
 
 Fields:
-
 string* intrinsic_name;
 ```
 
@@ -72,9 +71,8 @@ string* intrinsic_name;
 11 - generic
 
 Fields:
-
 #type* original;
-#type[] values;
+#type*[] values;
 ```
 
 ### Pointers
@@ -83,11 +81,10 @@ Fields:
 12 - pointer
 
 Flags:
-4 - optional;
-5 - mutable;
+4 - mutable;
+5 - optional;
 
 Fields:
-
 #type* to;
 ```
 
@@ -96,9 +93,11 @@ Fields:
 ```
 13 - array
 
-Fields:
+Flags:
+4 - mutable
 
-#type* to;
+Fields:
+#type* of;
 usize*? len;
 ```
 
@@ -110,11 +109,9 @@ There has to be a separate "generic" field for this, because one can have generi
 14 - function
 
 Flags:
-
 4 - generic
 
 Fields:
-
 if generic:
     string*[] fn_generic_names;
 #type* return_type;
@@ -130,10 +127,11 @@ if generic:
 15 - struct
 
 Fields:
-
+usize size;
 (struct {
     string* name;
     #type* type;
+    usize align;
 })[] members;
 ```
 
@@ -143,10 +141,11 @@ Fields:
 16 - union
 
 Fields:
-
+usize size;
 (struct {
     string* name;
     #type* type;
+    usize align;
 })[] members;
 ```
 
@@ -156,7 +155,6 @@ Fields:
 17 - enum
 
 Fields:
-
 #type* backing_type;
 (struct {
     string* name;
@@ -170,8 +168,8 @@ Fields:
 18 - sum type
 
 Fields:
-
-#type[] members;
+usize size;
+#type*[] members;
 ```
 
 ## Code Representation
