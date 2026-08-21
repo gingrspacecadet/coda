@@ -82,7 +82,11 @@ typedef enum {
     TYPE_ARRAY,
     TYPE_FN,
     TYPE_SUM,
+    TYPE_STRUCT,
+    TYPE_UNION,
+    TYPE_ENUM,
     TYPE_SPLICE,
+    TYPE_ERROR,
 } TypeKind;
 
 struct Type {
@@ -103,7 +107,6 @@ struct Type {
 
         struct {
             Type *element;
-
             bool sized;
             Expr *length;
         } array;
@@ -118,18 +121,32 @@ struct Type {
         } sum;
 
         struct {
+            Array(Field) fields;
+        } structure;
+
+        struct {
+            Array(Field) fields;
+        } union_;
+
+        struct {
+            Type *underlying;
+            Array(EnumItem) items;
+        } enumeration;
+
+        struct {
             Expr *expr;
         } splice;
     };
 };
 
 typedef enum {
+    LIT_NONE,
     LIT_INTEGER,
     LIT_FLOAT,
     LIT_STRING,
     LIT_CHAR,
     LIT_BOOL,
-    LIT_NONE,
+    LIT_NULL,
 } LiteralKind;
 
 typedef struct {
@@ -322,6 +339,13 @@ typedef enum {
     STMT_DEFER,
 } StmtKind;
 
+typedef struct {
+    Span span;
+    Pattern *pattern;
+    Expr *guard;
+    Stmt *body;
+} MatchCase;
+
 struct Stmt {
     Span span;
 
@@ -385,40 +409,14 @@ struct Stmt {
 
 struct IncludeDecl {
     Path path;
-    String alias;
+    Path alias;
 };
-
-typedef enum {
-    TYPEDEF_ALIAS,
-    TYPEDEF_STRUCT,
-    TYPEDEF_UNION,
-    TYPEDEF_ENUM,
-} TypeDefKind;
 
 struct TypeDecl {
     Span span;
-
     AstName name;
     Array(GenericParam) generics;
-
-    TypeDefKind kind;
-
-    union {
-        Type *alias;
-
-        struct {
-            Array(Field) fields;
-        } structure;
-
-        struct {
-            Array(Field) fields;
-        } union_;
-
-        struct {
-            Type *underlying;
-            Array(EnumItem) items;
-        } enumeration;
-    };
+    Type *type;
 };
 
 typedef struct {
@@ -433,8 +431,11 @@ struct FnDecl {
 
     bool comptime;
 
+    Type *receiver;
+
     AstName name;
 
+    Array(Attribute) attrs;
     Array(GenericParam) generics;
     Array(Param) params;
 

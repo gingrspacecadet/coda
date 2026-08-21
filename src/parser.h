@@ -12,6 +12,8 @@ typedef struct {
 
     Token current;
     Token previous;
+
+    Diags *diags;
 } Parser;
 
 void parser_init(Parser *p, Lexer *lexer, Arena *arena);

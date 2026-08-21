@@ -5,7 +5,17 @@ int main() {
 
     Source s = {
         .contents = string_make(
-            "io::println(\"Hello, world!\")"
+            "1 + 2 * 3\n"
+            "a = b = c\n"
+            "foo(1, 2).bar[3]?\n"
+            "foo<int>(x)\n"
+            "(int32)x\n"
+            "{x = 1, y = 2}\n"
+            "#sizeof(int)\n"
+            "#(name)\n"
+            "$a + b\n"
+            "-a * b\n"
+            "a && b || c\n"
         )
     };
 

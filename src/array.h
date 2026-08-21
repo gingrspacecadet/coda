@@ -21,6 +21,7 @@ typedef struct {
 #define Array(T) Array
 
 void array_init(Array *array, Arena *arena, size_t T);
+Array array_create(Arena *arena, size_t T);
 void array_push(Array *v, void *item);
 void array_append(Array *v, size_t num, void *item);
 void array_free(Array *v);

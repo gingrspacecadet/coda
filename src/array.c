@@ -9,6 +9,12 @@ void array_init(Array *array, Arena *arena, size_t T) {
     array->arena = arena;
 }
 
+Array array_create(Arena *arena, size_t T) {
+    Array a;
+    array_init(&a, arena, T);
+    return a;
+}
+
 void array_push(Array *v, void *item) {
     if (!v->alive) {
         fprintf(stderr, "array_push: uninitialised array\n");
