@@ -40,26 +40,27 @@ Bit 0 is the least-significant bit, bit 7 is the most-significant.
 ```
 00 - none
 01 - null
-02 - int8
-03 - int16
-04 - int32
-05 - int64
-06 - uint8
-07 - uint16
-08 - uint32
-09 - uint64
-0A - ssize
-0B - usize
-0C - float16
-0D - float32
-0E - float64
-0F - any
+02 - bool
+03 - int8
+04 - int16
+05 - int32
+06 - int64
+07 - uint8
+08 - uint16
+09 - uint32
+0A - uint64
+0B - ssize
+0C - usize
+0D - float16
+0E - float32
+0F - float64
+10 - any
 ```
 
 ### Intrinsics
 
 ```
-10 - intrinsic
+11 - intrinsic
 
 Fields:
 string* intrinsic_name;
@@ -68,7 +69,7 @@ string* intrinsic_name;
 ### Generics
 
 ```
-11 - generic
+12 - generic
 
 Fields:
 #type* original;
@@ -78,7 +79,7 @@ Fields:
 ### Pointers
 
 ```
-12 - pointer
+13 - pointer
 
 Flags:
 4 - mutable;
@@ -91,7 +92,7 @@ Fields:
 ### Arrays
 
 ```
-13 - array
+14 - array
 
 Flags:
 4 - mutable
@@ -106,7 +107,7 @@ usize*? len;
 There has to be a separate "generic" field for this, because one can have generic type aliases for generic functions.
 
 ```
-14 - function
+15 - function
 
 Flags:
 4 - generic
@@ -124,7 +125,7 @@ if generic:
 ### Structs
 
 ```
-15 - struct
+16 - struct
 
 Fields:
 usize size;
@@ -138,7 +139,7 @@ usize size;
 ### Unions
 
 ```
-16 - union
+17 - union
 
 Fields:
 usize size;
@@ -152,7 +153,7 @@ usize size;
 ### Enums
 
 ```
-17 - enum
+18 - enum
 
 Fields:
 #type* backing_type;
@@ -165,7 +166,7 @@ Fields:
 ### Sum types
 
 ```
-18 - sum type
+19 - sum type
 
 Fields:
 usize size;
