@@ -127,6 +127,7 @@ if generic:
 15 - struct
 
 Fields:
+usize size;
 (struct {
     string* name;
     #type* type;
@@ -140,6 +141,7 @@ Fields:
 16 - union
 
 Fields:
+usize size;
 (struct {
     string* name;
     #type* type;
@@ -166,6 +168,7 @@ Fields:
 18 - sum type
 
 Fields:
+usize size;
 #type*[] members;
 ```
 
