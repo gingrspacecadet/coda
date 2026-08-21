@@ -106,23 +106,34 @@
                     "name": "meta.declaration.attribute.coda",
                     "begin": "(@)([a-zA-Z_]\\w*)\\(",
                     "end": "\\)",
-                    "patterns": [
-                    ]
-                },
-                {
-                    "name": "meta.declaration.attribute.coda",
-                    "match": "(@)([a-zA-Z_]\\w*)",
-                    "captures": {
-                        "0": {
-                            "name": ""
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.definition.attribute.coda"
+                        },
+                        "2": {
+                            "name": "entity.name.function.attribute.coda storage.modifier.attribute.coda"
                         }
                     },
                     "patterns": [
                         {
-                            "name": "storage.modifier.coda",
-                            "match": "@[a-zA-Z_]\\w*(\\([\\(]*\\))?"
+                            "include": "#function-parameter"
+                        },
+                        {
+                            "include": "#punctuation-comma"
                         }
                     ]
+                },
+                {
+                    "name": "meta.declaration.attribute.coda storage.modifier.attribute.coda",
+                    "match": "(@)([a-zA-Z_]\\w*)",
+                    "captures": {
+                        "1": {
+                            "name": "punctuation.definition.attribute.coda"
+                        },
+                        "2": {
+                            "name": "entity.name.function.attribute.coda storage.modifier.attribute.coda"
+                        }
+                    }
                 }
             ]
         },
