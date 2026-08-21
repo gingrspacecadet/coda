@@ -2,7 +2,7 @@
 
 A runtime type is a value of type `#type*`. Types become `#type*`s at runtime. The compiler is responsible for ensuring that all identical types use the same pointers.
 
-The rest of section document describes the format of a `#type`.
+The rest of this document describes the format of a `#type`.
 
 ## Layout
 
