@@ -98,7 +98,7 @@ Fields:
 
 Fields:
 
-#type* to;
+#type* of;
 usize*? len;
 ```
 
