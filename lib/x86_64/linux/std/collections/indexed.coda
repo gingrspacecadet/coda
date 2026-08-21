@@ -9,7 +9,7 @@ constraint Indexed<T>: Sized<T> = {
 @export
 constraint AllocatorIndexed<T>: Indexed<T> = {
     Allocator* allocator;
-    fn none init(mut AllocatorContiguous* this, Allocator* allocator, usize new_len);
+    fn none init(mut AllocatorContiguous* this, Allocator* allocator, usize len);
     fn none destroy();
     fn none set_len(mut AllocatorContiguous* this, usize new_len);
     fn none shrink_to_fit(mut AllocatorContiguous* this);
