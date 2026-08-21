@@ -17,14 +17,14 @@ constraint AllocatorIndexed<T>: Indexed<T> = {
 
 @export
 @inline
-fn (usize | Error::OutOfBounds) Indexed<T>.resolve_index(Indexed<T>* this, usize index) {
+fn (usize | Error::OUT_OF_BOUNDS) Indexed<T>.resolve_index(Indexed<T>* this, usize index) {
     if (index < 0) {
         index += this.len;
         if (index < 0) {
-            return Error::OutOfBounds;
+            return Error::OUT_OF_BOUNDS;
         }
     } else if (index >= this.len) {
-        return Error::OutOfBounds;
+        return Error::OUT_OF_BOUNDS;
     }
     return (usize)index;
 }

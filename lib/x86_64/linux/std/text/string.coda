@@ -30,7 +30,7 @@ fn none GenericString.capitalize(mut GenericString* this) {
 }
 
 @export
-fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut GenericWString* out) {
+fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_ENCODED_DATA) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut GenericWString* out) {
     mut usize loc = 0;
     for (mut usize i = 0; i < this.len; i++) {
         wchar value = this.ptr[i];
@@ -38,7 +38,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
             // do nothing
         } else if (value < 0xc0) {
             // unexpected continuation byte
-            return Error::InvalidEncoding;
+            return Error::INVALID_ENCODED_DATA;
         } else if (value < 0xe0) {
             // one continuation byte
             value = (value & 0x1f) << 6;
@@ -46,7 +46,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
             i++;
             if (!(a >= 0x80 && a < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f);
         } else if (value < 0xf0) {
@@ -57,7 +57,7 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
             i += 2;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f) << 6;
             value |= (b & 0x3f);
@@ -70,17 +70,17 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
             i += 3;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f) << 12;
             value |= (b & 0x3f) << 6;
             value |= (c & 0x3f);
         } else {
             // invalid byte
-            return Error::InvalidEncoding;
+            return Error::INVALID_ENCODED_DATA;
         }
         if (loc >= out.len) {
-            return Error::OutOfBounds;
+            return Error::OUT_OF_BOUNDS;
         }
         out.data[loc] = value;
         loc++;
@@ -88,14 +88,14 @@ fn (none | Error::OutOfBounds | Error::InvalidEncoding) Contiguous<uint8>.utf8_d
 }
 
 @export
-fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut GenericAllocatorWString* out) {
+fn (none | Error::INVALID_ENCODED_DATA) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, mut GenericAllocatorWString* out) {
     for (mut usize i = 0; i < this.len; i++) {
         wchar value = this.ptr[i];
         if (value < 0x80) {
             // do nothing
         } else if (value < 0xc0) {
             // unexpected continuation byte
-            return Error::InvalidEncoding;
+            return Error::INVALID_ENCODED_DATA;
         } else if (value < 0xe0) {
             // one continuation byte
             value = (value & 0x1f) << 6;
@@ -103,7 +103,7 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
             i++;
             if (!(a >= 0x80 && a < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f);
         } else if (value < 0xf0) {
@@ -114,7 +114,7 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
             i += 2;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f) << 6;
             value |= (b & 0x3f);
@@ -127,14 +127,14 @@ fn (none | Error::InvalidEncoding) Contiguous<uint8>.utf8_decode_alloc(Contiguou
             i += 3;
             if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
                 // not a continuation byte
-                return Error::InvalidEncoding;
+                return Error::INVALID_ENCODED_DATA;
             }
             value |= (a & 0x3f) << 12;
             value |= (b & 0x3f) << 6;
             value |= (c & 0x3f);
         } else {
             // invalid byte
-            return Error::InvalidEncoding;
+            return Error::INVALID_ENCODED_DATA;
         }
         out.push(value);
     }

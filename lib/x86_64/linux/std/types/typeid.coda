@@ -1,0 +1,265 @@
+module std::types::typeid;
+
+include std::error : _;
+
+@export
+type TypeKind = enum: uint8 {
+    NONE = 0x00,
+    NULL = 0x01,
+    BOOL = 0x02,
+    INT8 = 0x03,
+    INT16 = 0x04,
+    INT32 = 0x05,
+    INT64 = 0x06,
+    UINT8 = 0x07,
+    UINT16 = 0x08,
+    UINT32 = 0x09,
+    UINT64 = 0x0a,
+    SSIZE = 0x0b,
+    USIZE = 0x0c,
+    FLOAT16 = 0x0d,
+    FLOAT32 = 0x0e,
+    FLOAT64 = 0x0f,
+    ANY = 0x10,
+    INTRINSIC = 0x11,
+    GENERIC = 0x12,
+    POINTER = 0x13,
+    ARRAY = 0x14,
+    FUNCTION = 0x15,
+    STRUCT = 0x16,
+    UNION = 0x17,
+    ENUM = 0x18,
+    SUM = 0x19,
+};
+
+@export
+type TypeFlags: enum: uint8 {
+    Named = 1,
+    Mutable = 2,
+    Generic = 4,
+    PointerMutable = 16,
+    ArrayMutable = 16,
+    PointerOptional = 32,
+    FunctionGeneric = 16,
+};
+
+// all of the @alignas(0) are probably not neccessary
+// i'm just putting it there to make sure
+
+// the other nonzero @alignas are neccessary though
+// to prevent the compiler from inserting holes
+
+@export
+type IntrinsicTypeData = struct {
+    @alignas(0)
+    string* name;
+};
+
+@export
+type GenericTypeData = struct {
+    @alignas(0)
+    Type* original;
+    @alignas(#sizeof(Type*))
+    Type*[] values;
+};
+
+@export
+type PointerTypeData = struct {
+    @alignas(0)
+    Type* to;
+};
+
+@export
+type ArrayTypeData = struct {
+    @alignas(0)
+    Type* of;
+    @alignas(#sizeof(Type*))
+    usize*? len;
+};
+
+@export
+type FunctionParameterTypeData = struct {
+    @alignas(0)
+    string* name;
+    @alignas(#sizeof(string*))
+    Type* type_;
+};
+
+@export
+type FunctionNonGenericTypeData = struct {
+    @alignas(0)
+    Type* return_type;
+    @alignas(#sizeof(Type*))
+    FunctionParameterData[] params;
+};
+
+@export
+type FunctionGenericTypeData = struct {
+    @alignas(0)
+    string*[] generic_names;
+    @alignas(#sizeof(string*[]))
+    Type* return_type;
+    @alignas(#sizeof(string*[]) + #sizeof(Type*))
+    FunctionParameterData[] params;
+};
+
+@export
+type StructMemberTypeData = struct {
+    @alignas(0)
+    string* name;
+    @alignas(#sizeof(string*))
+    Type* type_;
+    @alignas(#sizeof(string*) + #sizeof(Type*))
+    usize align;
+};
+
+@export
+type StructTypeData = struct {
+    @alignas(0)
+    usize size;
+    @alignas(#sizeof(usize))
+    StructMemberTypeData[] members;
+};
+
+@export
+type UnionMemberTypeData = struct {
+    @alignas(0)
+    string* name;
+    @alignas(#sizeof(string*))
+    Type* type_;
+    @alignas(#sizeof(string*) + #sizeof(Type*))
+    usize align;
+};
+
+@export
+type UnionTypeData = struct {
+    @alignas(0)
+    usize size;
+    @alignas(#sizeof(usize))
+    UnionMemberTypeData[] members;
+};
+
+@export
+type EnumMemberTypeData = struct {
+    @alignas(0)
+    string* name;
+    @alignas(#sizeof(string*))
+    // placeholder, only for #offsetof usage etc
+    uint8 value;
+};
+
+@export
+type EnumTypeData = struct {
+    @alignas(0)
+    Type* backing_type;
+    @alignas(0);
+    EnumMemberTypeData[] members;
+};
+
+@export
+type SumTypeData = struct {
+    @alignas(0)
+    usize size;
+    @alignas(#sizeof(usize))
+    Type*[] members;
+};
+
+@export
+type ExtraTypeData = union {
+    @alignas(0)
+    IntrinsicTypeData intrinsic;
+    @alignas(0)
+    GenericTypeData generic;
+    @alignas(0)
+    PointerTypeData pointer;
+    @alignas(0)
+    ArrayTypeData array;
+    @alignas(0)
+    FunctionNonGenericTypeData* function_non_generic;
+    @alignas(0)
+    FunctionGenericTypeData* function_generic;
+    @alignas(0)
+    StructTypeData* struct_;
+    @alignas(0)
+    UnionTypeData* union_;
+    @alignas(0)
+    EnumTypeData* enum_;
+    @alignas(0)
+    SumTypeData* sum;
+};
+
+@export
+type Type = struct {
+    @alignas(0)
+    TypeKind kind;
+    @alignas(#sizeof(TypeKind))
+    TypeFlags flags;
+    @alignas(#sizeof(TypeKind) + #sizeof(TypeFlags))
+    union {
+        struct {
+            @alignas(0)
+            ExtraTypeData* data;
+        } non_named_non_generic;
+        struct {
+            @alignas(0)
+            string*[] generic_names;
+            @alignas(#sizeof(string*[]))
+            ExtraTypeData* data;
+        } non_named_generic;
+        struct {
+            @alignas(0)
+            string* name;
+            @alignas(#sizeof(string*))
+            ExtraTypeData* data;
+        } named_non_generic;
+        struct {
+            @alignas(0)
+            string* name;
+            @alignas(#sizeof(string*))
+            string*[] generic_names;
+            @alignas(#sizeof(string*) + #sizeof(string*[]))
+            ExtraTypeData* data;
+        } named_generic;
+    }
+};
+
+@export
+fn usize Type.sizeof(Type* this) {
+    if (this.kind == TypeKind::NONE) {
+        return #sizeof(none);
+    } else if (this.kind == TypeKind::NULL) {
+        return #sizeof(type*);
+    } else if (this.kind == TypeKind::BOOL) {
+        return #sizeof(bool);
+    } else if (this.kind == TypeKind::INT8) {
+        return #sizeof(int8);
+    } else if (this.kind == TypeKind::INT16) {
+        return #sizeof(int16);
+    } else if (this.kind == TypeKind::INT32) {
+        return #sizeof(int32);
+    } else if (this.kind == TypeKind::INT64) {
+        return #sizeof(int64);
+    } else if (this.kind == TypeKind::UINT8) {
+        return #sizeof(uint8);
+    } else if (this.kind == TypeKind::UINT16) {
+        return #sizeof(uint16);
+    } else if (this.kind == TypeKind::UINT32) {
+        return #sizeof(uint32);
+    } else if (this.kind == TypeKind::UINT64) {
+        return #sizeof(uint64);
+    } else if (this.kind == TypeKind::SSIZE) {
+        return #sizeof(ssize);
+    } else if (this.kind == TypeKind::USIZE) {
+        return #sizeof(usize);
+    } else if (this.kind == TypeKind::FLOAT16) {
+        return #sizeof(float16);
+    } else if (this.kind == TypeKind::FLOAT32) {
+        return #sizeof(float32);
+    } else if (this.kind == TypeKind::FLOAT64) {
+        return #sizeof(float64);
+    } else if (this.kind == TypeKind::ANY) {
+        return #sizeof(any);
+    } else {
+        // todo
+    }
+}

@@ -4,19 +4,25 @@ include std;
 
 @export
 type Error = enum {
-    AllocationFailed,
-    OutOfBounds,
-    InvalidEncoding,
-    IsEmpty,
+    ALLOCATION_FAILED,
+    OUT_OF_BOUNDS,
+    INVALID_ENCODED_DATA,
+    IS_EMPTY,
 };
 
 @export
 string[] ERROR_MEANINGS = {
-    .[Error::AllocationFailed] = "Allocation failed",
-    .[Error::OutOfBounds] = "Out of bounds",
-    .[Error::InvalidEncoding] = "Invalid encoding",
-    .[Error::IsEmpty] = "Is empty",
+    .[Error::ALLOCATION_FAILED] = "Allocation failed",
+    .[Error::OUT_OF_BOUNDS] = "Out of bounds",
+    .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
+    .[Error::IS_EMPTY] = "Is empty",
 };
+
+@export
+@noreturn
+fn fatal_error(string message) {
+
+}
 
 @export
 @noreturn

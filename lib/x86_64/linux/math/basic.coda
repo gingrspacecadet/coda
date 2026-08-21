@@ -94,9 +94,9 @@ fn T T.real_mod<T: Float>(T this, T other) {
 }
 
 @export
-fn (T | Error::IsEmpty) min<T: Number>(Contiguous<T>* data) {
+fn (T | Error::IS_EMPTY) min<T: Number>(Contiguous<T>* data) {
     if (data.len == 0) {
-        return Error::IsEmpty;
+        return Error::IS_EMPTY;
     }
     T out = data.ptr[0];
     for (mut usize i = 1; i < data.len; i++) {
@@ -108,9 +108,9 @@ fn (T | Error::IsEmpty) min<T: Number>(Contiguous<T>* data) {
 }
 
 @export
-fn (T | Error::IsEmpty) max<T: Number>(Contiguous<T>* data) {
+fn (T | Error::IS_EMPTY) max<T: Number>(Contiguous<T>* data) {
     if (data.len == 0) {
-        return Error::IsEmpty;
+        return Error::IS_EMPTY;
     }
     T out = data.ptr[0];
     for (mut usize i = 1; i < data.len; i++) {

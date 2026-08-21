@@ -3,13 +3,13 @@
 #include <stdio.h>
 
 enum Flags {
-    Uppercase = 1,
-    Lowercase = 2,
-    Digit = 4,
-    HexDigit = 8,
-    Punctuation = 16,
-    Whitespace = 32,
-    Control = 64,
+    UPPERCASE = 1,
+    LOWERCASE = 2,
+    DIGIT = 4,
+    HEX_DIGIT = 8,
+    PUNCTUATION = 16,
+    WHITESPACE = 32,
+    CONTROL = 64,
 };
 
 #include <ctype.h>
@@ -18,25 +18,25 @@ int main(void) {
     for (int c = 0; c < 128; c++) {
         int v = 0;
         if (isupper(c)) {
-            v |= Uppercase;
+            v |= UPPERCASE;
         }
         if (islower(c)) {
-            v |= Lowercase;
+            v |= LOWERCASE;
         }
         if (isdigit(c)) {
-            v |= Digit;
+            v |= DIGIT;
         }
         if (isxdigit(c)) {
-            v |= HexDigit;
+            v |= HEX_DIGIT;
         }
         if (ispunct(c)) {
-            v |= Punctuation;
+            v |= PUNCTUATION;
         }
         if (isblank(c)) {
-            v |= Whitespace;
+            v |= WHITESPACE;
         }
         if (iscntrl(c)) {
-            v |= Control;
+            v |= CONTROL;
         }
         printf("%i", v);
         if (c != 127) {

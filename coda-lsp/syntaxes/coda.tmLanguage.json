@@ -82,7 +82,7 @@
                 },
                 {
                     "name": "support.type.primitive.coda",
-                    "match": "\\b(none|u?int(8|16|32|64)|float(16|32|64)|bool|usize|ssize|w?char|w?string)\\b"
+                    "match": "\\b(none|bool|u?int(8|16|32|64)|usize|ssize|float(16|32|64)|w?char|w?string)\\b"
                 },
                 {
                     "name": "constant.language.boolean.coda",

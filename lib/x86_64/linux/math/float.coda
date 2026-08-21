@@ -115,46 +115,46 @@ fn bool Float.is_snan<T: Float>(T this) {
 }
 
 @export
-type FloatClass = enum {
-    Zero = 1,
-    Positive = 2,
-    Negative = 4,
-    Subnormal = 8,
-    Finite = 16,
-    Infinity = 32,
-    NaN = 64,
-    QNaN = 128,
-    SNaN = 256,
+type FloatClass = enum: uint32 {
+    ZERO = 1,
+    POSITIVE = 2,
+    NEGATIVE = 4,
+    SUBNORMAL = 8,
+    FINITE = 16,
+    INFINITY = 32,
+    NAN = 64,
+    QNAN = 128,
+    SNAN = 256,
 };
 
 @export
 fn FloatClass classify_float<T: Float>(T value) {
     FloatClass out = 0;
     if (value == 0) {
-        out |= FloatClass::Zero;
+        out |= FloatClass::ZERO;
     }
     if (value.sign() == 1) {
-        out |= FloatClass::Positive;
+        out |= FloatClass::POSITIVE;
     } else {
-        out |= FloatClass::Negative;
+        out |= FloatClass::NEGATIVE;
     }
     if (value.is_subnormal()) {
-        out |= FloatClass::Subnormal;
+        out |= FloatClass::SUBNORMAL;
     }
     if (value.is_finite()) {
-        out |= FloatClass::Finite;
+        out |= FloatClass::FINITE;
     }
     if (value.is_infinity()) {
-        out |= FloatClass::Infinity;
+        out |= FloatClass::INFINITY;
     }
     if (value.is_nan()) {
-        out |= FloatClass::NaN;
+        out |= FloatClass::NAN;
     }
     if (value.is_qnan()) {
-        out |= FloatClass::QNaN;
+        out |= FloatClass::QNAN;
     }
     if (value.is_snan()) {
-        out |= FloatClass::SNaN;
+        out |= FloatClass::SNAN;
     }
     return out;
 }
