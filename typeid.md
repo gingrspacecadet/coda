@@ -62,7 +62,6 @@ Bit 0 is the least-significant bit, bit 7 is the most-significant.
 10 - intrinsic
 
 Fields:
-
 string* intrinsic_name;
 ```
 
@@ -72,7 +71,6 @@ string* intrinsic_name;
 11 - generic
 
 Fields:
-
 #type* original;
 #type[] values;
 ```
@@ -83,11 +81,10 @@ Fields:
 12 - pointer
 
 Flags:
-4 - optional;
-5 - mutable;
+4 - mutable;
+5 - optional;
 
 Fields:
-
 #type* to;
 ```
 
@@ -96,8 +93,10 @@ Fields:
 ```
 13 - array
 
-Fields:
+Flags:
+4 - mutable
 
+Fields:
 #type* of;
 usize*? len;
 ```
@@ -110,11 +109,9 @@ There has to be a separate "generic" field for this, because one can have generi
 14 - function
 
 Flags:
-
 4 - generic
 
 Fields:
-
 if generic:
     string*[] fn_generic_names;
 #type* return_type;
@@ -130,7 +127,6 @@ if generic:
 15 - struct
 
 Fields:
-
 (struct {
     string* name;
     #type* type;
@@ -143,7 +139,6 @@ Fields:
 16 - union
 
 Fields:
-
 (struct {
     string* name;
     #type* type;
@@ -156,7 +151,6 @@ Fields:
 17 - enum
 
 Fields:
-
 #type* backing_type;
 (struct {
     string* name;
@@ -170,7 +164,6 @@ Fields:
 18 - sum type
 
 Fields:
-
 #type[] members;
 ```
 
