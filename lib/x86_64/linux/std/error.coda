@@ -3,7 +3,7 @@ module std::error;
 include std;
 
 @export
-type Error = enum {
+type Error = enum: uint64 {
     ALLOCATION_FAILED,
     OUT_OF_BOUNDS,
     INVALID_ENCODED_DATA,
