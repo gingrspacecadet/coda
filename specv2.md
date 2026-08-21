@@ -430,13 +430,13 @@ declaration =
     { attribute },
     (
         include_decl
-      | function_decl
       | variable_decl
+      | type_decl
+      | constraint_decl
+      | function_decl
     )
 ;
-```
 
-```ebnf
 attribute =
     "@", identifier,
     [
@@ -561,7 +561,7 @@ generic_field =
 statement =
     [ "$" ],
     (
-        expression
+        expr_stmt
       | declaration
       | block_stmt
       | if_stmt
@@ -588,7 +588,9 @@ expr_stmt =
 
 ```ebnf
 block_stmt =
-    "{", statement, "}"
+    "{",
+    { statement },
+    "}"
 ;
 ```
 
@@ -660,7 +662,7 @@ match_stmt =
 ;
 
 match_part =
-    type_expr,
+    type,
     [ identifier ],
     block_stmt,
 ;
@@ -679,8 +681,8 @@ defer_stmt =
 
 ```ebnf
 expression =
-        literal
-      | identifier
+        identifier
+      | literal
       | initializer
       | parenthesised_expr
       | unary_expr
@@ -698,7 +700,10 @@ expression =
       | code_expr
       | splice_expr
       | type
+      | constraint
 ;
+
+identifier = ? defined in tokenisation ?;
 ```
 
 #### 3.4.1 Literals
@@ -729,9 +734,10 @@ string_literal = ? defined in tokenisation ?;
 #### 3.4.2 Initializers
 
 ```ebnf
-
 initializer =
-    "{", { init_field }, "}"
+    "{",
+    { init_field },
+    "}"
 ;
 
 init_field =
@@ -886,12 +892,14 @@ deref_expr =
 intrinsic_expr =
     "#",
     path,
-    "(",
     [
-        expression,
-        { ",", expression }
-    ],
-    ")"
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
 ;
 ```
 
@@ -930,7 +938,7 @@ lambda_expr =
 code_expr =
     "#",
     "{",
-    (* tbd *)
+    ? tbd ?,
     "}"
 ;
 ```
@@ -970,16 +978,13 @@ type =
 ```ebnf
 type_literal =
         "none"
+      | "null"
       | "bool"
-      | integer_type_literal
-      | "float16" | "float32" | "float64"
-      | "any"
-;
-
-integer_type_literal =
       | "int8" | "int16" | "int32" | "int64"
       | "uint8" | "uint16" | "uint32" | "uint64"
       | "ssize" | "usize"
+      | "float16" | "float32" | "float64"
+      | "any"
 ;
 ```
 
@@ -1059,11 +1064,12 @@ struct_type =
     "struct",
     [ ":", constraint ],
     "{",
-    { struct_type_field },
+    { struct_member },
     "}"
 ;
 
-struct_type_field =
+struct_member =
+    { attribute },
     type,
     identifier,
     ";"
@@ -1076,13 +1082,15 @@ struct_type_field =
 union_type =
     "union",
     "{",
-    { union_type_field },
+    { union_member },
     "}"
 ;
 
-union_type_field =
+union_member =
+    { attribute },
     type,
-    identifier
+    identifier,
+    ";"
 ;
 ```
 
@@ -1091,13 +1099,13 @@ union_type_field =
 ```ebnf
 enum_type =
     "enum",
-    [ ":", integer_type_literal ],
+    [ ":", type ],
     "{",
-    { enum_value },
+    { enum_member },
     "}"
 ;
 
-enum_value =
+enum_member =
     identifier,
     [ "=", expression ]
 ;
@@ -1155,7 +1163,8 @@ constraint_method =
         parameter_spec,
         { ",", parameter_spec }
     ],
-    ":"
+    ")",
+    ";"
 ;
 ```
 

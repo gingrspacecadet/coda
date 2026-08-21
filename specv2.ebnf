@@ -126,7 +126,9 @@ expr_stmt =
 ;
 
 block_stmt =
-    "{", statement, "}"
+    "{",
+    { statement },
+    "}"
 ;
 
 if_stmt =
@@ -186,8 +188,8 @@ defer_stmt =
 
 
 expression =
-        literal
-      | identifier
+        identifier
+      | literal
       | initializer
       | parenthesised_expr
       | unary_expr
@@ -207,6 +209,8 @@ expression =
       | type
       | constraint
 ;
+
+identifier = ? defined in tokenisation ?;
 
 literal =
         null_literal
@@ -230,7 +234,9 @@ char_literal = ? defined in tokenisation ?;
 string_literal = ? defined in tokenisation ?;
 
 initializer =
-    "{", { init_field }, "}"
+    "{",
+    { init_field },
+    "}"
 ;
 
 init_field =
@@ -341,12 +347,14 @@ deref_expr =
 intrinsic_expr =
     "#",
     path,
-    "(",
     [
-        expression,
-        { ",", expression }
-    ],
-    ")"
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
 ;
 
 bubble_expr =
@@ -373,7 +381,7 @@ lambda_expr =
 code_expr =
     "#",
     "{",
-    (* tbd *)
+    ? tbd ?,
     "}"
 ;
 
@@ -403,15 +411,11 @@ type_literal =
         "none"
       | "null"
       | "bool"
-      | integer_type_literal
-      | "float16" | "float32" | "float64"
-      | "any"
-;
-
-integer_type_literal =
       | "int8" | "int16" | "int32" | "int64"
       | "uint8" | "uint16" | "uint32" | "uint64"
       | "ssize" | "usize"
+      | "float16" | "float32" | "float64"
+      | "any"
 ;
 
 intrinsic_type =
@@ -468,6 +472,7 @@ struct_type =
 ;
 
 struct_member =
+    { attribute },
     type,
     identifier,
     ";"
@@ -481,19 +486,21 @@ union_type =
 ;
 
 union_member =
+    { attribute },
     type,
-    identifier
+    identifier,
+    ";"
 ;
 
 enum_type =
     "enum",
-    [ ":", integer_type_literal ],
+    [ ":", type ],
     "{",
-    { enum_value },
+    { enum_member },
     "}"
 ;
 
-enum_value =
+enum_member =
     identifier,
     [ "=", expression ]
 ;
@@ -551,5 +558,3 @@ path =
     identifier,
     { "::", identifier }
 ;
-
-identifier = ? defined in tokenisation ?;
