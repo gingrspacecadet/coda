@@ -21,26 +21,25 @@ string[] ERROR_MEANINGS = {
 @export
 @noreturn
 fn fatal_error(string message) {
-
+    std::debug::println(message);
+    std::process::exit(std::process::EXIT_FALIURE);
 }
 
 @export
 @noreturn
 fn Error.throw(Error this) {
-    // tbd
-    std::print("Error: {}", [ERROR_MEANINGS[this]]);
-    std::process::exit(std::process::EXIT_FALIURE);
+    fatal_error(std::fmt::format(std::mem::default_heap, "Error: {}", [ERROR_MEANINGS[this]]));
 }
 
 @export
 @inline
-fn T try<T>(value: (T | Error)) {
-    match (value) {
+fn T (T | Error).try((T | Error) this) {
+    match (this) {
         Error {
-            value.throw();
+            this.throw();
         }
         T {
-            return value;
+            return this;
         }
     }
 }

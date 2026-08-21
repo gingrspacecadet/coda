@@ -23,13 +23,14 @@ type TypeKind = enum: uint8 {
     ANY = 0x10,
     INTRINSIC = 0x11,
     GENERIC = 0x12,
-    POINTER = 0x13,
-    ARRAY = 0x14,
-    FUNCTION = 0x15,
-    STRUCT = 0x16,
-    UNION = 0x17,
-    ENUM = 0x18,
-    SUM = 0x19,
+    GENERIC_PARAM = 0x13,
+    POINTER = 0x14,
+    ARRAY = 0x15,
+    FUNCTION = 0x16,
+    STRUCT = 0x17,
+    UNION = 0x18,
+    ENUM = 0x19,
+    SUM = 0x1A,
 };
 
 @export

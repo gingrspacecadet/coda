@@ -94,6 +94,11 @@ fn T T.real_mod<T: Float>(T this, T other) {
 }
 
 @export
+fn T ceil_div<T: Integer>(T this, T other) {
+    return (this + other - 1) / other;
+}
+
+@export
 fn (T | Error::IS_EMPTY) min<T: Number>(Contiguous<T>* data) {
     if (data.len == 0) {
         return Error::IS_EMPTY;
