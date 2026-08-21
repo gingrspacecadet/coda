@@ -30,7 +30,7 @@ type TypeKind = enum: uint8 {
     STRUCT = 0x17,
     UNION = 0x18,
     ENUM = 0x19,
-    SUM = 0x1A,
+    SUM = 0x1a,
 };
 
 @export
