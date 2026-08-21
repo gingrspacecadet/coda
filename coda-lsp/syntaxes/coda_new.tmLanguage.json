@@ -1,0 +1,158 @@
+{
+    "scopeName": "source.coda",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#top-level"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "include": "#block-comments"
+                },
+                {
+                    "name": "comment.line.double-slash.coda",
+                    "match": "(//).*(?=$)",
+                    "captures": {
+                        "1": {
+                            "name": "punctuation.definition.comment.line.double-slash.coda"
+                        }
+                    }
+                }
+            ]
+        },
+        "block-comments": {
+                "name": "comment.block.coda",
+                "begin": "/\\*",
+                "end": "\\*/",
+                "beginCaptures": {
+                    "0": {
+                        "name": "punctuation.definition.comment.block.begin.coda"
+                    }
+                },
+                "endCaptures": {
+                    "0": {
+                        "name": "punctuation.definition.comment.block.end.coda"
+                    }
+                },
+                "patterns": [
+                    {
+                        "include": "#block-comments"
+                    }
+                ]
+            },
+        "top-level": {
+            "patterns": [
+                {
+                    "include": "#comments"
+                },
+                {
+                    "include": "#module"
+                },
+                {
+                    "include": "#declarations"
+                }
+            ]
+        },
+        "module": {
+            "name": "meta.module.coda",
+            "begin": "^\\s*(module)",
+            "end": "(?=;)",
+            "beginCaptures": {
+                "1": {
+                    "name": "keyword.control.module.coda"
+                }
+            },
+            "patterns": [
+                {
+                    "name": "punctuation.separator.double-colon.coda",
+                    "match": "::"
+                },
+                {
+                    "name": "entity.name.namespace.coda",
+                    "match": "\\b[A-Za-z_]\\w*\\b"
+                }
+            ]
+        },
+        "declarations": {
+            "patterns": [
+                {
+                    "include": "#attributes"
+                },
+                {
+                    "include": "#include-declaration"
+                },
+                {
+                    "include": "#variable-declaration"
+                },
+                {
+                    "include": "#type-declaration"
+                },
+                {
+                    "include": "#constraint-declaration"
+                },
+                {
+                    "include": "#function-declaration"
+                }
+            ]
+        },
+        "attributes": {
+            "patterns": [
+                {
+                    "name": "meta.declaration.attribute.coda",
+                    "begin": "(@)([a-zA-Z_]\\w*)\\(",
+                    "end": "\\)",
+                    "patterns": [
+                    ]
+                },
+                {
+                    "name": "meta.declaration.attribute.coda",
+                    "match": "(@)([a-zA-Z_]\\w*)",
+                    "captures": {
+                        "0": {
+                            "name": ""
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "name": "storage.modifier.coda",
+                            "match": "@[a-zA-Z_]\\w*(\\([\\(]*\\))?"
+                        }
+                    ]
+                }
+            ]
+        },
+        "include-declaration": {
+            "name": "meta.module.coda",
+            "begin": "^\\s*(include)",
+            "end": "(?=;)",
+            "beginCaptures": {
+                "1": {
+                    "name": "keyword.control.include.coda"
+                }
+            },
+            "patterns": [
+                {
+                    "name": "punctuation.separator.double-colon.coda",
+                    "match": "::"
+                },
+                {
+                    "name": "punctuation.separator.colon.coda",
+                    "match": "(?<!:):(?!:)"
+                },
+                {
+                    "name": "keyword.control.underscore.coda",
+                    "match": "\\b_\\b"
+                },
+                {
+                    "name": "entity.name.namespace.coda",
+                    "match": "\\b[A-Za-z_]\\w*\\b"
+                }
+            ]
+        }
+    }
+}
