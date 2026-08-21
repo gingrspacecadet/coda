@@ -72,7 +72,7 @@ string* intrinsic_name;
 
 Fields:
 #type* original;
-#type[] values;
+#type*[] values;
 ```
 
 ### Pointers
@@ -166,7 +166,7 @@ Fields:
 18 - sum type
 
 Fields:
-#type[] members;
+#type*[] members;
 ```
 
 ## Code Representation
