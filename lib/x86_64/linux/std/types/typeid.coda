@@ -41,7 +41,8 @@ type TypeFlags: enum: uint8 {
     POINTER_MUTABLE = 16,
     POINTER_OPTIONAL = 32,
     ARRAY_MUTABLE = 16,
-    FUNCTION_GENERIC = 16,
+    FUNCTION_NAMED = 16,
+    FUNCTION_GENERIC = 32,
 };
 
 // all of the @alignas(0) are probably not neccessary
@@ -79,7 +80,7 @@ type FunctionParameterTypeData = struct {
 };
 
 @export
-type FunctionNonGenericTypeData = struct {
+type FunctionNonNamedNonGenericTypeData = struct {
     @alignas(0)
     Type* return_type;
     @alignas(#sizeof(Type*))
@@ -87,12 +88,34 @@ type FunctionNonGenericTypeData = struct {
 };
 
 @export
-type FunctionGenericTypeData = struct {
+type FunctionNonNamedGenericTypeData = struct {
     @alignas(0)
-    string*[] generic_names;
-    @alignas(#sizeof(string*[]))
     Type* return_type;
-    @alignas(#sizeof(string*[]) + #sizeof(Type*))
+    @alignas(#sizeof(Type*))
+    string*[] generic_names;
+    @alignas(#sizeof(Type*) + #sizeof(string*[]))
+    FunctionParameterData[] params;
+};
+
+@export
+type FunctionNamedNonGenericTypeData = struct {
+    @alignas(0)
+    Type* return_type;
+    @alignas(#sizeof(Type*))
+    string* name;
+    @alignas(#sizeof(Type*) + #sizeof(string*))
+    FunctionParameterData[] params;
+};
+
+@export
+type FunctionNamedGenericTypeData = struct {
+    @alignas(0)
+    Type* return_type;
+    @alignas(#sizeof(Type*))
+    string* name;
+    @alignas(#sizeof(Type*) + #sizeof(string*))
+    string*[] generic_names;
+    @alignas(#sizeof(Type*) + #sizeof(string*) + #sizeof(string*[]))
     FunctionParameterData[] params;
 };
 
@@ -103,7 +126,7 @@ type StructMemberTypeData = struct {
     @alignas(#sizeof(string*))
     Type* type_;
     @alignas(#sizeof(string*) + #sizeof(Type*))
-    usize align;
+    usize offset;
 };
 
 @export
@@ -111,6 +134,8 @@ type StructTypeData = struct {
     @alignas(0)
     usize size;
     @alignas(#sizeof(usize))
+    #type[] inherits_from;
+    @alignas(#sizeof(usize) + #sizeof(#type[]))
     StructMemberTypeData[] members;
 };
 
@@ -121,13 +146,15 @@ type UnionMemberTypeData = struct {
     @alignas(#sizeof(string*))
     Type* type_;
     @alignas(#sizeof(string*) + #sizeof(Type*))
-    usize align;
+    usize offset;
 };
 
 @export
 type UnionTypeData = struct {
     @alignas(0)
     usize size;
+    @alignas(#sizeof(usize))
+    #type[] inherits_from;
     @alignas(#sizeof(usize))
     UnionMemberTypeData[] members;
 };
@@ -166,9 +193,13 @@ type ExtraTypeData = union {
     @alignas(0)
     ArrayTypeData array;
     @alignas(0)
-    FunctionNonGenericTypeData* function_non_generic;
+    FunctionNonNamedNonGenericTypeData* function_non_named_non_generic;
     @alignas(0)
-    FunctionGenericTypeData* function_generic;
+    FunctionNonNamedGenericTypeData* function_non_named_non_generic;
+    @alignas(0)
+    FunctionNamedNonGenericTypeData* function_named_non_generic;
+    @alignas(0)
+    FunctionNamedGenericTypeData* function_named_generic;
     @alignas(0)
     StructTypeData* struct_;
     @alignas(0)
@@ -230,6 +261,30 @@ fn bool Type.is_mutable(Type* this) {
 @inline
 fn bool Type.is_generic(Type* this) {
     return this.flags & TypeFlags::GENERIC;
+}
+
+@export
+@inline
+fn bool Type.is_pointer_mutable(Type* this) {
+    return this.flags & TypeFlags::POINTER_MUTABLE;
+}
+
+@export
+@inline
+fn bool Type.is_pointer_optional(Type* this) {
+    return this.flags & TypeFlags::POINTER_OPTIONAL;
+}
+
+@export
+@inline
+fn bool Type.is_array_mutable(Type* this) {
+    return this.flags & TypeFlags::ARRAY_MUTABLE;
+}
+
+@export
+@inline
+fn bool Type.is_function_generic(Type* this) {
+    return this.flags & TypeFlags::FUNCTION_GENERIC;
 }
 
 @export
@@ -327,6 +382,6 @@ fn usize Type.get_size(Type* this) {
     } else if (this.kind == TypeKind::SUM) {
         return this.get_extra_data().sum.size;
     } else {
-        fatal_error(format(default_heap, "Fatal error: Invalid typeid: {}", [this.kind]).to_array());
+        fatal_error("Fatal error: Invalid typeid kind");
     }
 }

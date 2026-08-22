@@ -1,24 +1,22 @@
 module std::fmt;
 
+include std
 include std::types::typeid = _;
 include std::error = _;
-include std::mem = _;
+include std::mem = mem;
 include std::text = _;
 
-type FormatState = struct {
-    String* str;
+type FormatConfig = struct {
+};
+
+type Formatter = struct: String {
+    FormatConfig config;
+    any[] data;
     usize indent;
 };
 
-fn none FormatState.push(FormatState* this, char data) {
-    this.str.push(data);
-}
-
-fn none FormatState.add(FormatState* this, GenericString data) {
-    this.str.add(data);
-}
-
-fn none FormatState.newline(FormatState* this) {
+@inline
+fn none Formatter.newline(mut Formatter* this) {
     this.add("\n");
     for (mut usize i = 0; i < this.len; i += 1) {
         this.add("    ");
@@ -26,47 +24,48 @@ fn none FormatState.newline(FormatState* this) {
 }
 
 string DIGITS = "0123456789";
+string HEX_DIGITS = "0123456789abcdef";
 
 @inline
-fn none format_unsigned<T: Unsigned>(FormatState* state, T value) {
+fn none Formatter.unsigned<T: Unsigned>(mut Formatter* this, T value) {
     if (value == 0) {
-        state.add("0");
+        this.add("0");
     } else {
         while (value > 0) {
-            state.push(DIGITS[value % 10]);
+            this.push(DIGITS[value % 10]);
             value /= 10;
         }
     }
 }
 
 @inline
-fn none format_signed<T: Signed>(FormatState* state, T value) {
+fn none Formatter.signed<T: Signed>(mut Formatter* this, T value) {
     if (value == 0) {
-        state.add("0");
+        this.add("0");
         return;
     }
     if (value < 0) {
         value = -value;
-        state.add("-");
+        this.add("-");
     }
     while (value > 0) {
-        state.push(DIGITS[value % 10]);
+        this.push(DIGITS[value % 10]);
         value /= 10;
     }
 }
 
 @inline
-fn none format_float<T: Float>(FormatState* state, T value) {
+fn none Formatter.float<T: Float>(mut Formatter* this, T value) {
     if (value.is_nan()) {
-        state.add("NaN");
+        this.add("NaN");
         return;
     }
     if (value < 0) {
         value = -value;
-        state.add("-");
+        this.add("-");
     }
     if (value.is_infinity()) {
-        state.add("Infinity");
+        this.add("Infinity");
         return;
     }
     (none | int64) exp = none;
@@ -90,142 +89,306 @@ fn none format_float<T: Float>(FormatState* state, T value) {
         value = value.trunc();
     }
     if (value == 0) {
-        state.add("0");
+        this.add("0");
     } else {
         while (value > 0) {
-            state.push(DIGITS[value % 10]);
+            this.push(DIGITS[value % 10]);
             value /= 10;
         }
     }
     if (fraction != 0) {
-        state.add(".");
+        this.add(".");
         while (fraction > 0) {
             fraction *= 10;
-            state.add(DIGITS[fraction.trunc()]);
+            this.add(DIGITS[fraction.trunc()]);
             fraction %= 1;
         }
     }
     if (#tag_test(exp, int64)) {
-        state.add("e");
+        this.add("e");
         if (exp > 0) {
-            state.add("+");
+            this.add("+");
         } else {
-            state.add("-");
+            this.add("-");
         }
-        format_unsigned(state, exp.abs());
+        this.unsigned(exp.abs());
     }
 }
 
-string HEX_DIGITS = "0123456789";
 
-fn none format_type(FormatState* state, Type* t) {
-    if (t.is_mutable()) {
-        state.add("mut ");
+fn bool Formatter.try_name(mut Formatter* this, Type* t, bool space_after) {
+    if (this.is_named()) {
+        if (t.is_generic()) {
+            string*[] generic_names = t.get_generic_names().try();
+            this.add("<");
+            for (mut usize i = 0; i < generic_names.len; i += 1) {
+                this.add(generic_names[i]);
+                if (i != generic_names.len - 1) {
+                    this.add(", ");
+                }
+            }
+            this.add(">");
+        }
+        if (space_after) {
+            this.add(" ");
+        }
+        return true;
+    } else {
+        return false;
     }
-    if (t.is_named()) {
-        state.add(t.get_name().try());
+}
+
+fn none Formatter.type_(mut Formatter* this, Type* t) {
+    if (t.is_mutable()) {
+        this.add("mut ");
+    }
+    if (this.try_name(t, false)) {
+        // do nothing, the function handles it
     } else if (t.kind == TypeKind::NONE) {
-        state.add("none");
+        this.add("none");
     } else if (t.kind == TypeKind::NULL) {
-        state.add("null");
+        this.add("null");
     } else if (t.kind == TypeKind::BOOL) {
-        state.add("bool");
+        this.add("bool");
     } else if (t.kind == TypeKind::INT8) {
-        state.add("int8");
+        this.add("int8");
     } else if (t.kind == TypeKind::INT16) {
-        state.add("int16");
+        this.add("int16");
     } else if (t.kind == TypeKind::INT32) {
-        state.add("int32");
+        this.add("int32");
     } else if (t.kind == TypeKind::INT64) {
-        state.add("int64");
+        this.add("int64");
     } else if (t.kind == TypeKind::UINT8) {
-        state.add("uint8");
+        this.add("uint8");
     } else if (t.kind == TypeKind::UINT16) {
-        state.add("uint16");
+        this.add("uint16");
     } else if (t.kind == TypeKind::UINT32) {
-        state.add("uint32");
+        this.add("uint32");
     } else if (t.kind == TypeKind::UINT64) {
-        state.add("uint64");
+        this.add("uint64");
     } else if (t.kind == TypeKind::SSIZE) {
-        state.add("ssize");
+        this.add("ssize");
     } else if (t.kind == TypeKind::USIZE) {
-        state.add("usize");
+        this.add("usize");
     } else if (t.kind == TypeKind::FLOAT16) {
-        state.add("float16");
+        this.add("float16");
     } else if (t.kind == TypeKind::FLOAT32) {
-        state.add("float32");
+        this.add("float32");
     } else if (t.kind == TypeKind::FLOAT64) {
-        state.add("float64");
+        this.add("float64");
     } else if (t.kind == TypeKind::ANY) {
-        state.add("any");
+        this.add("any");
     } else if (t.kind == TypeKind::INTRINSIC) {
         // todo
+        this.add("<intrinsic type>");
+    } else if (t.kind == TypeKind::POINTER) {
+        this.type_(t.get_extra_data().pointer.to);
+        if (this.is_pointer_mutable()) {
+            this.add(" mut");
+        }
+        this.add("*");
+        if (this.is_pointer_optional()) {
+            this.add("?");
+        }
+    } else if (t.kind == TypeKind::ARRAY) {
+        this.type_(t.get_extra_data().array.of);
+        if (this.is_array_mutable()) {
+            this.add(" mut");
+        }
+        this.add("[]");
+    } else if (t.kind == TypeKind::FUNCTION) {
+        this.add("(fn ");
+        FunctionParameterTypeData[] params;
+        // i'll deal with this not being up to date later
+        if (this.is_function_generic()) {
+            FunctionGenericTypeData* extra = &t.get_extra_data().function_generic;
+            this.type_(extra.return_type);
+            this.add("<");
+            for (mut usize i = 0; i < extra.generic_names.len; i += 1) {
+                this.add(extra.generic_names[i]);
+                if (i != extra.generic_names.len - 1) {
+                    this.add(", ");
+                }
+            }
+            this.add(">");
+            params = extra.params;
+        } else {
+            FunctionNonGenericTypeData* extra = &t.get_extra_data().function_non_generic;
+            this.type_(extra.return_type);
+            params = extra.params;
+        }
+        this.add("(");
+        for (mut usize i = 0; i < params.len; i += 1) {
+            this.type_(params[i].name);
+            this.add(" ");
+            this.type_(params[i].type_);
+        }
+        this.add("))");
+    } else if (t.kind == TypeKind::STRUCT) {
+        this.add("struct");
+        StructTypeData* extra = &t.get_extra_data().struct_;
+        if (extra.inherits_from.len > 0) {
+            this.add(": ");
+            for (mut usize i = 0; i < extra.inherits_from.len; i++) {
+                this.add("");
+            }
+        }
+        this.add(" {");
+        this.indent += 1;
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            StructMemberTypeData* member = &extra.members[i];
+            this.newline();
+            this.add(member.type_);
+            this.add(" ");
+            this.add(member.name);
+            this.add(";");
+        }
+        this.indent -= 1;
+        this.newline();
+        this.add("}");
+    } else if (t.kind == TypeKind::UNION) {
+        this.add("union");
+        // UnionTypeData* extra = &t.get_extra_data().struct_;
+        // if (extra.inherits_from.len > 0) {
+        //     this.add(": ");
+        //     for (mut usize i = 0; i < extra.inherits_from.len; i++) {
+        //         this.add("");
+        //     }
+        // }
+        this.add(" {");
+        this.indent += 1;
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            UnionMemberTypeData* member = &extra.members[i];
+            this.newline();
+            this.add(member.type_);
+            this.add(" ");
+            this.add(member.name);
+            this.add(";");
+        }
+        this.indent -= 1;
+        this.newline();
+        this.add("}");
+    } else if (t.kind == TypeKind::ENUM) {
+        this.add("enum: ");
+        EnumTypeData* extra = &t.get_extra_data().enum_;
+        this.type_(extra.backing_type);
+        this.add(" {");
+        this.indent += 1;
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            EnumMemberTypeData* member = &extra.members[i];
+            this.newline();
+            this.add(member.name);
+            this.add(" = ");
+            this.value(extra.backing_type, &member.value);
+            this.add(",");
+        }
+        this.indent -= 1;
+        this.newline();
+        this.add("}");
+    } else if (t.kind == TypeKind::SUM) {
+        this.add("(");
+        Type*[] members = &t.get_extra_data().sum.members;
+        for (mut usize i = 0; i < members.len; i += 1) {
+            this.type_(members[i]);
+            if (i != members.len - 1) {
+                this.add(" | ");
+            }
+        }
+        this.add(")");
+    } else {
+        fatal_error("Fatal error: Invalid typeid kind");
     }
-} 
-
-fn none format_intrinsic(FormatState* state, Type* t, none* value) {
-
 }
 
-fn none format_value(FormatState* state, Type* t, none* value) {
+@inline
+fn none Formatter.intrinsic(mut Formatter* this, Type* t, none* value) {
+    // todo
+    this.add("<intrinsic type>");
+}
+
+@inline
+fn none Formatter.char_(mut Formatter* this, char c) {
+    if (c == '\\') {
+        this.add('\\\\');
+    } else if (c == '"') {
+        this.add('\\"');
+    } else if (c == '\'') {
+        this.add('\\\'');
+    } else if (c == '\n') {
+        this.add('\\n');
+    } else if (c == '\r') {
+        this.add('\\r');
+    } else if (c == '\t') {
+        this.add('\\t');
+    } else if (c == '\0') {
+        this.add('\\0');
+    } else if (c.is_printable()) {
+        this.add(c);
+    } else {
+        this.add("\\x");
+        this.push(HEX_DIGITS[c >> 4]);
+        this.push(HEX_DIGITS[c & 0xf]);
+    }
+}
+
+fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
     if (t.kind == TypeKind::NONE) {
-        state.add("none");
+        this.add("none");
     } else if (t.kind == TypeKind::NULL) {
-        state.add("null");
+        this.add("null");
     } else if (t.kind == TypeKind::BOOL) {
-        ostateut.add((*(bool*)value).to_string());
+        this.add((*(bool*)value).to_string());
     } else if (t.kind == TypeKind::INT8) {
-        format_signed(state, *(int8*)value);
+        this.signed(*(int8*)value);
     } else if (t.kind == TypeKind::INT16) {
-        format_signed(state, *(int16*)value);
+        this.signed(*(int16*)value);
     } else if (t.kind == TypeKind::INT32) {
-        format_signed(state, *(int32*)value);
+        this.signed(*(int32*)value);
     } else if (t.kind == TypeKind::INT64) {
-        format_signed(state, *(int64*)value);
+        this.signed(*(int64*)value);
     } else if (t.kind == TypeKind::UINT8) {
         if (t.is_named() && t.get_name().try().eq("char")) {
-            state.add("'");
-            state.add(*(uint8*)value);
-            state.add("'");
+            this.add("'");
+            this.char_(*(char*)value);
+            this.add("'");
         } else {
-            format_unsigned(state, *(uint8*)value);
+            this.unsigned(*(uint8*)value);
         }
     } else if (t.kind == TypeKind::UINT16) {
-        format_unsigned(state, *(uint16*)value);
+        this.unsigned(*(uint16*)value);
     } else if (t.kind == TypeKind::UINT32) {
-        format_unsigned(state, *(uint32*)value);
+        this.unsigned(*(uint32*)value);
     } else if (t.kind == TypeKind::UINT64) {
-        format_unsigned(state, *(uint64*)value);
+        this.unsigned(*(uint64*)value);
     } else if (t.kind == TypeKind::SSIZE) {
-        format_signed(state, *(ssize*)value);
+        this.signed(*(ssize*)value);
     } else if (t.kind == TypeKind::USIZE) {
-        format_unsigned(state, *(usize*)value);
+        this.unsigned(*(usize*)value);
     } else if (t.kind == TypeKind::FLOAT16) {
-        format_float(state, *(float16*)value);
+        this.float(*(float16*)value);
     } else if (t.kind == TypeKind::FLOAT32) {
-        format_float(state, *(float32*)value);
+        this.float(*(float32*)value);
     } else if (t.kind == TypeKind::FLOAT64) {
-        format_float(state, *(float64*)value);
+        this.float(*(float64*)value);
     } else if (t.kind == TypeKind::ANY) {
-        state.add("(any) ");
+        this.add("(any) ");
         any value2 = *(any*)value;
-        format_value(state, (Type*)value2.typeid, value2.value, state);
-        format_value(state, (Type*)value2.typeid, value2.value, state);
+        this.value((Type*)value2.typeid, value2.value);
     } else if (t.kind == TypeKind::INTRINSIC) {
-        format_intrinsic(state, t.get_extra_data().name);
+        this.intrinsic(t.get_extra_data().name);
     } else if (t.kind == TypeKind::POINTER) {
         // format using the type:
-        // state.add("(");
-        // format_type(state, t);
-        // state.add(") 0x");
+        // this.add("(");
+        // this.type_(t);
+        // this.add(") 0x");
         // format using &:
-        state.add("&0x");
+        this.add("&0x");
         usize ptr = *(usize*)value;
         if (ptr == 0) {
-            state.add("0");
+            this.add("0");
         } else {
             while (value > 0) {
-                state.push(HEX_DIGITS[value & 0xf]);
+                this.push(HEX_DIGITS[value & 0xf]);
                 value >>= 4;
             }
         }
@@ -233,49 +396,94 @@ fn none format_value(FormatState* state, Type* t, none* value) {
         Type* of = t.get_extra_data().array.of;
         none[] array = *(none[]*)value;
         if (of.kind == TypeKind::UINT8 && t.is_named() && t.get_name().try().eq("string")) {
-            state.add("\"");
-            state.add((string)array);
-            state.add("\"");
-        } else if (array.len == 0) {
-            state.add("[]");
+            this.add("\"");
+            for (mut usize i = 0; i < array.len; i += 1) {
+                this.char_((char)array[i]);
+            }
+            this.add("\"");
         } else {
-            state.add("[");
-            state.indent += 1;
+            this.add("[");
             for (mut usize i = 0; i < array.len; i += 1) {
                 none* elt = array.ptr + of.sizeof();
-                state.newline();
-                format_value(state, of, value);
-                state.add(",");
+                this.value(of, value);
+                if (i != array.len - 1) {
+                    this.add(", ");
+                }
             }
-            state.indent -= 1;
-            state.newline();
-            state.add("]");
+            this.add("]");
         }
+    } else if (t.kind == TypeKind::FUNCTION) {
+        // todo
+        this.add("<function pointer>");
+    } else if (t.kind == TypeKind::STRUCT) {
+        StructTypeData* extra = &t.get_extra_data().struct_;
+        this.add("struct ");
+        this.try_name(t, true);
+        this.add("{");
+        this.indent += 1;
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            StructMemberTypeData* member = &extra.members[i];
+            this.newline();
+            this.add(member.name);
+            this.add(" = ");
+            this.value(member.type_, value + member.offset);
+            this.add(";");
+        }
+        this.indent -= 1;
+        this.newline();
+        this.add("}");
+    } else if (this.kind == TypeKind::UNION) {
+        StructTypeData* extra = &t.get_extra_data().union_;
+        this.add("union ");
+        this.try_name(t, true);
+        this.add("{");
+        this.indent += 1;
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            UnionMemberTypeData* member = &extra.members[i];
+            this.newline();
+            this.add(member.name);
+            this.add(" = ");
+            this.value(member.type_, value + member.offset);
+            this.add(";");
+        }
+        this.indent -= 1;
+        this.newline();
+        this.add("}");
+    } else if (this.kind == TypeKind::ENUM) {
+        StructTypeData* extra = &t.get_extra_data().enum_;
+        this.add("(enum");
+        this.try_name(t, false);
+        // todo: add backing type and fix call to compare and finish it up
+        this.add(")");
+        for (mut usize i = 0; i < extra.members.len; i += 1) {
+            EnumMemberTypeData* member = &extra.members[i];
+            if (mem::compare(member.value, value)) {
+
+            }
+        }
+    } else if (this.kind == TypeKind::SUM) {
+        // todo
+    } else {
+        fatal_error("Fatal error: Invalid typeid kind");
     }
 }
 
-fn (none | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD) format_field(String* out, string field, any[] data, usize* data_pos) {
-    FormatState state = {
-        .str = out,
-        .indent = 0,
-    };
+fn (none | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD) Formatter.field(mut Formatter* this, string field, any[] data, usize* data_pos) {
     if (field.len > 0) {
         return Error::INVALID_FORMAT_FIELD;
     }
     if (*data_pos > data.length) {
         return Error::NOT_ENOUGH_FORMAT_ARGS;
     }
-    any value = data[*data_pos];
+    any value = this.data[*data_pos];
     *data_pos += 1;
-    format_value(out, (Type*)data_value.typeid, value.value, state);
+    this.value(out, (Type*)data_value.typeid, value.value);
 }
 
 @export
-fn (String | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD | Error::FORMAT_FIELD_NOT_CLOSED | Error::FORMAT_FIELD_NOT_OPENED) format(Allocator* allocator, string str, any[] data) {
-    String out;
-    out.init(allocator, 0);
+fn (String | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD | Error::FORMAT_FIELD_NOT_CLOSED | Error::FORMAT_FIELD_NOT_OPENED) Formatter.main(string str) {
     String current_field;
-    current_field.init(allocator, 0);
+    current_field.init(this.allocator, 0);
     usize data_pos = 0;
     for (mut usize i = 0; i < str.len; i += 1) {
         char c = str[i];
@@ -296,12 +504,27 @@ fn (String | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD | Error
                 current_field.push(c);
                 i += 1;
             }
-            format_field(out, current_field.to_array(), data, &data_pos);
+            this.field(out, current_field.to_array(), data, &data_pos);
         } else if (c == '}' && !(i != str.len - 1 && str[i + 1] == '}')) {
             return Error::FORMAT_FIELD_NOT_OPENED;
         } else {
             out.push(c);
         }
     }
+    return out;
+}
+
+@export
+fn (String | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD | Error::FORMAT_FIELD_NOT_CLOSED | Error::FORMAT_FIELD_NOT_OPENED) format(Allocator* allocator, string str, any[] data) {
+    Formatter f;
+    f.config = {};
+    f.data = data;
+    f.indent = 0;
+    f.init(allocator, 0);
+    f.main(str);
+    String out;
+    out.init(f.len, 0);
+    f.copy_to(out);
+    f.destroy();
     return out;
 }
