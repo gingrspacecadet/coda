@@ -76,18 +76,12 @@ Fields:
 #type*[] values;
 ```
 
-### Generic Parameters
-
-```
-13 - generic parameter
-```
-
 This type represents a generic parameter. It does not resolve to a real type by itself, but can only be used inside generic types. The `name` flag must be set to 1.
 
 ### Pointers
 
 ```
-14 - pointer
+13 - pointer
 
 Flags:
 4 - mutable;
@@ -100,7 +94,7 @@ Fields:
 ### Arrays
 
 ```
-15 - array
+14 - array
 
 Flags:
 4 - mutable
@@ -115,7 +109,7 @@ usize*? len;
 There has to be a separate "generic" field for this, because one can have generic type aliases for generic functions.
 
 ```
-16 - function
+15 - function
 
 Flags:
 4 - generic
@@ -133,7 +127,7 @@ if generic:
 ### Structs
 
 ```
-17 - struct
+16 - struct
 
 Fields:
 usize size;
@@ -147,7 +141,7 @@ usize size;
 ### Unions
 
 ```
-18 - union
+17 - union
 
 Fields:
 usize size;
@@ -161,7 +155,7 @@ usize size;
 ### Enums
 
 ```
-19 - enum
+18 - enum
 
 Fields:
 #type* backing_type;
@@ -174,7 +168,7 @@ Fields:
 ### Sum types
 
 ```
-1A - sum type
+19 - sum type
 
 Fields:
 usize size;
