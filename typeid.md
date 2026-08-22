@@ -119,6 +119,7 @@ if generic:
 
 Fields:
 usize size;
+#type[] inherits_from;
 (struct {
     string* name;
     #type* type;
