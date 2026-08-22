@@ -5,18 +5,18 @@
 int main() {
     Source s = {
         .contents = string_make(
-"module lambda;\n"
-"\n"
-"fn int test(fn int(int) func) {\n"
-"    return func(2);\n"
-"}\n"
-"\n"
-"@export\n"
-"fn int main() {\n"
-"    return test(fn int (int a) {\n"
-"        return a;\n"
-"    });\n"
-"}\n"
+            "module lambda;\n"
+            "\n"
+            "fn int test(fn int(int) func) {\n"
+            "    return func(2);\n"
+            "}\n"
+            "\n"
+            "@export\n"
+            "fn int main() {\n"
+            "    return test(fn int (int a) {\n"
+            "        return a;\n"
+            "    });\n"
+            "}\n"
         )
     };
 

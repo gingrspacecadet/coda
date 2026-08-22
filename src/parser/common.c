@@ -69,14 +69,28 @@ AstName parse_name(Parser *p) {
         .kind = NAME_IDENT
     };
 
-    if (!at(p, TK_IDENT)) {
-        error_expected_identifier(p->diags, p->current.span);
+    if (at(p, TK_IDENT)) {
+        name.ident = span_to_string(p->current.span);
+        advance(p);
         return name;
     }
 
-    name.ident = span_to_string(p->current.span);
-    advance(p);
+    if (at(p, TK_POUND)) {
+        name.kind = NAME_SPLICE;
 
+        advance(p);
+
+        if (!expect(p, TK_LPAREN)) {
+            return name;
+        }
+
+        name.splice = parse_expression(p);
+
+        expect(p, TK_RPAREN);
+        return name;
+    }
+
+    error_expected_identifier(p->diags, p->current.span);
     return name;
 }
 
