@@ -1,14 +1,253 @@
 module std::fmt;
 
+include std::types::typeid = _;
+include std::error = _;
 include std::mem = _;
 include std::text = _;
 
-fn none format_field(String out, string field, any[] data, usize* data_pos) {
-    any value = data[data_pos];
+type FormatState = struct {
+    String* out;
+    usize indent;
+};
+
+string DIGITS = "0123456789";
+
+@inline
+fn none format_unsigned<T: Unsigned>(FormatState* state, T value) {
+    if (value == 0) {
+        out.add("0");
+    } else {
+        while (value > 0) {
+            out.push(DIGITS[value % 10]);
+            value /= 10;
+        }
+    }
+}
+
+@inline
+fn none format_signed<T: Signed>(FormatState* state, T value) {
+    if (value == 0) {
+        out.add("0");
+        return;
+    }
+    if (value < 0) {
+        value = -value;
+        value.add("-");
+    }
+    while (value > 0) {
+        out.push(DIGITS[value % 10]);
+        value /= 10;
+    }
+}
+
+@inline
+fn none format_float<T: Float>(String* out, T value) {
+    if (value.is_nan()) {
+        out.add("NaN");
+        return;
+    }
+    if (value < 0) {
+        value = -value;
+        out.add("-");
+    }
+    if (value.is_infinity()) {
+        out.add("Infinity");
+        return;
+    }
+    (none | int64) exp = none;
+    if (value > value.get_max_safe_integer() || value < 1e-7) {
+        exp = 0;
+        if (value > 10) {
+            while (value > 10) {
+                value /= 10;
+                exp++;
+            }
+        } else {
+            while (value < 1) {
+                value *= 10;
+                exp--;
+            }
+        }
+    }
+    float64 fraction = 0;
+    if (!value.is_integer()) {
+        fraction = (value % 1).abs();
+        value = value.trunc();
+    }
+    if (value == 0) {
+        out.add("0");
+    } else {
+        while (value > 0) {
+            out.push(DIGITS[value % 10]);
+            value /= 10;
+        }
+    }
+    if (fraction != 0) {
+        out.add(".");
+        while (fraction > 0) {
+            fraction *= 10;
+            out.add(DIGITS[fraction.trunc()]);
+            fraction %= 1;
+        }
+    }
+    if (#tag_test(exp, int64)) {
+        out.add("e");
+        if (exp > 0) {
+            out.add("+");
+        } else {
+            out.add("-");
+        }
+        format_unsigned(out, exp.abs());
+    }
+}
+
+string HEX_DIGITS = "0123456789";
+
+fn none format_type(FormatState* state, Type* t) {
+    if (t.kind == TypeKind::NONE) {
+        out.add("none");
+    } else if (t.kind == TypeKind::NULL) {
+        out.add("null");
+    } else if (t.kind == TypeKind::BOOL) {
+        out.add((*(bool*)value).to_string());
+    } else if (t.kind == TypeKind::INT8) {
+        format_signed(out, *(int8*)value);
+    } else if (t.kind == TypeKind::INT16) {
+        format_signed(out, *(int16*)value);
+    } else if (t.kind == TypeKind::INT32) {
+        format_signed(out, *(int32*)value);
+    } else if (t.kind == TypeKind::INT64) {
+        format_signed(out, *(int64*)value);
+    } else if (t.kind == TypeKind::UINT8) {
+        if (t.is_named() && t.get_name().eq("char")) {
+            out.add("'");
+            out.add(*(uint8*)value);
+            out.add("'");
+        }
+        format_unsigned(out, *(uint8*)value);
+    } else if (t.kind == TypeKind::UINT16) {
+        format_unsigned(out, *(uint16*)value);
+    } else if (t.kind == TypeKind::UINT32) {
+        format_unsigned(out, *(uint32*)value);
+    } else if (t.kind == TypeKind::UINT64) {
+        format_unsigned(out, *(uint64*)value);
+    } else if (t.kind == TypeKind::SSIZE) {
+        format_signed(out, *(ssize*)value);
+    } else if (t.kind == TypeKind::USIZE) {
+        format_unsigned(out, *(usize*)value);
+    } else if (t.kind == TypeKind::FLOAT16) {
+        format_float(out, *(float16*)value);
+    } else if (t.kind == TypeKind::FLOAT32) {
+        format_float(out, *(float32*)value);
+    } else if (t.kind == TypeKind::FLOAT64) {
+        format_float(out, *(float64*)value);
+    } else if (t.kind == TypeKind::ANY) {
+        out.add("(any) ");
+        any value2 = *(any*)value;
+        format_value(out, (Type*)value2.typeid, value2.value, state);
+    }
+}
+
+fn none format_intrinsic(FormatState* state, Type* t, none* value) {
+
+}
+
+fn none format_value(FormatState* state, Type* t, none* value) {
+    if (t.kind == TypeKind::NONE) {
+        out.add("none");
+    } else if (t.kind == TypeKind::NULL) {
+        out.add("null");
+    } else if (t.kind == TypeKind::BOOL) {
+        out.add((*(bool*)value).to_string());
+    } else if (t.kind == TypeKind::INT8) {
+        format_signed(out, *(int8*)value);
+    } else if (t.kind == TypeKind::INT16) {
+        format_signed(out, *(int16*)value);
+    } else if (t.kind == TypeKind::INT32) {
+        format_signed(out, *(int32*)value);
+    } else if (t.kind == TypeKind::INT64) {
+        format_signed(out, *(int64*)value);
+    } else if (t.kind == TypeKind::UINT8) {
+        if (t.is_named() && t.get_name().try().eq("char")) {
+            out.add("'");
+            out.add(*(uint8*)value);
+            out.add("'");
+        } else {
+            format_unsigned(out, *(uint8*)value);
+        }
+    } else if (t.kind == TypeKind::UINT16) {
+        format_unsigned(out, *(uint16*)value);
+    } else if (t.kind == TypeKind::UINT32) {
+        format_unsigned(out, *(uint32*)value);
+    } else if (t.kind == TypeKind::UINT64) {
+        format_unsigned(out, *(uint64*)value);
+    } else if (t.kind == TypeKind::SSIZE) {
+        format_signed(out, *(ssize*)value);
+    } else if (t.kind == TypeKind::USIZE) {
+        format_unsigned(out, *(usize*)value);
+    } else if (t.kind == TypeKind::FLOAT16) {
+        format_float(out, *(float16*)value);
+    } else if (t.kind == TypeKind::FLOAT32) {
+        format_float(out, *(float32*)value);
+    } else if (t.kind == TypeKind::FLOAT64) {
+        format_float(out, *(float64*)value);
+    } else if (t.kind == TypeKind::ANY) {
+        out.add("(any) ");
+        any value2 = *(any*)value;
+        format_value(out, (Type*)value2.typeid, value2.value, state);
+        format_value(out, (Type*)value2.typeid, value2.value, state);
+    } else if (t.kind == TypeKind::INTRINSIC) {
+        format_intrinsic(out, t.get_extra_data().name);
+    } else if (t.kind == TypeKind::POINTER) {
+        // format using the type:
+        // out.add("(");
+        // format_type(out, t);
+        // out.add(") 0x");
+        // format using &:
+        out.add("&0x");
+        usize ptr = *(usize*)value;
+        if (ptr == 0) {
+            out.add("0");
+        } else {
+            while (value > 0) {
+                out.push(HEX_DIGITS[value & 0xf]);
+                value >>= 4;
+            }
+        }
+    } else if (t.kind == TypeKind::ARRAY) {
+        Type* of = t.get_extra_data().array.of;
+        none[] array = *(none[]*)value;
+        if (of.kind == TypeKind::UINT8 && t.is_named() && t.get_name().try().eq("string")) {
+            out.add("\"");
+            out.add((string)array);
+            out.add("\"");
+        } else {
+            state.indent++;
+            for (mut usize i = 0; i < array.len; i++) {
+                none* elt = array.ptr + of.sizeof();
+                format_value();
+            }
+        }
+    }
+}
+
+fn (none | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD) format_field(String* out, string field, any[] data, usize* data_pos) {
+    FormatState state = {
+        .indent = 0,
+    };
+    if (field.len > 0) {
+        return Error::INVALID_FORMAT_FIELD;
+    }
+    if (*data_pos > data.length) {
+        return Error::NOT_ENOUGH_FORMAT_ARGS;
+    }
+    any value = data[*data_pos];
+    *data_pos += 1;
+    format_value(out, (Type*)data_value.typeid, value.value, state);
 }
 
 @export
-fn String format(Allocator* allocator, string str, any[] data) {
+fn (String | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD | Error::FORMAT_FIELD_NOT_CLOSED | Error::FORMAT_FIELD_NOT_OPENED) format(Allocator* allocator, string str, any[] data) {
     String out;
     out.init(allocator, 0);
     String current_field;
@@ -16,7 +255,13 @@ fn String format(Allocator* allocator, string str, any[] data) {
     usize data_pos = 0;
     for (mut usize i = 0; i < str.len; i += 1) {
         char c = str[i];
-        if (c == '{' && !(i == str.len - 1 || str[i + 1] == '{')) {
+        if (c == '{' && !(i != str.len - 1 && str[i + 1] == '{')) {
+            if (i == str.len - 1) {
+                return Error::INVALID_FORMAT_FIELD;
+            } else if (str[i + 1] == '{') {
+                out.add("{");
+                continue;
+            }
             current_field.reset(0).try();
             i += 1;
             while (i < str.len) {
@@ -28,6 +273,8 @@ fn String format(Allocator* allocator, string str, any[] data) {
                 i += 1;
             }
             format_field(out, current_field.to_array(), data, &data_pos);
+        } else if (c == '}' && !(i != str.len - 1 && str[i + 1] == '}')) {
+            return Error::FORMAT_FIELD_NOT_OPENED;
         } else {
             out.push(c);
         }

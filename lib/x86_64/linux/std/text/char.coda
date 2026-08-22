@@ -64,10 +64,18 @@ fn bool char.is_printable(char this) {
 
 @export
 fn char char.to_upper(char this) {
-    return #inline(this.is_lower()) ? this - 32 : this;
+    if (#inline(this.is_lower())) {
+        return this - 32;
+    } else {
+        return this;
+    }
 }
 
 @export
 fn char char.to_lower(char this) {
-    return #inline(this.is_upper()) ? this + 32 : this;
+    if (#inline(this.is_upper())) {
+        return this - 32;
+    } else {
+        return this;
+    }
 }

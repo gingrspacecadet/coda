@@ -63,3 +63,12 @@ int32 INT32_MAX = 0x7fff_ffff;
 int64 INT64_MIN = -0x8000_0000_0000_0000;
 @export
 int64 INT64_MAX = 0x7fff_ffff_ffff_ffff;
+
+@export
+fn bool.to_string(bool this) {
+    if (this) {
+        return "true";
+    } else {
+        return "false";
+    }
+}

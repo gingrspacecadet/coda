@@ -155,7 +155,11 @@ fn bool is_leap_year(int64 year) {
 
 @export
 fn int32 get_days_in_year(int64 year) {
-    return #inline(is_leap_year(year)) ? 366 : 365;
+    if (#inline(is_leap_year(year))) {
+        return 366;
+    } else {
+        return 365;
+    }
 }
 
 uint8[12] _DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};

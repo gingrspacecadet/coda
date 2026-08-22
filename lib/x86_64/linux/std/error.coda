@@ -4,24 +4,36 @@ include std;
 
 @export
 type Error = enum: uint64 {
-    NOT_INITALIZED,
+    TYPE_IS_NOT_NAMED,
+    TYPE_IS_NOT_GENERIC,
+    NOT_INITIALIZED,
     ALLOCATION_FAILED,
     OUT_OF_BOUNDS,
     INVALID_ENCODED_DATA,
     INVALID_UNICODE_CHAR,
-    IS_EMPTY,
     INVALID_NUMBER,
-};
+    NOT_ENOUGH_FORMAT_ARGS,
+    INVALID_FORMAT_FIELD,
+    FORMAT_FIELD_NOT_CLOSED,
+    FORMAT_FIELD_NOT_OPENED,
+    IS_EMPTY,
+=};
 
 @export
 string[] ERROR_MEANINGS = {
-    .[Error::NOT_INITALIZED] = "Not initialized",
+    .[Error::TYPE_IS_NOT_NAMED] = "Type is not named",
+    .[Error::TYPE_IS_NOT_NAMED] = "Type is not generic",
+    .[Error::NOT_INITIALIZED] = "Not initialized",
     .[Error::ALLOCATION_FAILED] = "Allocation failed",
     .[Error::OUT_OF_BOUNDS] = "Out of bounds",
     .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
-    .[Error::INVALID_UNICODE_CHAR] = "Invalid Unicode character",
-    .[Error::IS_EMPTY] = "Is empty",
+    .[Error::INVALID_UNICODE_CODEPOINT] = "Invalid Unicode codepoint",
     .[Error::INVALID_NUMBER] = "Invalid number",
+    .[Error::NOT_ENOUGH_FORMAT_ARGS] = "Not enough format args",
+    .[Error::INVALID_FORMAT_FIELD] = "Invalid format field",
+    .[Error::FORMAT_FIELD_NOT_CLOSED] = "Format field not closed",
+    .[Error::FORMAT_FIELD_NOT_OPENED] = "Format field not opened",
+    .[Error::IS_EMPTY] = "Is empty",
 };
 
 @export
@@ -34,7 +46,11 @@ fn fatal_error(string message) {
 @export
 @noreturn
 fn Error.throw(Error this) {
-    fatal_error(std::fmt::format(std::mem::default_heap, "Error: {}", [ERROR_MEANINGS[this]]));
+    String* msg;
+    msg.init(default_heap, 0);
+    msg.add("Error: ");
+    msg.add(ERROR_MEANINGS[this]);
+    fatal_error(msg.to_array());
 }
 
 @export

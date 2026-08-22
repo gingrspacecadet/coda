@@ -24,14 +24,13 @@ type TypeKind = enum: uint8 {
     FLOAT64 = 0x0f,
     ANY = 0x10,
     INTRINSIC = 0x11,
-    GENERIC = 0x12,
-    POINTER = 0x13,
-    ARRAY = 0x14,
-    FUNCTION = 0x15,
-    STRUCT = 0x16,
-    UNION = 0x17,
-    ENUM = 0x18,
-    SUM = 0x19,
+    POINTER = 0x12,
+    ARRAY = 0x13,
+    FUNCTION = 0x14,
+    STRUCT = 0x15,
+    UNION = 0x16,
+    ENUM = 0x17,
+    SUM = 0x18,
 };
 
 @export
@@ -55,14 +54,6 @@ type TypeFlags: enum: uint8 {
 type IntrinsicTypeData = struct {
     @alignas(0)
     string* name;
-};
-
-@export
-type GenericTypeData = struct {
-    @alignas(0)
-    Type* original;
-    @alignas(#sizeof(Type*))
-    Type*[] values;
 };
 
 @export
@@ -171,8 +162,6 @@ type ExtraTypeData = union {
     @alignas(0)
     IntrinsicTypeData intrinsic;
     @alignas(0)
-    GenericTypeData generic;
-    @alignas(0)
     PointerTypeData pointer;
     @alignas(0)
     ArrayTypeData array;
@@ -244,18 +233,20 @@ fn bool Type.is_generic(Type* this) {
 }
 
 @export
-fn (none | string*) Type.get_name(Type* this) {
+fn (string* | Error::TYPE_IS_NOT_NAMED) Type.get_name(Type* this) {
     if (this.is_named()) {
         if (this.is_generic()) {
             return this.named_generic.name;
         } else {
             return this.named_non_generic.name;
         }
+    } else {
+        return Error::TYPE_IS_NOT_NAMED;
     }
 }
 
 @export
-fn (none | string*[]) Type.get_generic_names(Type* this) {
+fn (string*[] | Error::TYPE_IS_NOT_GENERIC) Type.get_generic_names(Type* this) {
     if (this.is_generic()) {
         if (this.is_named()) {
             return this.named_generic.generic_names;
@@ -320,6 +311,7 @@ fn usize Type.get_size(Type* this) {
         return #sizeof(any);
     } else if (this.kind == TypeKind::INTRINSIC) {
         // todo
+        fatal_error("Fatal error: Cannot take size of intrinsic");
     } else if (this.kind == TypeKind::POINTER) {
         return #sizeof(none*);
     } else if (this.kind == TypeKind::ARRAY) {

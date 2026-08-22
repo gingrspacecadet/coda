@@ -26,7 +26,7 @@ fn none normalise<T: GenericString>(mut String* out, T* path) {
         } else if (part.eq("..") && i > 0) {
             parts.pop();
         } else {
-            parts.push(part);
+            parts.add(part);
         }
     }
     out.clear();
@@ -39,8 +39,8 @@ fn none join<T: Contiguous<GenericString>>(mut String* out, T* path) {
     temp.init(out.allocator, 0);
     defer temp.destroy();
     for (mut usize i = 0; i < out.len; i += 1) {
-        temp.concat(path.ptr[i]);
-        temp.push('\\');
+        temp.add(path.ptr[i]);
+        temp.add("\\");
     }
     normalise(out, temp);
 }

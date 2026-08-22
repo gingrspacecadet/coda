@@ -10,7 +10,7 @@ constraint GenericWString = Contiguous<wchar>;
 type WString = List<wchar>;
 
 @export
-fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_UNICODE_CHAR) Contiguous<uint32>.utf8_encode(Contiguous<uint32>* this, Contiguous<uint8>* out) {
+fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_UNICODE_CODEPOINT) Contiguous<uint32>.utf8_encode(Contiguous<uint32>* this, Contiguous<uint8>* out) {
     mut usize loc = 0;
     for (mut usize i = 0; i < this.len; i += 1) {
         wchar c = this.ptr[i];
@@ -45,13 +45,13 @@ fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_UNICODE_CHAR) Contiguous<uint32
             out.ptr[loc + 3] = 0x80 | (c & 0x3f);
             loc += 4;
         } else {
-            return Error::INVALID_UNICODE_CHAR;
+            return Error::INVALID_UNICODE_CODEPOINT;
         }
     }
 }
 
 @export
-fn (mut List<uint8> | Error::INVALID_UNICODE_CHAR) Contiguous<uint32>.utf8_encode_alloc(Contiguous<uint32>* this, Allocator* allocator) {
+fn (mut List<uint8> | Error::INVALID_UNICODE_CODEPOINT) Contiguous<uint32>.utf8_encode_alloc(Contiguous<uint32>* this, Allocator* allocator) {
     mut List<uint8> out;
     out.init(allocator, 0);
     for (mut usize i = 0; i < this.len; i += 1) {
@@ -71,7 +71,7 @@ fn (mut List<uint8> | Error::INVALID_UNICODE_CHAR) Contiguous<uint32>.utf8_encod
             out.push(0x80 | ((c >> 6) & 0x3f));
             out.push(0x80 | (c & 0x3f));
         } else {
-            return Error::INVALID_UNICODE_CHAR;
+            return Error::INVALID_UNICODE_CODEPOINT;
         }
     }
     return out;

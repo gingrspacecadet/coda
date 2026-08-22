@@ -1,7 +1,7 @@
 module math;
 
-include std::types : _;
-include std::system : _;
+include std::types = _;
+include std::system = _;
 
 @export
 fn int32 Float.sign<T: Float>(T this) {
@@ -159,7 +159,7 @@ fn FloatClass classify_float<T: Float>(T value) {
     return out;
 }
 
-int32 MAX_ITERATIONS = 64;
+int32 MAX_ITERATIONS = 1024;
 
 @export
 fn T inv_sqrt<T: Float>(T value) {

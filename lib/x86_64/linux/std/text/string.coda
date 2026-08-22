@@ -190,7 +190,7 @@ fn (FloatParserOut | Error::INVALID_NUMBER) _parse_float(GenericString* this, ui
     float64 out = 0;
     bool found_dp = false;
     uint64 dp_index;
-    for (; i < this.len; i++) {
+    for (; i < this.len; i += 1) {
         char c = this.ptr[i].to_lower();
         if (c == '.') {
             if (found_dp) {
@@ -245,7 +245,11 @@ fn (float64 | Error::INVALID_NUMBER) GenericString.to_float(GenericString mut* t
     if (this.eq("NaN")) {
         return math::NAN_64;
     } else if (this.eq("Infinity")) {
-        return negative ? -math::INFINITY_64 : math::INFINITY_64;
+        if (negative) {
+            return -math::INFINITY_64;
+        } else {
+            return math::INFINITY_64;
+        }
     } else if (this.ptr[0] == '0') {
         if (this.len == 1) {
             return 0;
@@ -400,5 +404,3 @@ fn (mut WString* | Error::INVALID_ENCODED_DATA) Contiguous<uint8>.utf8_decode_al
         out.push(value);
     }
 }
-
-fn none Contiguous<uint8>.base
