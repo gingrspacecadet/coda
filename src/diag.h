@@ -4,12 +4,21 @@
 #include <stdint.h>
 #include "source.h"
 #include "array.h"
+#include "token.h"
 
 typedef enum {
     DIAG_ERROR
 } DiagSeverity;
 
-typedef uint32_t DiagCode;
+typedef enum {
+    E_EXPECTED_TOKEN = 1000,
+    E_EXPECTED_IDENTIFIER,
+    E_EXPECTED_TYPE,
+    E_EXPECTED_EXPRESSION,
+    E_EXPECTED_DECLARATION,
+    E_EXPECTED_PATTERN,
+    E_UNEXPECTED_TOKEN,
+} DiagCode;
 
 typedef struct {
     Span span;

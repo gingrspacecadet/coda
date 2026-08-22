@@ -79,3 +79,4 @@ void diag_finish(DiagBuilder *builder) {
 
     (void)builder;
 }
+

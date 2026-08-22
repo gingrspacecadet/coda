@@ -339,10 +339,37 @@ typedef enum {
     STMT_DEFER,
 } StmtKind;
 
+typedef enum {
+    PATTERN_ERROR,
+    PATTERN_WILDCARD,
+    PATTERN_LITERAL,
+    PATTERN_BINDING,
+    PATTERN_VARIANT,
+    PATTERN_EXPR,
+} PatternKind;
+
+struct Pattern {
+    Span span;
+    PatternKind kind;
+
+    union {
+        Literal literal;
+
+        AstName binding;
+
+        struct {
+            AstName name;
+            AstName binding;
+        } variant;
+
+        Expr *expr;
+    };
+};
+
 typedef struct {
     Span span;
+
     Pattern *pattern;
-    Expr *guard;
     Stmt *body;
 } MatchCase;
 
@@ -408,12 +435,15 @@ struct Stmt {
 };
 
 struct IncludeDecl {
+    Span span;
+
     Path path;
     Path alias;
 };
 
 struct TypeDecl {
     Span span;
+    
     AstName name;
     Array(GenericParam) generics;
     Type *type;
