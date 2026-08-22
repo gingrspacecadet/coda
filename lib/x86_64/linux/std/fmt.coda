@@ -6,19 +6,34 @@ include std::mem = _;
 include std::text = _;
 
 type FormatState = struct {
-    String* out;
+    String* str;
     usize indent;
 };
+
+fn none FormatState.push(FormatState* this, char data) {
+    this.str.push(data);
+}
+
+fn none FormatState.add(FormatState* this, GenericString data) {
+    this.str.add(data);
+}
+
+fn none FormatState.newline(FormatState* this) {
+    this.add("\n");
+    for (mut usize i = 0; i < this.len; i += 1) {
+        this.add("    ");
+    }
+}
 
 string DIGITS = "0123456789";
 
 @inline
 fn none format_unsigned<T: Unsigned>(FormatState* state, T value) {
     if (value == 0) {
-        out.add("0");
+        state.add("0");
     } else {
         while (value > 0) {
-            out.push(DIGITS[value % 10]);
+            state.push(DIGITS[value % 10]);
             value /= 10;
         }
     }
@@ -27,31 +42,31 @@ fn none format_unsigned<T: Unsigned>(FormatState* state, T value) {
 @inline
 fn none format_signed<T: Signed>(FormatState* state, T value) {
     if (value == 0) {
-        out.add("0");
+        state.add("0");
         return;
     }
     if (value < 0) {
         value = -value;
-        value.add("-");
+        state.add("-");
     }
     while (value > 0) {
-        out.push(DIGITS[value % 10]);
+        state.push(DIGITS[value % 10]);
         value /= 10;
     }
 }
 
 @inline
-fn none format_float<T: Float>(String* out, T value) {
+fn none format_float<T: Float>(FormatState* state, T value) {
     if (value.is_nan()) {
-        out.add("NaN");
+        state.add("NaN");
         return;
     }
     if (value < 0) {
         value = -value;
-        out.add("-");
+        state.add("-");
     }
     if (value.is_infinity()) {
-        out.add("Infinity");
+        state.add("Infinity");
         return;
     }
     (none | int64) exp = none;
@@ -60,12 +75,12 @@ fn none format_float<T: Float>(String* out, T value) {
         if (value > 10) {
             while (value > 10) {
                 value /= 10;
-                exp++;
+                exp += 1;
             }
         } else {
             while (value < 1) {
                 value *= 10;
-                exp--;
+                exp -= 1;
             }
         }
     }
@@ -75,78 +90,78 @@ fn none format_float<T: Float>(String* out, T value) {
         value = value.trunc();
     }
     if (value == 0) {
-        out.add("0");
+        state.add("0");
     } else {
         while (value > 0) {
-            out.push(DIGITS[value % 10]);
+            state.push(DIGITS[value % 10]);
             value /= 10;
         }
     }
     if (fraction != 0) {
-        out.add(".");
+        state.add(".");
         while (fraction > 0) {
             fraction *= 10;
-            out.add(DIGITS[fraction.trunc()]);
+            state.add(DIGITS[fraction.trunc()]);
             fraction %= 1;
         }
     }
     if (#tag_test(exp, int64)) {
-        out.add("e");
+        state.add("e");
         if (exp > 0) {
-            out.add("+");
+            state.add("+");
         } else {
-            out.add("-");
+            state.add("-");
         }
-        format_unsigned(out, exp.abs());
+        format_unsigned(state, exp.abs());
     }
 }
 
 string HEX_DIGITS = "0123456789";
 
 fn none format_type(FormatState* state, Type* t) {
-    if (t.kind == TypeKind::NONE) {
-        out.add("none");
-    } else if (t.kind == TypeKind::NULL) {
-        out.add("null");
-    } else if (t.kind == TypeKind::BOOL) {
-        out.add((*(bool*)value).to_string());
-    } else if (t.kind == TypeKind::INT8) {
-        format_signed(out, *(int8*)value);
-    } else if (t.kind == TypeKind::INT16) {
-        format_signed(out, *(int16*)value);
-    } else if (t.kind == TypeKind::INT32) {
-        format_signed(out, *(int32*)value);
-    } else if (t.kind == TypeKind::INT64) {
-        format_signed(out, *(int64*)value);
-    } else if (t.kind == TypeKind::UINT8) {
-        if (t.is_named() && t.get_name().eq("char")) {
-            out.add("'");
-            out.add(*(uint8*)value);
-            out.add("'");
-        }
-        format_unsigned(out, *(uint8*)value);
-    } else if (t.kind == TypeKind::UINT16) {
-        format_unsigned(out, *(uint16*)value);
-    } else if (t.kind == TypeKind::UINT32) {
-        format_unsigned(out, *(uint32*)value);
-    } else if (t.kind == TypeKind::UINT64) {
-        format_unsigned(out, *(uint64*)value);
-    } else if (t.kind == TypeKind::SSIZE) {
-        format_signed(out, *(ssize*)value);
-    } else if (t.kind == TypeKind::USIZE) {
-        format_unsigned(out, *(usize*)value);
-    } else if (t.kind == TypeKind::FLOAT16) {
-        format_float(out, *(float16*)value);
-    } else if (t.kind == TypeKind::FLOAT32) {
-        format_float(out, *(float32*)value);
-    } else if (t.kind == TypeKind::FLOAT64) {
-        format_float(out, *(float64*)value);
-    } else if (t.kind == TypeKind::ANY) {
-        out.add("(any) ");
-        any value2 = *(any*)value;
-        format_value(out, (Type*)value2.typeid, value2.value, state);
+    if (t.is_mutable()) {
+        state.add("mut ");
     }
-}
+    if (t.is_named()) {
+        state.add(t.get_name().try());
+    } else if (t.kind == TypeKind::NONE) {
+        state.add("none");
+    } else if (t.kind == TypeKind::NULL) {
+        state.add("null");
+    } else if (t.kind == TypeKind::BOOL) {
+        state.add("bool");
+    } else if (t.kind == TypeKind::INT8) {
+        state.add("int8");
+    } else if (t.kind == TypeKind::INT16) {
+        state.add("int16");
+    } else if (t.kind == TypeKind::INT32) {
+        state.add("int32");
+    } else if (t.kind == TypeKind::INT64) {
+        state.add("int64");
+    } else if (t.kind == TypeKind::UINT8) {
+        state.add("uint8");
+    } else if (t.kind == TypeKind::UINT16) {
+        state.add("uint16");
+    } else if (t.kind == TypeKind::UINT32) {
+        state.add("uint32");
+    } else if (t.kind == TypeKind::UINT64) {
+        state.add("uint64");
+    } else if (t.kind == TypeKind::SSIZE) {
+        state.add("ssize");
+    } else if (t.kind == TypeKind::USIZE) {
+        state.add("usize");
+    } else if (t.kind == TypeKind::FLOAT16) {
+        state.add("float16");
+    } else if (t.kind == TypeKind::FLOAT32) {
+        state.add("float32");
+    } else if (t.kind == TypeKind::FLOAT64) {
+        state.add("float64");
+    } else if (t.kind == TypeKind::ANY) {
+        state.add("any");
+    } else if (t.kind == TypeKind::INTRINSIC) {
+        // todo
+    }
+} 
 
 fn none format_intrinsic(FormatState* state, Type* t, none* value) {
 
@@ -154,63 +169,63 @@ fn none format_intrinsic(FormatState* state, Type* t, none* value) {
 
 fn none format_value(FormatState* state, Type* t, none* value) {
     if (t.kind == TypeKind::NONE) {
-        out.add("none");
+        state.add("none");
     } else if (t.kind == TypeKind::NULL) {
-        out.add("null");
+        state.add("null");
     } else if (t.kind == TypeKind::BOOL) {
-        out.add((*(bool*)value).to_string());
+        ostateut.add((*(bool*)value).to_string());
     } else if (t.kind == TypeKind::INT8) {
-        format_signed(out, *(int8*)value);
+        format_signed(state, *(int8*)value);
     } else if (t.kind == TypeKind::INT16) {
-        format_signed(out, *(int16*)value);
+        format_signed(state, *(int16*)value);
     } else if (t.kind == TypeKind::INT32) {
-        format_signed(out, *(int32*)value);
+        format_signed(state, *(int32*)value);
     } else if (t.kind == TypeKind::INT64) {
-        format_signed(out, *(int64*)value);
+        format_signed(state, *(int64*)value);
     } else if (t.kind == TypeKind::UINT8) {
         if (t.is_named() && t.get_name().try().eq("char")) {
-            out.add("'");
-            out.add(*(uint8*)value);
-            out.add("'");
+            state.add("'");
+            state.add(*(uint8*)value);
+            state.add("'");
         } else {
-            format_unsigned(out, *(uint8*)value);
+            format_unsigned(state, *(uint8*)value);
         }
     } else if (t.kind == TypeKind::UINT16) {
-        format_unsigned(out, *(uint16*)value);
+        format_unsigned(state, *(uint16*)value);
     } else if (t.kind == TypeKind::UINT32) {
-        format_unsigned(out, *(uint32*)value);
+        format_unsigned(state, *(uint32*)value);
     } else if (t.kind == TypeKind::UINT64) {
-        format_unsigned(out, *(uint64*)value);
+        format_unsigned(state, *(uint64*)value);
     } else if (t.kind == TypeKind::SSIZE) {
-        format_signed(out, *(ssize*)value);
+        format_signed(state, *(ssize*)value);
     } else if (t.kind == TypeKind::USIZE) {
-        format_unsigned(out, *(usize*)value);
+        format_unsigned(state, *(usize*)value);
     } else if (t.kind == TypeKind::FLOAT16) {
-        format_float(out, *(float16*)value);
+        format_float(state, *(float16*)value);
     } else if (t.kind == TypeKind::FLOAT32) {
-        format_float(out, *(float32*)value);
+        format_float(state, *(float32*)value);
     } else if (t.kind == TypeKind::FLOAT64) {
-        format_float(out, *(float64*)value);
+        format_float(state, *(float64*)value);
     } else if (t.kind == TypeKind::ANY) {
-        out.add("(any) ");
+        state.add("(any) ");
         any value2 = *(any*)value;
-        format_value(out, (Type*)value2.typeid, value2.value, state);
-        format_value(out, (Type*)value2.typeid, value2.value, state);
+        format_value(state, (Type*)value2.typeid, value2.value, state);
+        format_value(state, (Type*)value2.typeid, value2.value, state);
     } else if (t.kind == TypeKind::INTRINSIC) {
-        format_intrinsic(out, t.get_extra_data().name);
+        format_intrinsic(state, t.get_extra_data().name);
     } else if (t.kind == TypeKind::POINTER) {
         // format using the type:
-        // out.add("(");
-        // format_type(out, t);
-        // out.add(") 0x");
+        // state.add("(");
+        // format_type(state, t);
+        // state.add(") 0x");
         // format using &:
-        out.add("&0x");
+        state.add("&0x");
         usize ptr = *(usize*)value;
         if (ptr == 0) {
-            out.add("0");
+            state.add("0");
         } else {
             while (value > 0) {
-                out.push(HEX_DIGITS[value & 0xf]);
+                state.push(HEX_DIGITS[value & 0xf]);
                 value >>= 4;
             }
         }
@@ -218,21 +233,30 @@ fn none format_value(FormatState* state, Type* t, none* value) {
         Type* of = t.get_extra_data().array.of;
         none[] array = *(none[]*)value;
         if (of.kind == TypeKind::UINT8 && t.is_named() && t.get_name().try().eq("string")) {
-            out.add("\"");
-            out.add((string)array);
-            out.add("\"");
+            state.add("\"");
+            state.add((string)array);
+            state.add("\"");
+        } else if (array.len == 0) {
+            state.add("[]");
         } else {
-            state.indent++;
-            for (mut usize i = 0; i < array.len; i++) {
+            state.add("[");
+            state.indent += 1;
+            for (mut usize i = 0; i < array.len; i += 1) {
                 none* elt = array.ptr + of.sizeof();
-                format_value();
+                state.newline();
+                format_value(state, of, value);
+                state.add(",");
             }
+            state.indent -= 1;
+            state.newline();
+            state.add("]");
         }
     }
 }
 
 fn (none | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD) format_field(String* out, string field, any[] data, usize* data_pos) {
     FormatState state = {
+        .str = out,
         .indent = 0,
     };
     if (field.len > 0) {
