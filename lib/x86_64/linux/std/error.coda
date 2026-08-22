@@ -4,18 +4,24 @@ include std;
 
 @export
 type Error = enum: uint64 {
+    NOT_INITALIZED,
     ALLOCATION_FAILED,
     OUT_OF_BOUNDS,
     INVALID_ENCODED_DATA,
+    INVALID_UNICODE_CHAR,
     IS_EMPTY,
+    INVALID_NUMBER,
 };
 
 @export
 string[] ERROR_MEANINGS = {
+    .[Error::NOT_INITALIZED] = "Not initialized",
     .[Error::ALLOCATION_FAILED] = "Allocation failed",
     .[Error::OUT_OF_BOUNDS] = "Out of bounds",
     .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
+    .[Error::INVALID_UNICODE_CHAR] = "Invalid Unicode character",
     .[Error::IS_EMPTY] = "Is empty",
+    .[Error::INVALID_NUMBER] = "Invalid number",
 };
 
 @export
@@ -34,12 +40,9 @@ fn Error.throw(Error this) {
 @export
 @inline
 fn T (T | Error).try((T | Error) this) {
-    match (this) {
-        Error {
-            this.throw();
-        }
-        T {
-            return this;
-        }
+    if (#tag_test(this, Error)) {
+        this.throw();
+    } else {
+        return (T)this;
     }
 }

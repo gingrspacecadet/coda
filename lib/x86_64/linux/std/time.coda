@@ -88,7 +88,7 @@ fn Time Time.add(Time* this, Time* value) {
     uint64 s = this.s + value.s;
     uint64 ns = this.ns + value.ns;
     if (ns > 1e9) {
-        s++;
+        s += 1;
         ns -= 1e9;
     }
     return {.s = s, .ns = ns};
@@ -99,7 +99,7 @@ fn none Time.iadd(Time* this, Time* value) {
     this.s += value.s;
     this.ns += value.ns;
     if (this.ns > 1e9) {
-        this.s++;
+        this.s += 1;
         this.ns -= 1e9;
     }
     return {.s = s, .ns = ns};
@@ -110,7 +110,7 @@ fn Duration Time.sub(Time* this, Time* other) {
     int64 s = this.s - other.s;
     int32 ns = this.s - other.ns;
     if (ns < 0) {
-        s--;
+        s -= 1;
         ns += 1e9;
     }
     return {.s = s, .ns = ns};
@@ -121,7 +121,7 @@ fn none Time.isub(Time* this, Time* other, Duration* out) {
     out.s = this.s - other.s;
     int32 ns = this.s - other.ns;
     if (ns < 0) {
-        out.s--;
+        out.s -= 1;
         ns += 1e9;
     }
     out.ns = ns;
@@ -129,7 +129,7 @@ fn none Time.isub(Time* this, Time* other, Duration* out) {
 
 @export
 fn bool is_leap_second(int64 second) {
-    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i++) {
+    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i += 1) {
         if (LEAP_SECONDS[i].time.s == second) {
             return true;
         }
@@ -140,7 +140,7 @@ fn bool is_leap_second(int64 second) {
 @export
 fn bool Time.is_leap_second(Time* this) {
     return #inline(is_leap_second(this.s));
-    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i++) {
+    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i += 1) {
         if (LEAP_SECONDS[i].time.s == this.s) {
             return true;
         }
@@ -179,12 +179,12 @@ fn ParsedTime Time.parse(Time* this) {
     int64 year = 1970;
     if (value < 0) {
         while (value < 0) {
-            year--;
+            year -= 1;
             value += get_days_in_year(year);
         }
     } else {
         while (value > get_days_in_year(year)) {
-            year++;
+            year += 1;
             value -= get_days_in_year(year);
         }
     }
@@ -193,7 +193,7 @@ fn ParsedTime Time.parse(Time* this) {
     uint8 month = 1;
     while (value > get_days_in_month(year, month)) {
         value -= get_days_in_month(year, month);
-        month++;
+        month += 1;
     }
     return {
         .year = year,
@@ -218,12 +218,12 @@ fn none Time.iparse(Time* this, ParsedTime* out) {
     int64 year = 1970;
     if (value < 0) {
         while (value < 0) {
-            year--;
+            year -= 1;
             value += get_days_in_year(year);
         }
     } else {
         while (value > get_days_in_year(year)) {
-            year++;
+            year += 1;
             value -= get_days_in_year(year);
         }
     }
@@ -232,7 +232,7 @@ fn none Time.iparse(Time* this, ParsedTime* out) {
     uint8 month = 1;
     while (value > get_days_in_month(year, month)) {
         value -= get_days_in_month(year, month);
-        month++;
+        month += 1;
     }
     out.year = year;
     out.month = month;
@@ -249,19 +249,19 @@ fn Time ParsedTime.unparse(ParsedTime* this) {
     uint8 month = this.month;
     while (month > 1) {
         s += get_days_in_month(month);
-        month--;
+        month -= 1;
     }
     // add in year
     int64 year = this.year;
     if (year < 0) {
         while (year != 1970) {
             s += get_days_in_year(year) * 86400;
-            year++;
+            year += 1;
         }
     } else {
         while (year != 1970) {
             s -= get_days_in_year(year) * 86400;
-            year--;
+            year -= 1;
         }
     }
     return {.s = s, .ns = this.nanosecond};
@@ -273,19 +273,19 @@ fn none ParsedTime.iunparse(ParsedTime* this, Time* out) {
     uint8 month = this.month;
     while (month > 1) {
         s += get_days_in_month(month);
-        month--;
+        month -= 1;
     }
     // add in year
     int64 year = this.year;
     if (year < 0) {
         while (year != 1970) {
             s += get_days_in_year(year) * 86400;
-            year++;
+            year += 1;
         }
     } else {
         while (year != 1970) {
             s -= get_days_in_year(year) * 86400;
-            year--;
+            year -= 1;
         }
     }
     out.s = s;

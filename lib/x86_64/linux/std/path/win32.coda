@@ -1,7 +1,7 @@
 module std::path::win32;
 
-include std::mem : _;
-include std::collections : _;
+include std::mem = _;
+include std::collections = _;
 
 @export
 string sep = "\\";
@@ -17,7 +17,7 @@ fn none normalise<T: GenericString>(mut String* out, T* path) {
     List<string*> parts;
     parts.init(out.allocator, 0);
     defer parts.destroy();
-    for (mut usize i = 0; i < data.len; i++) {
+    for (mut usize i = 0; i < data.len; i += 1) {
         string part = data.ptr[i];
         if (part.eq("") && i > 0) {
             continue;
@@ -38,7 +38,7 @@ fn none join<T: Contiguous<GenericString>>(mut String* out, T* path) {
     mut String* temp;
     temp.init(out.allocator, 0);
     defer temp.destroy();
-    for (mut usize i = 0; i < out.len; i++) {
+    for (mut usize i = 0; i < out.len; i += 1) {
         temp.concat(path.ptr[i]);
         temp.push('\\');
     }
@@ -49,7 +49,7 @@ fn none join<T: Contiguous<GenericString>>(mut String* out, T* path) {
 fn string dirname<T: GenericString>(T* path) {
     bool is_at_start = true;
     // end at 1 to turn "\" into "\", not "\"
-    for (mut usize i = out.len - 1; i >= 1; i--) {
+    for (mut usize i = out.len - 1; i >= 1; i -= 1) {
         if (path.ptr[i] === '\\') {
             if (!is_at_start) {
                 return path.view(0, i - 1);
@@ -68,7 +68,7 @@ fn string dirname<T: GenericString>(T* path) {
 @export
 fn string filename<T: GenericString>(T* path) {
     bool is_at_start = true;
-    for (mut ssize i = out.len - 2; i >= 0; i--) {
+    for (mut ssize i = out.len - 2; i >= 0; i -= 1) {
         if (path.ptr[i] === '\\') {
             if (!is_at_start) {
                 return path.view(i + 1, path.len);
@@ -82,7 +82,7 @@ fn string filename<T: GenericString>(T* path) {
 
 @export
 fn string stem<T: GenericString>(T* path) {
-    for (mut usize i = out.len - 2; i >= 1; i--) {
+    for (mut usize i = out.len - 2; i >= 1; i -= 1) {
         if (path.ptr[i] === '.') {
             return path.view(0, i - 1);
         }
@@ -92,7 +92,7 @@ fn string stem<T: GenericString>(T* path) {
 
 @export
 fn string extension<T: GenericString>(T* path) {
-    for (mut ssize i = out.len - 2; i >= 0; i--) {
+    for (mut ssize i = out.len - 2; i >= 0; i -= 1) {
         if (path.ptr[i] === '.') {
             return path.view(i, path.len);
         }

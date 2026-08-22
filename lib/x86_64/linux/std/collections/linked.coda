@@ -40,7 +40,7 @@ fn T Linked<T>.get(Linked<T>* this, mut ssize index) {
     Node<T>* node = this.first;
     while (index2 > 0) {
         node = node.next;
-        index2--;
+        index2 -= 1;
     }
     return node.value;
 }
@@ -51,7 +51,7 @@ fn T* Linked<T>.get_ptr(Linked<T>* this, mut ssize index) {
     Node<T>* node = this.first;
     while (index2 > 0) {
         node = node.next;
-        index2--;
+        index2 -= 1;
     }
     return &node.value;
 }
@@ -62,7 +62,7 @@ fn T Linked<T>.set(Linked<T>* this, mut ssize index, T value) {
     Node<T>* node = this.first;
     while (index2 > 0) {
         node = node.next;
-        index2--;
+        index2 -= 1;
     }
     return node;
 }

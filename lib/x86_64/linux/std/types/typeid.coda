@@ -1,6 +1,7 @@
 module std::types::typeid;
 
 include std::error = _;
+include std::mem = _;
 include std::format = _;
 
 @export
@@ -35,13 +36,13 @@ type TypeKind = enum: uint8 {
 
 @export
 type TypeFlags: enum: uint8 {
-    Named = 1,
-    Mutable = 2,
-    Generic = 4,
-    PointerMutable = 16,
-    ArrayMutable = 16,
-    PointerOptional = 32,
-    FunctionGeneric = 16,
+    NAMED = 1,
+    MUTABLE = 2,
+    GENERIC = 4,
+    POINTER_MUTABLE = 16,
+    POINTER_OPTIONAL = 32,
+    ARRAY_MUTABLE = 16,
+    FUNCTION_GENERIC = 16,
 };
 
 // all of the @alignas(0) are probably not neccessary
@@ -225,9 +226,27 @@ type Type = struct {
 };
 
 @export
+@inline
+fn bool Type.is_named(Type* this) {
+    return this.flags & TypeFlags::NAMED;
+}
+
+@export
+@inline
+fn bool Type.is_mutable(Type* this) {
+    return this.flags & TypeFlags::MUTABLE;
+}
+
+@export
+@inline
+fn bool Type.is_generic(Type* this) {
+    return this.flags & TypeFlags::GENERIC;
+}
+
+@export
 fn (none | string*) Type.get_name(Type* this) {
-    if (this.flags & TypeFlags::NAMED) {
-        if (this.flags & TypeFlags::GENERIC) {
+    if (this.is_named()) {
+        if (this.is_generic()) {
             return this.named_generic.name;
         } else {
             return this.named_non_generic.name;
@@ -237,8 +256,8 @@ fn (none | string*) Type.get_name(Type* this) {
 
 @export
 fn (none | string*[]) Type.get_generic_names(Type* this) {
-    if (this.flags & TypeFlags::GENERIC) {
-        if (this.flags & TypeFlags::NAMED) {
+    if (this.is_generic()) {
+        if (this.is_named()) {
             return this.named_generic.generic_names;
         } else {
             return this.non_named_generic.generic_names;
@@ -316,6 +335,6 @@ fn usize Type.get_size(Type* this) {
     } else if (this.kind == TypeKind::SUM) {
         return this.get_extra_data().sum.size;
     } else {
-        fatal_error(format("Error: Invalid typeid: {}", [this.kind]));
+        fatal_error(format(default_heap, "Fatal error: Invalid typeid: {}", [this.kind]).to_array());
     }
 }

@@ -1,11 +1,14 @@
 module std;
 
+include std::error = _;
+
 @export
+@inline
 $fn #code::stmt assert(#code::expr expr) {
     return #{
         {
             if (!#(expr)) {
-                printf("Assertion failed: "#(expr.raw));
+                fatal_error("Assertion failed: "#(expr.raw));
             }
         }
     };

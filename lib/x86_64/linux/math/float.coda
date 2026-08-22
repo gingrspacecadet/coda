@@ -180,7 +180,7 @@ fn T inv_sqrt<T: Float>(T value) {
     while (out != prev && i < MAX_ITERATIONS) {
         prev = out;
         out = out * (1.5 - (value * 0.5 * out * out));
-        i++;
+        i += 1;
     }
     return out;
 }
@@ -199,7 +199,7 @@ fn T exp<T: Float>(T value) {
     while (out != prev) {
         prev = out;
         term *= value / i;
-        i++;
+        i += 1;
         out += term;
     }
     return out;
@@ -214,7 +214,7 @@ fn T expm1<T: Float>(T value) {
     while (out != prev) {
         prev = out;
         term *= value / i;
-        i++;
+        i += 1;
         out += term;
     }
     return out;
@@ -231,7 +231,7 @@ fn T log<T: Float>(T value) {
     while (out != prev && i < MAX_ITERATIONS) {
         prev = out;
         out = out + 2 * (value - exp(y))/(value + exp(y));
-        i++;
+        i += 1;
     }
     return out;
 }
@@ -247,7 +247,7 @@ fn T log1p<T: Float>(T value) {
     while (out != prev && i < MAX_ITERATIONS) {
         prev = out;
         out = out + 2 * (value - expm1(y))/(value + expm1(y));
-        i++;
+        i += 1;
     }
     return out;
 }

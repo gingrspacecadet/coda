@@ -2,4 +2,4 @@ module std::path;
 
 // platform-dependent
 @export
-include std::path::posix : _;
+include std::path::posix = _;

@@ -22,27 +22,23 @@ fn usize normalize_capacity<T>(usize len) {
 }
 
 @export
-type List<T> = struct: AllocatorContiguous<T> {
-    Allocator* allocator;
-    usize len;
-    usize capacity;
-    T* data;
-}
+type List<T> = struct: Contiguous<T>, AllocatorIndexed<T> {
+};
 
 @export
 fn none List<T>.init<T>(mut List<T>* this, usize len) {
     this.len = len;
     this.capacity = normalize_capacity<T>(len);
-    this.data = this.allocator.alloc<T>(len);
+    this.ptr = this.allocator.alloc<T>(len);
 }
 
 @export
 fn none List<T>..destroy<T>(mut List<T>* this) {
-    this.allocator.free(this.data);
+    this.allocator.free(this.ptr);
 }
 
 @export
-fn none List<T>.set_len(mut List<T>* this, usize new_len) {
+fn none List<T>.set_len<T>(mut List<T>* this, usize new_len) {
     if (new_len < this.len) {
         return;
     }
@@ -52,15 +48,25 @@ fn none List<T>.set_len(mut List<T>* this, usize new_len) {
         return;
     }
     this.capacity = new_capacity;
-    this.data = this.allocator.realloc(this.data, new_capacity)?;
+    this.ptr = this.allocator.realloc(this.ptr, new_capacity)?;
 }
 
 @export
-fn none List<T>.shrink_to_fit(mut List<T>* this, usize new_len) {
+fn none List<T>.shrink_to_fit<T>(mut List<T>* this, usize new_len) {
     usize new_capacity = normalize_capacity<T>(this.len);
     if (this.capacity = new_capacity) {
         return;
     }
     this.capacity = new_capacity;
-    this.data = this.allocator.realloc(this.data, new_capacity)?;
+    this.ptr = this.allocator.realloc(this.ptr, new_capacity)?;
+}
+
+@export
+fn mut List<T> List<T>.copy<T>(List<T>* this) {
+    mut List<T> out;
+    out.init(this.allocator, this.len);
+    for (mut usize i = 0; i < this.len; i += 1) {
+        out.ptr[i] = this.ptr[i];
+    }
+    return out;
 }

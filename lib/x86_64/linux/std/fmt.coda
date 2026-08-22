@@ -1,0 +1,36 @@
+module std::fmt;
+
+include std::mem = _;
+include std::text = _;
+
+fn none format_field(String out, string field, any[] data, usize* data_pos) {
+    any value = data[data_pos];
+}
+
+@export
+fn String format(Allocator* allocator, string str, any[] data) {
+    String out;
+    out.init(allocator, 0);
+    String current_field;
+    current_field.init(allocator, 0);
+    usize data_pos = 0;
+    for (mut usize i = 0; i < str.len; i += 1) {
+        char c = str[i];
+        if (c == '{' && !(i == str.len - 1 || str[i + 1] == '{')) {
+            current_field.reset(0).try();
+            i += 1;
+            while (i < str.len) {
+                c = str[i];
+                if (c == '}') {
+                    break;
+                }
+                current_field.push(c);
+                i += 1;
+            }
+            format_field(out, current_field.to_array(), data, &data_pos);
+        } else {
+            out.push(c);
+        }
+    }
+    return out;
+}
