@@ -1,6 +1,7 @@
 module std::types::typeid;
 
-include std::error : _;
+include std::error = _;
+include std::format = _;
 
 @export
 type TypeKind = enum: uint8 {
@@ -220,11 +221,50 @@ type Type = struct {
             @alignas(#sizeof(string*) + #sizeof(string*[]))
             ExtraTypeData* data;
         } named_generic;
-    }
+    };
 };
 
 @export
-fn usize Type.sizeof(Type* this) {
+fn (none | string*) Type.get_name(Type* this) {
+    if (this.flags & TypeFlags::NAMED) {
+        if (this.flags & TypeFlags::GENERIC) {
+            return this.named_generic.name;
+        } else {
+            return this.named_non_generic.name;
+        }
+    }
+}
+
+@export
+fn (none | string*[]) Type.get_generic_names(Type* this) {
+    if (this.flags & TypeFlags::GENERIC) {
+        if (this.flags & TypeFlags::NAMED) {
+            return this.named_generic.generic_names;
+        } else {
+            return this.non_named_generic.generic_names;
+        }
+    }
+}
+
+@export
+fn (none | ExtraTypeData*) Type.get_extra_data(Type* this) {
+    if (this.flags & TypeFlags::NAMED) {
+        if (this.flags & TypeFlags::GENERIC) {
+            return &this.named_generic.data;
+        } else {
+            return &this.named_non_generic.data;
+        }
+    } else {
+        if (this.flags & TypeFlags::GENERIC) {
+            return &this.non_named_generic.data;
+        } else {
+            return &this.non_named_non_generic.data;
+        }
+    }
+}
+
+@export
+fn usize Type.get_size(Type* this) {
     if (this.kind == TypeKind::NONE) {
         return #sizeof(none);
     } else if (this.kind == TypeKind::NULL) {
@@ -259,7 +299,23 @@ fn usize Type.sizeof(Type* this) {
         return #sizeof(float64);
     } else if (this.kind == TypeKind::ANY) {
         return #sizeof(any);
-    } else {
+    } else if (this.kind == TypeKind::INTRINSIC) {
         // todo
+    } else if (this.kind == TypeKind::POINTER) {
+        return #sizeof(none*);
+    } else if (this.kind == TypeKind::ARRAY) {
+        return #sizeof(int32[]);
+    } else if (this.kind == TypeKind::FUNCTION) {
+        return #sizeof(none*);
+    } else if (this.kind == TypeKind::STRUCT) {
+        return this.get_extra_data().struct_.size;
+    } else if (this.kind == TypeKind::UNION) {
+        return this.get_extra_data().union_.size;
+    } else if (this.kind == TypeKind::ENUM) {
+        return this.get_extra_data().enum_.backing_type.get_size();
+    } else if (this.kind == TypeKind::SUM) {
+        return this.get_extra_data().sum.size;
+    } else {
+        fatal_error(format("Error: Invalid typeid: {}", [this.kind]));
     }
 }

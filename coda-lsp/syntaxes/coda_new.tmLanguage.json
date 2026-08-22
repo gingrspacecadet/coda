@@ -152,8 +152,8 @@
                     "match": "::"
                 },
                 {
-                    "name": "punctuation.separator.colon.coda",
-                    "match": "(?<!:):(?!:)"
+                    "name": "punctuation.separator.equals.coda",
+                    "match": "="
                 },
                 {
                     "name": "keyword.control.underscore.coda",

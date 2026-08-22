@@ -1,7 +1,7 @@
 module std::collections;
 
-include std::error::Error : Error;
-include std::mem : _;
+include std::error = _;
+include std::mem = _;
 
 @export
 constraint Node<T> = {

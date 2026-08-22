@@ -1,6 +1,6 @@
 module std::collections;
 
-include std::error : _;
+include std::error = _;
 
 @export
 constraint Contiguous<T>: Indexed<T> = {
