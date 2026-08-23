@@ -26,11 +26,12 @@ type TypeKind = enum: uint8 {
     INTRINSIC = 0x11,
     POINTER = 0x12,
     ARRAY = 0x13,
-    FUNCTION = 0x14,
-    STRUCT = 0x15,
-    UNION = 0x16,
-    ENUM = 0x17,
-    SUM = 0x18,
+    SLICE = 0x14,
+    FUNCTION = 0x15,
+    STRUCT = 0x16,
+    UNION = 0x17,
+    ENUM = 0x18,
+    SUM = 0x19,
 };
 
 @export
@@ -41,6 +42,7 @@ type TypeFlags: enum: uint8 {
     POINTER_MUTABLE = 16,
     POINTER_OPTIONAL = 32,
     ARRAY_MUTABLE = 16,
+    SLICE_MUTABLE = 16,
     FUNCTION_NAMED = 16,
     FUNCTION_GENERIC = 32,
 };
@@ -67,6 +69,12 @@ type PointerTypeData = struct {
 type ArrayTypeData = struct {
     @alignas(0)
     Type* of;
+    @alignas(#sizeof(Type*))
+    usize*? len;
+};
+
+@export
+type SliceTypeData = struct {
     @alignas(#sizeof(Type*))
     usize*? len;
 };
@@ -192,6 +200,8 @@ type ExtraTypeData = union {
     PointerTypeData pointer;
     @alignas(0)
     ArrayTypeData array;
+    @alignas(0)
+    SliceTypeData slice;
     @alignas(0)
     FunctionNonNamedNonGenericTypeData* function_non_named_non_generic;
     @alignas(0)
@@ -376,7 +386,10 @@ fn usize Type.get_size(Type* this) {
     } else if (this.kind == TypeKind::POINTER) {
         return #sizeof(none*);
     } else if (this.kind == TypeKind::ARRAY) {
-        return #sizeof(int32[]);
+        ArrayTypeData* extra = &this.get_extra_data().array;
+        return #sizeof(usize) + extra.of.sizeof() + extra.len;
+    } else if (this.kind == TypeKind::SLICE) {
+        return #sizeof(uint8[]);
     } else if (this.kind == TypeKind::FUNCTION) {
         return #sizeof(none*);
     } else if (this.kind == TypeKind::STRUCT) {

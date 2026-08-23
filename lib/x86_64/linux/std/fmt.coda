@@ -192,8 +192,17 @@ fn none Formatter.type_(mut Formatter* this, Type* t) {
             this.add("?");
         }
     } else if (t.kind == TypeKind::ARRAY) {
-        this.type_(t.get_extra_data().array.of);
+        ArrayTypeData* extra = t.get_extra_data().array;
+        this.type_(extra.array.of);
         if (this.is_array_mutable()) {
+            this.add(" mut");
+        }
+        this.add("[");
+        this.unsigned(extra.len);
+        this.add("]");
+    } else if (t.kind == TypeKind::SLICE) {
+        this.type_(t.get_extra_data().slice.of);
+        if (this.is_slice_mutable()) {
             this.add(" mut");
         }
         this.add("[]");
@@ -424,6 +433,27 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
     } else if (t.kind == TypeKind::ARRAY) {
         Type* of = t.get_extra_data().array.of;
         none[] array = *(none[]*)value;
+        if (of.kind == TypeKind::UINT8 && of.is_named() && of.get_name().try().eq("char")) {
+            this.add("\"");
+            for (mut usize i = 0; i < array.len; i += 1) {
+                this.char_((char)array[i]);
+            }
+            this.add("\"");
+        } else {
+            this.add("[");
+            for (mut usize i = 0; i < array.len; i += 1) {
+                // this is pointer artithmetic
+                none* elt = array.ptr + of.sizeof();
+                this.value(of, elt);
+                if (i != array.len - 1) {
+                    this.add(", ");
+                }
+            }
+            this.add("]");
+        }
+    } else if (t.kind == TypeKind::SLICE) {
+        Type* of = t.get_extra_data().slice.of;
+        none[] array = *(none[]*)value;
         if (of.kind == TypeKind::UINT8 && t.is_named() && t.get_name().try().eq("string")) {
             this.add("\"");
             for (mut usize i = 0; i < array.len; i += 1) {
@@ -492,7 +522,7 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
         (usize | none) index = none;
         for (mut usize i = 0; i < extra.members.len; i += 1) {
             EnumMemberTypeData* member = &extra.members[i];
-            if (mem::compare_len(member.value, *(uint8*)value, extra.backing_type.sizeof())) {
+            if (mem::compare_ptr(&member.value, value, extra.backing_type.sizeof())) {
                 index = i;
                 break;
             }
@@ -514,7 +544,7 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
     } else if (this.kind == TypeKind::SUM) {
         // uint8 and uint16 are dummy types
         (uint8 | uint16) value2 = *((uint8 | uint16)*)value;
-        this.value(t.get_extra_data().sum.members[value.tag], &(none)value);
+        this.value(t.get_extra_data().sum.members[value.tag], (none*)&(uint8)value);
     } else {
         fatal_error("Fatal error: Invalid typeid kind");
     }

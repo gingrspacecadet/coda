@@ -138,6 +138,24 @@ fn (T | Error::IS_EMPTY) max<T: Number>(Contiguous<T>* data) {
 }
 
 @export
+fn T min2<T: Number>(T x, T y) {
+    if (x < y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+@export
+fn T max2<T: Number>(T x, T y) {
+    if (x > y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+@export
 fn T gcd<T: Unsigned>(mut T x, mut T y) {
     while (y != 0) {
         T temp = y;

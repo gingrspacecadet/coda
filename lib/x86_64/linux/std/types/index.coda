@@ -12,12 +12,12 @@ type wstring = wchar[];
 
 @export
 constraint Signed = {
-    Signed == int8 || Signed == int16 || Signed == int32 || Signed == int64;
+    Signed == int8 || Signed == int16 || Signed == int32 || Signed == int64 || Signed == ssize;
 
 }
 @export
 constraint Unsigned = {
-    Unsigned == uint8 || Unsigned == uint16 || Unsigned == uint32 || Unsigned == uint64;
+    Unsigned == uint8 || Unsigned == uint16 || Unsigned == uint32 || Unsigned == uint64 || Unsigned == usize;
 }
 
 @export

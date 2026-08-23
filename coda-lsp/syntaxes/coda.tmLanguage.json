@@ -137,7 +137,7 @@
         },
         "functions": {
             "name": "entity.name.function.coda",
-            "match": "\\b(?:[a-z_]\\w*\\s*(?=\\(|<\\s*([A-Z](?![A-Z])|none|u?int(8|16|32|64)|float(16|32|64)|bool|usize|ssize|char|string))|[A-Z]\\w*\\s*(?=\\())"
+            "match": "\\b(?:[a-z_]\\w*\\s*(?=\\(|<\\s*([A-Z](?![A-Z_])|none|u?int(8|16|32|64)|float(16|32|64)|bool|usize|ssize|char|string))|[A-Z_]\\w*\\s*(?=\\())"
         },
         "namespaces": {
             "comment": "Handles inline namespace resolution like io::println",

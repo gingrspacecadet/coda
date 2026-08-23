@@ -1,7 +1,6 @@
 module std::collections;
 
 include std::error = _;
-include std::mem = _;
 
 @inline
 fn usize normalize_capacity<T>(usize len) {

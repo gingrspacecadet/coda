@@ -47,16 +47,6 @@ fn (none | Error::OUT_OF_BOUNDS) Contiguous<T>.get_slice_list<T>(Contiguous<T>* 
 }
 
 @export
-fn (none | Error::OUT_OF_BOUNDS) Contiguous<T>.slice<T>(Contiguous<T>* this, mut Contiguous<T>* out, usize start, usize end) {
-    #inline(this.get_slice(out, start, end));
-}
-
-@export
-fn (none | Error::OUT_OF_BOUNDS) Contiguous<T>.slice_list<T>(Contiguous<T>* this, mut List<T>* out, usize start, usize end) {
-    #inline(this.get_slice_list(out, start, end));
-}
-
-@export
 fn (none | Error::OUT_OF_BOUNDS) Contiguous<T>.set<T>(mut Contiguous<T>* this, ssize index, T value) {
     this.ptr[this.resolve_index(index)?] = value;
 }
@@ -177,8 +167,20 @@ fn (none | Error::OUT_OF_BOUNDS) Contiguous<T>.set_slice_to_list<T>(Contiguous<T
 
 @export
 fn (T[] | Error::OUT_OF_BOUNDS) Contiguous<T>.view(Contiguous<T>* this, ssize start_index, ssize end_index) {
-    usize start = this.resolve_index(start_index);
-    usize end = this.resolve_index(end_index);
+    usize start = this.clamp_index(start_index);
+    usize end = this.clamp_index(end_index);
+    if (start > end) {
+        usize temp = start;
+        start = end;
+        end = temp;
+    }
+    return (T[]){.len = end - start, .ptr = this.ptr + start};
+}
+
+@export
+fn (T[] | Error::OUT_OF_BOUNDS) Contiguous<T>.view_resolve(Contiguous<T>* this, ssize start_index, ssize end_index) {
+    usize start = this.resolve_index(start_index)?;
+    usize end = this.resolve_index(end_index)?;
     if (start > end) {
         return Error::OUT_OF_BOUNDS;
     }

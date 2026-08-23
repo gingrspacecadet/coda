@@ -19,7 +19,7 @@ constraint AllocatorIndexed<T>: Indexed<T> = {
 
 @export
 @inline
-fn (usize | Error::OUT_OF_BOUNDS) Indexed<T>.resolve_index(Indexed<T>* this, usize index) {
+fn (usize | Error::OUT_OF_BOUNDS) Indexed<T>.resolve_index(Indexed<T>* this, ssize index) {
     if (index < 0) {
         index += this.len;
         if (index < 0) {
@@ -29,4 +29,21 @@ fn (usize | Error::OUT_OF_BOUNDS) Indexed<T>.resolve_index(Indexed<T>* this, usi
         return Error::OUT_OF_BOUNDS;
     }
     return (usize)index;
+}
+
+@export
+@inline
+fn usize Indexed<T>.clamp_index(Indexed<T>* this, ssize index) {
+    if (index < 0) {
+        index += this.len;
+        if (index < 0) {
+            return 0;
+        } else {
+            return (usize)index;
+        }
+    } else if (index >= this.len) {
+        return this.len - 1;
+    } else {
+        return (usize)index;
+    }
 }

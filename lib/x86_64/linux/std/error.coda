@@ -6,8 +6,9 @@ include std;
 type Error = enum: uint64 {
     TYPE_IS_NOT_NAMED,
     TYPE_IS_NOT_GENERIC,
-    NOT_INITIALIZED,
+    ARRAY_LENGTH_MISMATCH,
     ALLOCATION_FAILED,
+    NOT_INITIALIZED,
     OUT_OF_BOUNDS,
     INVALID_ENCODED_DATA,
     INVALID_UNICODE_CHAR,
@@ -23,8 +24,9 @@ type Error = enum: uint64 {
 string[] ERROR_MEANINGS = {
     .[Error::TYPE_IS_NOT_NAMED] = "Type is not named",
     .[Error::TYPE_IS_NOT_NAMED] = "Type is not generic",
-    .[Error::NOT_INITIALIZED] = "Not initialized",
+    .[Error::ARRAY_LENGTH_MISMATCH] = "Array lengths are not the same",
     .[Error::ALLOCATION_FAILED] = "Allocation failed",
+    .[Error::NOT_INITIALIZED] = "Not initialized",
     .[Error::OUT_OF_BOUNDS] = "Out of bounds",
     .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
     .[Error::INVALID_UNICODE_CODEPOINT] = "Invalid Unicode codepoint",
