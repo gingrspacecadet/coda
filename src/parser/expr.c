@@ -1,6 +1,6 @@
 #include "common.h"
 
-int binary_binding_power(TokenType type, bool *right_assoc, BinaryOp *op) {
+int binary_binding_power(TokenType type, bool *right_assoc, AstBinaryOp *op) {
     *right_assoc = false;
 
     switch (type) {
@@ -154,8 +154,8 @@ int binary_binding_power(TokenType type, bool *right_assoc, BinaryOp *op) {
     }
 }
 
-Expr *parse_literal(Parser *p) {
-    Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+AstExpr *parse_literal(Parser *p) {
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = p->current.span;
     expr->kind = EXPR_LITERAL;
@@ -195,8 +195,8 @@ Expr *parse_literal(Parser *p) {
     return expr;
 }
 
-Expr *parse_identifier_or_path(Parser *p) {
-    Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+AstExpr *parse_identifier_or_path(Parser *p) {
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = p->current.span;
 
@@ -213,7 +213,7 @@ Expr *parse_identifier_or_path(Parser *p) {
     return expr;
 }
 
-bool token_to_unary(TokenType type, UnaryOp *op) {
+bool token_to_unary(TokenType type, AstUnaryOp *op) {
     switch (type) {
     case TK_PLUS:
         *op = UNARY_POS;
@@ -244,11 +244,11 @@ bool token_to_unary(TokenType type, UnaryOp *op) {
     }
 }
 
-Expr *parse_expression_prefix(Parser *p) {
+AstExpr *parse_expression_prefix(Parser *p) {
     if (at(p, TK_DOLLAR)) {
         advance(p);
 
-        Expr *expr = parse_expression(p);
+        AstExpr *expr = parse_expression(p);
         expr->comptime = true;
 
         return expr;
@@ -275,10 +275,10 @@ Expr *parse_expression_prefix(Parser *p) {
 
         advance(p);
 
-        Type *type = parse_type(p);
+        AstType *type = parse_type(p);
 
         if (type->kind != TYPE_ERROR && match(p, TK_RPAREN)) {
-            Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+            AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
             expr->span = start.span;
             expr->kind = EXPR_CAST;
@@ -292,7 +292,7 @@ Expr *parse_expression_prefix(Parser *p) {
 
         advance(p);
 
-        Expr *expr = parse_expression(p);
+        AstExpr *expr = parse_expression(p);
 
         expect(p, TK_RPAREN);
 
@@ -302,13 +302,13 @@ Expr *parse_expression_prefix(Parser *p) {
     if (at(p, TK_LBRACE))
         return parse_init_expression(p);
 
-    UnaryOp op;
+    AstUnaryOp op;
 
     if (token_to_unary(p->current.type, &op)) {
         Token start = p->current;
         advance(p);
 
-        Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+        AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
         expr->span = start.span;
         expr->kind = EXPR_UNARY;
@@ -323,7 +323,7 @@ Expr *parse_expression_prefix(Parser *p) {
 
     error_expected_expression(p->diags, p->current.span);
 
-    Expr *error = arena_calloc(p->arena, sizeof(*error));
+    AstExpr *error = arena_calloc(p->arena, sizeof(*error));
     error->span = p->current.span;
     error->kind = EXPR_ERROR;
 
@@ -333,12 +333,12 @@ Expr *parse_expression_prefix(Parser *p) {
     return error;
 }
 
-Expr *parse_hash_expression(Parser *p) {
+AstExpr *parse_hash_expression(Parser *p) {
     Token start = p->current;
     advance(p);
 
     if (match(p, TK_LPAREN)) {
-        Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+        AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
         expr->span = start.span;
         expr->kind = EXPR_SPLICE;
@@ -349,20 +349,20 @@ Expr *parse_hash_expression(Parser *p) {
         return expr;
     }
 
-    Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
     expr->kind = EXPR_INTRINSIC;
     expr->intrinsic.name = parse_path(p);
     expr->intrinsic.args = array_create(
         p->arena,
-        sizeof(Expr *)
+        sizeof(AstExpr *)
     );
 
     if (match(p, TK_LPAREN)) {
         if (!at(p, TK_RPAREN)) {
             for (;;) {
-                Expr *arg = parse_expression(p);
+                AstExpr *arg = parse_expression(p);
                 array_push(&expr->intrinsic.args, &arg);
 
                 if (!match(p, TK_COMMA))
@@ -376,21 +376,21 @@ Expr *parse_hash_expression(Parser *p) {
     return expr;
 }
 
-Expr *parse_init_expression(Parser *p) {
+AstExpr *parse_init_expression(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
     expr->kind = EXPR_INIT;
     expr->init.fields = array_create(
         p->arena,
-        sizeof(InitField)
+        sizeof(AstInitField)
     );
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        InitField field = {
+        AstInitField field = {
             .span = p->current.span,
             .name = NULL,
         };
@@ -424,18 +424,18 @@ Expr *parse_init_expression(Parser *p) {
     return expr;
 }
 
-Expr *parse_lambda_expression(Parser *p) {
+AstExpr *parse_lambda_expression(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    Expr *expr = arena_calloc(p->arena, sizeof(*expr));
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
     expr->kind = EXPR_LAMBDA;
 
-    expr->lambda.generics = array_create(p->arena, sizeof(GenericParam));
+    expr->lambda.generics = array_create(p->arena, sizeof(AstGenericParam));
 
-    expr->lambda.params = array_create(p->arena, sizeof(Param));
+    expr->lambda.params = array_create(p->arena, sizeof(AstParam));
 
     expr->lambda.ret = parse_type(p);
 
@@ -443,7 +443,7 @@ Expr *parse_lambda_expression(Parser *p) {
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            Param param = parse_param(p);
+            AstParam param = parse_param(p);
             array_push(&expr->lambda.params, &param);
 
             if (!match(p, TK_COMMA))
@@ -466,7 +466,7 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
         return false;
     }
 
-    Array parsed = array_create(p->arena, sizeof(Type *));
+    Array parsed = array_create(p->arena, sizeof(AstType *));
 
     if (at(p, TK_GT)) {
         restore(p, cp);
@@ -474,7 +474,7 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
     }
 
     for (;;) {
-        Type *type = parse_type(p);
+        AstType *type = parse_type(p);
 
         if (type->kind == TYPE_ERROR) {
             restore(p, cp);
@@ -501,22 +501,22 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
     return true;
 }
 
-Expr *parse_expression_postfix(Parser *p, Expr *left) {
+AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
     for (;;) {
         if (match(p, TK_LPAREN)) {
-            Expr *call = arena_calloc(p->arena, sizeof(*call));
+            AstExpr *call = arena_calloc(p->arena, sizeof(*call));
 
             call->span = left->span;
             call->kind = EXPR_CALL;
             call->call.callee = left;
             call->call.generic_args =
-                array_create(p->arena, sizeof(Type *));
+                array_create(p->arena, sizeof(AstType *));
             call->call.args =
-                array_create(p->arena, sizeof(Expr *));
+                array_create(p->arena, sizeof(AstExpr *));
 
             if (!at(p, TK_RPAREN)) {
                 for (;;) {
-                    Expr *arg = parse_expression(p);
+                    AstExpr *arg = parse_expression(p);
                     array_push(&call->call.args, &arg);
 
                     if (!match(p, TK_COMMA))
@@ -536,18 +536,18 @@ Expr *parse_expression_postfix(Parser *p, Expr *left) {
 
             expect(p, TK_LPAREN);
 
-            Expr *call = arena_calloc(p->arena, sizeof(*call));
+            AstExpr *call = arena_calloc(p->arena, sizeof(*call));
 
             call->span = left->span;
             call->kind = EXPR_CALL;
             call->call.callee = left;
             call->call.generic_args = generic_args;
             call->call.args =
-                array_create(p->arena, sizeof(Expr *));
+                array_create(p->arena, sizeof(AstExpr *));
 
             if (!at(p, TK_RPAREN)) {
                 for (;;) {
-                    Expr *arg = parse_expression(p);
+                    AstExpr *arg = parse_expression(p);
                     array_push(&call->call.args, &arg);
 
                     if (!match(p, TK_COMMA))
@@ -562,7 +562,7 @@ Expr *parse_expression_postfix(Parser *p, Expr *left) {
         }
 
         if (match(p, TK_LBRACK)) {
-            Expr *index = arena_calloc(p->arena, sizeof(*index));
+            AstExpr *index = arena_calloc(p->arena, sizeof(*index));
 
             index->span = p->previous.span;
             index->kind = EXPR_INDEX;
@@ -576,7 +576,7 @@ Expr *parse_expression_postfix(Parser *p, Expr *left) {
         }
 
         if (match(p, TK_DOT)) {
-            Expr *member = arena_calloc(p->arena, sizeof(*member));
+            AstExpr *member = arena_calloc(p->arena, sizeof(*member));
 
             member->span = p->previous.span;
             member->kind = EXPR_MEMBER;
@@ -588,7 +588,7 @@ Expr *parse_expression_postfix(Parser *p, Expr *left) {
         }
 
         if (match(p, TK_QUERY)) {
-            Expr *bubble = arena_calloc(p->arena, sizeof(*bubble));
+            AstExpr *bubble = arena_calloc(p->arena, sizeof(*bubble));
 
             bubble->span = p->previous.span;
             bubble->kind = EXPR_BUBBLE;
@@ -604,12 +604,12 @@ Expr *parse_expression_postfix(Parser *p, Expr *left) {
     return left;
 }
 
-Expr *parse_expression_bp(Parser *p, int min_bp) {
-    Expr *left = parse_expression_prefix(p);
+AstExpr *parse_expression_bp(Parser *p, int min_bp) {
+    AstExpr *left = parse_expression_prefix(p);
     left = parse_expression_postfix(p, left);
 
     for (;;) {
-        BinaryOp op;
+        AstBinaryOp op;
         bool right_assoc;
         int bp = binary_binding_power(p->current.type, &right_assoc, &op);
 
@@ -621,9 +621,9 @@ Expr *parse_expression_bp(Parser *p, int min_bp) {
 
         int right_bp = right_assoc ? bp - 1 : bp;
 
-        Expr *right = parse_expression_bp(p, right_bp);
+        AstExpr *right = parse_expression_bp(p, right_bp);
 
-        Expr *binary = arena_calloc(p->arena, sizeof(*binary));
+        AstExpr *binary = arena_calloc(p->arena, sizeof(*binary));
 
         binary->span = left->span;
         binary->kind = EXPR_BINARY;
@@ -638,7 +638,7 @@ Expr *parse_expression_bp(Parser *p, int min_bp) {
     return left;
 }
 
-Expr *parse_expression(Parser *p) {
+AstExpr *parse_expression(Parser *p) {
     return parse_expression_bp(p, 0);
 }
 

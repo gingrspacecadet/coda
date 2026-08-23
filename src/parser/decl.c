@@ -17,13 +17,13 @@ void recover_declaration(Parser *p) {
     }
 }
 
-bool try_parse_fn_decl(Parser *p, FnDecl *fn) {
+bool try_parse_fn_decl(Parser *p, AstFnDecl *fn) {
     Checkpoint cp = checkpoint(p);
 
     if (at(p, TK_AT)) {
         fn->attrs = parse_attributes(p);
     } else {
-        fn->attrs = array_create(p->arena, sizeof(Attribute));
+        fn->attrs = array_create(p->arena, sizeof(AstAttribute));
     }
 
     bool comptime = match(p, TK_DOLLAR);
@@ -40,7 +40,7 @@ bool try_parse_fn_decl(Parser *p, FnDecl *fn) {
 
     Checkpoint name_cp = checkpoint(p);
 
-    Type *receiver = parse_type(p);
+    AstType *receiver = parse_type(p);
 
     if (match(p, TK_DOT)) {
         fn->receiver = receiver;
@@ -52,7 +52,7 @@ bool try_parse_fn_decl(Parser *p, FnDecl *fn) {
     }
 
     fn->generics = parse_generic_params(p);
-    fn->params = array_create(p->arena, sizeof(Param));
+    fn->params = array_create(p->arena, sizeof(AstParam));
 
     if (!match(p, TK_LPAREN)) {
         restore(p, cp);
@@ -61,7 +61,7 @@ bool try_parse_fn_decl(Parser *p, FnDecl *fn) {
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            Param param = parse_param(p);
+            AstParam param = parse_param(p);
             array_push(&fn->params, &param);
 
             if (!match(p, TK_COMMA))
@@ -87,8 +87,8 @@ bool try_parse_fn_decl(Parser *p, FnDecl *fn) {
 }
 
 
-Param parse_param(Parser *p) {
-    Param param = {
+AstParam parse_param(Parser *p) {
+    AstParam param = {
         .span = p->current.span
     };
 
@@ -98,7 +98,7 @@ Param parse_param(Parser *p) {
     return param;
 }
 
-void parse_fn_decl(Parser *p, FnDecl *fn, Array attrs) {
+void parse_fn_decl(Parser *p, AstFnDecl *fn, Array attrs) {
     fn->span = p->current.span;
     fn->comptime = match(p, TK_DOLLAR);
     fn->attrs = attrs;
@@ -110,7 +110,7 @@ void parse_fn_decl(Parser *p, FnDecl *fn, Array attrs) {
 
     Checkpoint cp = checkpoint(p);
 
-    Type *possible_receiver = parse_type(p);
+    AstType *possible_receiver = parse_type(p);
 
     if (match(p, TK_DOT)) {
         fn->receiver = possible_receiver;
@@ -121,13 +121,13 @@ void parse_fn_decl(Parser *p, FnDecl *fn, Array attrs) {
     }
 
     fn->generics = parse_generic_params(p);
-    fn->params = array_create(p->arena, sizeof(Param));
+    fn->params = array_create(p->arena, sizeof(AstParam));
 
     expect(p, TK_LPAREN);
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            Param param = parse_param(p);
+            AstParam param = parse_param(p);
             array_push(&fn->params, &param);
 
             if (!match(p, TK_COMMA))
@@ -145,7 +145,7 @@ void parse_fn_decl(Parser *p, FnDecl *fn, Array attrs) {
     }
 }
 
-void parse_var_decl(Parser *p, VarDecl *var) {
+void parse_var_decl(Parser *p, AstVarDecl *var) {
     var->span = p->current.span;
 
     var->type = parse_type(p);
@@ -159,7 +159,7 @@ void parse_var_decl(Parser *p, VarDecl *var) {
     expect(p, TK_SEMICOLON);
 }
 
-void parse_type_decl(Parser *p, TypeDecl *decl) {
+void parse_type_decl(Parser *p, AstTypeDecl *decl) {
     decl->span = p->current.span;
 
     expect(p, TK_KW_TYPE);
@@ -174,7 +174,7 @@ void parse_type_decl(Parser *p, TypeDecl *decl) {
     expect(p, TK_SEMICOLON);
 }
 
-void parse_include_decl(Parser *p, IncludeDecl *decl) {
+void parse_include_decl(Parser *p, AstIncludeDecl *decl) {
     expect(p, TK_KW_INCLUDE);
 
     decl->span = p->current.span;
@@ -190,7 +190,7 @@ void parse_include_decl(Parser *p, IncludeDecl *decl) {
     expect(p, TK_SEMICOLON);
 }
 
-bool try_parse_var_decl(Parser *p, VarDecl *var) {
+bool try_parse_var_decl(Parser *p, AstVarDecl *var) {
     Checkpoint cp = checkpoint(p);
 
     var->span = p->current.span;
@@ -221,14 +221,14 @@ bool try_parse_var_decl(Parser *p, VarDecl *var) {
     return true;
 }
 
-void parse_constraint_decl(Parser *p, ConstraintDecl *decl) {
+void parse_constraint_decl(Parser *p, AstConstraintDecl *decl) {
     decl->span = p->current.span;
 
     expect(p, TK_KW_CONSTRAINT);
 
     decl->name = parse_name(p);
 
-    decl->items = array_create(p->arena, sizeof(ConstraintItem));
+    decl->items = array_create(p->arena, sizeof(AstConstraintItem));
 
     expect(p, TK_EQ);
     expect(p, TK_LBRACE);
@@ -238,8 +238,8 @@ void parse_constraint_decl(Parser *p, ConstraintDecl *decl) {
     expect(p, TK_RBRACE);
 }
 
-Decl *parse_decl(Parser *p) {
-    Decl *decl = arena_calloc(p->arena, sizeof(*decl));
+AstDecl *parse_decl(Parser *p) {
+    AstDecl *decl = arena_calloc(p->arena, sizeof(*decl));
 
     decl->attrs = parse_attributes(p);
 
@@ -275,7 +275,7 @@ Decl *parse_decl(Parser *p) {
 
     Checkpoint cp = checkpoint(p);
 
-    VarDecl var = {0};
+    AstVarDecl var = {0};
 
     if (try_parse_var_decl(p, &var)) {
         decl->kind = DECL_VAR;

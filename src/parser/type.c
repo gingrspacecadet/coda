@@ -1,13 +1,13 @@
 #include "common.h"
 
-ConstraintItem parse_constraint_item(Parser *p) {
-    ConstraintItem item = {
+AstConstraintItem parse_constraint_item(Parser *p) {
+    AstConstraintItem item = {
         .span = p->current.span,
     };
 
     Checkpoint cp = checkpoint(p);
 
-    FnDecl *fn = arena_calloc(p->arena, sizeof(*fn));
+    AstFnDecl *fn = arena_calloc(p->arena, sizeof(*fn));
 
     if (try_parse_fn_decl(p, fn)) {
         item.kind = CONSTRAINT_METHOD;
@@ -19,7 +19,7 @@ ConstraintItem parse_constraint_item(Parser *p) {
 
     cp = checkpoint(p);
 
-    Field field = parse_field(p);
+    AstField field = parse_field(p);
 
     if (match(p, TK_SEMICOLON)) {
         item.kind = CONSTRAINT_FIELD;
@@ -39,16 +39,16 @@ ConstraintItem parse_constraint_item(Parser *p) {
 
 void parse_constraint_items(Parser *p, Array *items ) {
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        ConstraintItem item = parse_constraint_item(p);
+        AstConstraintItem item = parse_constraint_item(p);
         array_push(items, &item);
     }
 }
 
-ConstraintDecl *parse_inline_constraint(Parser *p) {
-    ConstraintDecl *constraint = arena_calloc(p->arena, sizeof(*constraint));
+AstConstraintDecl *parse_inline_constraint(Parser *p) {
+    AstConstraintDecl *constraint = arena_calloc(p->arena, sizeof(*constraint));
 
     constraint->span = p->current.span;
-    constraint->items = array_create(p->arena, sizeof(ConstraintItem));
+    constraint->items = array_create(p->arena, sizeof(AstConstraintItem));
 
     expect(p, TK_LBRACE);
 
@@ -59,8 +59,8 @@ ConstraintDecl *parse_inline_constraint(Parser *p) {
     return constraint;
 }
 
-ConstraintRef parse_constraint_ref(Parser *p) {
-    ConstraintRef ref = {
+AstConstraintRef parse_constraint_ref(Parser *p) {
+    AstConstraintRef ref = {
         .span = p->current.span
     };
 
@@ -75,10 +75,10 @@ ConstraintRef parse_constraint_ref(Parser *p) {
     return ref;
 }
 
-GenericParam parse_generic_param(Parser *p) {
-    GenericParam param = {
+AstGenericParam parse_generic_param(Parser *p) {
+    AstGenericParam param = {
         .span = p->current.span,
-        .constraints = array_create(p->arena, sizeof(ConstraintRef))
+        .constraints = array_create(p->arena, sizeof(AstConstraintRef))
     };
 
     param.name = parse_name(p);
@@ -87,7 +87,7 @@ GenericParam parse_generic_param(Parser *p) {
         return param;
 
     for (;;) {
-        ConstraintRef ref = parse_constraint_ref(p);
+        AstConstraintRef ref = parse_constraint_ref(p);
         array_push(&param.constraints, &ref);
 
         if (!match(p, TK_PLUS))
@@ -98,14 +98,14 @@ GenericParam parse_generic_param(Parser *p) {
 }
 
 Array parse_generic_params(Parser *p) {
-    Array params = array_create(p->arena, sizeof(GenericParam));
+    Array params = array_create(p->arena, sizeof(AstGenericParam));
 
     if (!match(p, TK_LT))
         return params;
 
     if (!at(p, TK_GT)) {
         for (;;) {
-            GenericParam param = parse_generic_param(p);
+            AstGenericParam param = parse_generic_param(p);
             array_push(&params, &param);
 
             if (!match(p, TK_COMMA))
@@ -118,8 +118,8 @@ Array parse_generic_params(Parser *p) {
     return params;
 }
 
-Field parse_field(Parser *p) {
-    Field field = {
+AstField parse_field(Parser *p) {
+    AstField field = {
         .span = p->current.span,
     };
 
@@ -129,19 +129,19 @@ Field parse_field(Parser *p) {
     return field;
 }
 
-Type *parse_struct_type(Parser *p) {
-    Type *type = arena_calloc(p->arena, sizeof(*type));
+AstType *parse_struct_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
 
     type->kind = TYPE_STRUCT;
     type->span = p->current.span;
-    type->structure.fields = array_create(p->arena, sizeof(Field));
+    type->structure.fields = array_create(p->arena, sizeof(AstField));
 
     advance(p); /* struct */
 
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        Field field = parse_field(p);
+        AstField field = parse_field(p);
         array_push(&type->structure.fields, &field);
 
         expect(p, TK_SEMICOLON);
@@ -152,19 +152,19 @@ Type *parse_struct_type(Parser *p) {
     return type;
 }
 
-Type *parse_union_type(Parser *p) {
-    Type *type = arena_calloc(p->arena, sizeof(*type));
+AstType *parse_union_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
 
     type->kind = TYPE_UNION;
     type->span = p->current.span;
-    type->union_.fields = array_create(p->arena, sizeof(Field));
+    type->union_.fields = array_create(p->arena, sizeof(AstField));
 
     advance(p);
 
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        Field field = parse_field(p);
+        AstField field = parse_field(p);
         array_push(&type->union_.fields, &field);
 
         expect(p, TK_SEMICOLON);
@@ -175,14 +175,14 @@ Type *parse_union_type(Parser *p) {
     return type;
 }
 
-Type *parse_enum_type(Parser *p) {
-    Type *type = arena_calloc(p->arena, sizeof(*type));
+AstType *parse_enum_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
 
     type->kind = TYPE_ENUM;
     type->span = p->current.span;
     type->enumeration.underlying = NULL;
     type->enumeration.items =
-        array_create(p->arena, sizeof(EnumItem));
+        array_create(p->arena, sizeof(AstEnumItem));
 
     advance(p);
 
@@ -192,7 +192,7 @@ Type *parse_enum_type(Parser *p) {
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        EnumItem item = {
+        AstEnumItem item = {
             .span = p->current.span,
             .name = parse_name(p),
             .value = NULL,
@@ -212,16 +212,16 @@ Type *parse_enum_type(Parser *p) {
     return type;
 }
 
-Type *parse_type_single(Parser *p) {
+AstType *parse_type_single(Parser *p) {
     bool mutable = match(p, TK_KW_MUT);
 
-    Type *base = NULL;
+    AstType *base = NULL;
 
     if (at(p, TK_KW_FN)) {
         Token start = p->current;
         advance(p);
 
-        Type *ret = parse_type(p);
+        AstType *ret = parse_type(p);
 
         expect(p, TK_LPAREN);
 
@@ -230,11 +230,11 @@ Type *parse_type_single(Parser *p) {
         base->span = start.span;
         base->fn.ret = ret;
         base->fn.params =
-            array_create(p->arena, sizeof(Type *));
+            array_create(p->arena, sizeof(AstType *));
 
         if (!at(p, TK_RPAREN)) {
             for (;;) {
-                Type *param = parse_type(p);
+                AstType *param = parse_type(p);
                 array_push(&base->fn.params, &param);
 
                 if (!match(p, TK_COMMA))
@@ -266,12 +266,12 @@ Type *parse_type_single(Parser *p) {
         base->kind = TYPE_NAMED;
         base->span = p->current.span;
         base->named.path = parse_path(p);
-        base->named.args = array_create(p->arena, sizeof(Type *));
+        base->named.args = array_create(p->arena, sizeof(AstType *));
 
         if (match(p, TK_LT)) {
             if (!at(p, TK_GT)) {
                 for (;;) {
-                    Type *arg = parse_type(p);
+                    AstType *arg = parse_type(p);
                     array_push(&base->named.args, &arg);
 
                     if (!match(p, TK_COMMA))
@@ -295,7 +295,7 @@ Type *parse_type_single(Parser *p) {
         bool postfix_mut = match(p, TK_KW_MUT);
 
         if (match(p, TK_STAR)) {
-            Type *ptr = arena_calloc(p->arena, sizeof(*ptr));
+            AstType *ptr = arena_calloc(p->arena, sizeof(*ptr));
 
             ptr->kind = TYPE_POINTER;
             ptr->span = p->previous.span;
@@ -308,7 +308,7 @@ Type *parse_type_single(Parser *p) {
         }
 
         if (match(p, TK_LBRACK)) {
-            Type *array = arena_calloc(p->arena, sizeof(*array));
+            AstType *array = arena_calloc(p->arena, sizeof(*array));
 
             array->kind = TYPE_ARRAY;
             array->span = p->previous.span;
@@ -338,22 +338,22 @@ Type *parse_type_single(Parser *p) {
     return base;
 }
 
-Type *parse_type(Parser *p) {
-    Type *left = parse_type_single(p);
+AstType *parse_type(Parser *p) {
+    AstType *left = parse_type_single(p);
 
     if (!match(p, TK_PIPE))
         return left;
 
-    Type *sum = arena_calloc(p->arena, sizeof(*sum));
+    AstType *sum = arena_calloc(p->arena, sizeof(*sum));
 
     sum->kind = TYPE_SUM;
     sum->span = left->span;
-    sum->sum.members = array_create(p->arena, sizeof(Type *));
+    sum->sum.members = array_create(p->arena, sizeof(AstType *));
 
     array_push(&sum->sum.members, &left);
 
     do {
-        Type *member = parse_type_single(p);
+        AstType *member = parse_type_single(p);
         array_push(&sum->sum.members, &member);
     } while (match(p, TK_PIPE));
 

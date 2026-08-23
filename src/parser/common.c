@@ -22,10 +22,10 @@ Path parse_path(Parser *p) {
     return path;
 }
 
-Attribute parse_attribute(Parser *p) {
-    Attribute attr = {
+AstAttribute parse_attribute(Parser *p) {
+    AstAttribute attr = {
         .span = p->current.span,
-        .args = array_create(p->arena, sizeof(Expr *))
+        .args = array_create(p->arena, sizeof(AstExpr *))
     };
 
     advance(p);
@@ -40,7 +40,7 @@ Attribute parse_attribute(Parser *p) {
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            Expr *expr = parse_expression(p);
+            AstExpr *expr = parse_expression(p);
             array_push(&attr.args, &expr);
 
             if (!match(p, TK_COMMA))
@@ -54,10 +54,10 @@ Attribute parse_attribute(Parser *p) {
 }
 
 Array parse_attributes(Parser *p) {
-    Array attrs = array_create(p->arena, sizeof(Attribute));
+    Array attrs = array_create(p->arena, sizeof(AstAttribute));
 
     while (at(p, TK_AT)) {
-        Attribute attr = parse_attribute(p);
+        AstAttribute attr = parse_attribute(p);
         array_push(&attrs, &attr);
     }
 

@@ -26,6 +26,6 @@ static inline void parser_init(Parser *p, Lexer *lexer, Arena *arena) {
     };
 }
 
-Module *parser_parse_module(Parser *p);
+AstModule *parser_parse_module(Parser *p);
 
 #endif

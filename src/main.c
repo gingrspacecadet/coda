@@ -52,7 +52,7 @@ int main() {
 
     Parser p;
     parser_init(&p, &l, arena);
-    Module *m = parser_parse_module(&p);
+    AstModule *m = parser_parse_module(&p);
 
     print_ast_module(stdout, m);
 }

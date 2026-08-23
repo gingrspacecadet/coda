@@ -48,7 +48,7 @@ static void print_name(FILE *out, const AstName *name) {
     }
 }
 
-static const char *type_kind_name(TypeKind kind) {
+static const char *type_kind_name(AstTypeKind kind) {
     switch (kind) {
     case TYPE_NONE:   return "none";
     case TYPE_NAMED:  return "named";
@@ -66,7 +66,7 @@ static const char *type_kind_name(TypeKind kind) {
     return "?";
 }
 
-static const char *expr_kind_name(ExprKind kind) {
+static const char *expr_kind_name(AstExprKind kind) {
     switch (kind) {
     case EXPR_NONE:       return "none";
     case EXPR_ERROR:      return "error";
@@ -89,7 +89,7 @@ static const char *expr_kind_name(ExprKind kind) {
     return "?";
 }
 
-static const char *stmt_kind_name(StmtKind kind) {
+static const char *stmt_kind_name(AstStmtKind kind) {
     switch (kind) {
     case STMT_NONE:     return "none";
     case STMT_ERROR:    return "error";
@@ -124,7 +124,7 @@ static const char *decl_kind_name(int kind) {
 
 static void print_literal(
     FILE *out,
-    const Literal *literal
+    const AstLiteral *literal
 ) {
     switch (literal->kind) {
     case LIT_INTEGER:
@@ -150,7 +150,7 @@ static void print_literal(
     print_string(out, literal->raw);
 }
 
-static const char *unary_op_name(UnaryOp op) {
+static const char *unary_op_name(AstUnaryOp op) {
     switch (op) {
     case UNARY_POS:     return "+";
     case UNARY_NEG:     return "-";
@@ -163,7 +163,7 @@ static const char *unary_op_name(UnaryOp op) {
     return "?";
 }
 
-static const char *binary_op_name(BinaryOp op) {
+static const char *binary_op_name(AstBinaryOp op) {
     switch (op) {
     case BINARY_ADD:          return "+";
     case BINARY_SUB:          return "-";
@@ -205,15 +205,15 @@ static const char *binary_op_name(BinaryOp op) {
 
 static void print_type(
     FILE *out,
-    const Type *type,
+    const AstType *type,
     unsigned depth
 );
 
-static void print_stmt(FILE *out, const Stmt *stmt, unsigned depth);
+static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth);
 
 static void print_expr(
     FILE *out,
-    const Expr *expr,
+    const AstExpr *expr,
     unsigned depth
 ) {
     indent(out, depth);
@@ -273,7 +273,7 @@ static void print_expr(
             for (size_t i = 0;
                  i < expr->call.generic_args.len;
                  ++i) {
-                Type **arg = array_at(
+                AstType **arg = array_at(
                     (Array *)&expr->call.generic_args,
                     i
                 );
@@ -284,7 +284,7 @@ static void print_expr(
         for (size_t i = 0;
              i < expr->call.args.len;
              ++i) {
-            Expr **arg = array_at(
+            AstExpr **arg = array_at(
                 (Array *)&expr->call.args,
                 i
             );
@@ -320,7 +320,7 @@ static void print_expr(
         for (size_t i = 0;
              i < expr->intrinsic.args.len;
              ++i) {
-            Expr **arg = array_at(
+            AstExpr **arg = array_at(
                 (Array *)&expr->intrinsic.args,
                 i
             );
@@ -336,7 +336,7 @@ static void print_expr(
         for (size_t i = 0;
              i < expr->init.fields.len;
              ++i) {
-            InitField *field = array_at(
+            AstInitField *field = array_at(
                 (Array *)&expr->init.fields,
                 i
             );
@@ -360,7 +360,7 @@ static void print_expr(
         for (size_t i = 0;
              i < expr->lambda.params.len;
              ++i) {
-            Param *param = array_at(
+            AstParam *param = array_at(
                 (Array *)&expr->lambda.params,
                 i
             );
@@ -388,7 +388,7 @@ static void print_expr(
 
 static void print_pattern(
     FILE *out,
-    const Pattern *pattern,
+    const AstPattern *pattern,
     unsigned depth
 ) {
     indent(out, depth);
@@ -430,7 +430,7 @@ static void print_pattern(
         print_expr(out, pattern->expr, depth + 1);
 }
 
-static void print_stmt(FILE *out, const Stmt *stmt, unsigned depth) {
+static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
     if (stmt == NULL)
         return;
 
@@ -467,7 +467,7 @@ static void print_stmt(FILE *out, const Stmt *stmt, unsigned depth) {
         for (size_t i = 0;
              i < stmt->block.stmts.len;
              ++i) {
-            Stmt **child = array_at(
+            AstStmt **child = array_at(
                 (Array *)&stmt->block.stmts,
                 i
             );
@@ -513,7 +513,7 @@ static void print_stmt(FILE *out, const Stmt *stmt, unsigned depth) {
         for (size_t i = 0;
              i < stmt->match.cases.len;
              ++i) {
-            MatchCase *case_ = array_at(
+            AstMatchCase *case_ = array_at(
                 (Array *)&stmt->match.cases,
                 i
             );
@@ -537,7 +537,7 @@ static void print_stmt(FILE *out, const Stmt *stmt, unsigned depth) {
 
 static void print_field(
     FILE *out,
-    const Field *field,
+    const AstField *field,
     unsigned depth
 ) {
     indent(out, depth);
@@ -550,7 +550,7 @@ static void print_field(
 
 static void print_type(
     FILE *out,
-    const Type *type,
+    const AstType *type,
     unsigned depth
 ) {
     indent(out, depth);
@@ -575,7 +575,7 @@ static void print_type(
         fputc('\n', out);
 
         for (size_t i = 0; i < type->named.args.len; ++i) {
-            Type **arg = array_at(
+            AstType **arg = array_at(
                 (Array *)&type->named.args,
                 i
             );
@@ -611,7 +611,7 @@ static void print_type(
         print_type(out, type->fn.ret, depth + 1);
 
         for (size_t i = 0; i < type->fn.params.len; ++i) {
-            Type **param = array_at(
+            AstType **param = array_at(
                 (Array *)&type->fn.params,
                 i
             );
@@ -621,7 +621,7 @@ static void print_type(
 
     case TYPE_SUM:
         for (size_t i = 0; i < type->sum.members.len; ++i) {
-            Type **member = array_at(
+            AstType **member = array_at(
                 (Array *)&type->sum.members,
                 i
             );
@@ -631,7 +631,7 @@ static void print_type(
 
     case TYPE_STRUCT:
         for (size_t i = 0; i < type->structure.fields.len; ++i) {
-            Field *field = array_at(
+            AstField *field = array_at(
                 (Array *)&type->structure.fields,
                 i
             );
@@ -641,7 +641,7 @@ static void print_type(
 
     case TYPE_UNION:
         for (size_t i = 0; i < type->union_.fields.len; ++i) {
-            Field *field = array_at(
+            AstField *field = array_at(
                 (Array *)&type->union_.fields,
                 i
             );
@@ -658,7 +658,7 @@ static void print_type(
             );
 
         for (size_t i = 0; i < type->enumeration.items.len; ++i) {
-            EnumItem *item = array_at(
+            AstEnumItem *item = array_at(
                 (Array *)&type->enumeration.items,
                 i
             );
@@ -689,7 +689,7 @@ static void print_attributes(
     unsigned depth
 ) {
     for (size_t i = 0; i < attrs->len; ++i) {
-        Attribute *attr = array_at((Array *)attrs, i);
+        AstAttribute *attr = array_at((Array *)attrs, i);
 
         indent(out, depth);
         fputs("attribute ", out);
@@ -697,7 +697,7 @@ static void print_attributes(
         fputc('\n', out);
 
         for (size_t j = 0; j < attr->args.len; ++j) {
-            Expr **arg = array_at(
+            AstExpr **arg = array_at(
                 &attr->args,
                 j
             );
@@ -708,7 +708,7 @@ static void print_attributes(
 
 static void print_param(
     FILE *out,
-    const Param *param,
+    const AstParam *param,
     unsigned depth
 ) {
     indent(out, depth);
@@ -721,7 +721,7 @@ static void print_param(
 
 static void print_constraint_item(
     FILE *out,
-    const ConstraintItem *item,
+    const AstConstraintItem *item,
     unsigned depth
 ) {
     indent(out, depth);
@@ -744,7 +744,7 @@ static void print_constraint_item(
         for (size_t i = 0;
              i < item->method->params.len;
              ++i) {
-            Param *param = array_at(
+            AstParam *param = array_at(
                 (Array *)&item->method->params,
                 i
             );
@@ -767,7 +767,7 @@ static void print_constraint_item(
     }
 }
 
-static void print_decl(FILE *out, const Decl *decl, unsigned depth) {
+static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
     indent(out, depth);
 
     fprintf(
@@ -831,7 +831,7 @@ static void print_decl(FILE *out, const Decl *decl, unsigned depth) {
         for (size_t i = 0;
              i < decl->fn.params.len;
              ++i) {
-            Param *param = array_at(
+            AstParam *param = array_at(
                 (Array *)&decl->fn.params,
                 i
             );
@@ -851,7 +851,7 @@ static void print_decl(FILE *out, const Decl *decl, unsigned depth) {
         for (size_t i = 0;
              i < decl->constraint.items.len;
              ++i) {
-            ConstraintItem *item = array_at(
+            AstConstraintItem *item = array_at(
                 (Array *)&decl->constraint.items,
                 i
             );
@@ -864,7 +864,7 @@ static void print_decl(FILE *out, const Decl *decl, unsigned depth) {
     }
 }
 
-void print_ast_module(FILE *out, const Module *module) {
+void print_ast_module(FILE *out, const AstModule *module) {
     fputs("module ", out);
     print_path(out, &module->path);
 
@@ -873,7 +873,7 @@ void print_ast_module(FILE *out, const Module *module) {
     fputc('\n', out);
 
     for (size_t i = 0; i < module->decls.len; ++i) {
-        Decl **decl = array_at(
+        AstDecl **decl = array_at(
             (Array *)&module->decls,
             i
         );

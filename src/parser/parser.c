@@ -1,9 +1,9 @@
 #include "common.h"
 
-Module *parser_parse_module(Parser *p) {
-    Module *module = arena_calloc(p->arena, sizeof(*module));
+AstModule *parser_parse_module(Parser *p) {
+    AstModule *module = arena_calloc(p->arena, sizeof(*module));
 
-    module->decls = array_create(p->arena, sizeof(Decl *));
+    module->decls = array_create(p->arena, sizeof(AstDecl *));
     if (!match(p, TK_KW_MODULE)) {
         error_expected_module(p->diags, p->current.span);
 
@@ -25,7 +25,7 @@ Module *parser_parse_module(Parser *p) {
     while (!at(p, TK_EOF)) {
         size_t before = p->current.span.offset;
 
-        Decl *decl = parse_decl(p);
+        AstDecl *decl = parse_decl(p);
 
         if (decl != NULL)
             array_push(&module->decls, &decl);
