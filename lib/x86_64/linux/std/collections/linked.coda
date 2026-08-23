@@ -71,12 +71,12 @@ type Linked<T> = struct: GenericLinked<T> {
 };
 
 @export
-fn none Linked<T>.init(Linked<T>* this, Allocator* allocator) {
+fn none Linked<T>.init<T>(Linked<T>* this, Allocator* allocator) {
     this.allocator = allocator;
 }
 
 @export
-fn Node<T>* Linked<T>.push(Linked<T>* this, T value) {
+fn Node<T>* Linked<T>.push<T>(Linked<T>* this, T value) {
     Node<T>* node = this.allocator.alloc(#sizeof(Node<T>));
     this.end.next = node;
     this.end = node;
@@ -85,7 +85,7 @@ fn Node<T>* Linked<T>.push(Linked<T>* this, T value) {
 }
 
 @export
-fn (none | Error::IS_EMPTY) Linked<T>.shift(Linked<T>* this, T value) {
+fn (none | Error::IS_EMPTY) Linked<T>.shift<T>(Linked<T>* this, T value) {
     if (this.len == 0) {
         return Error::IS_EMPTY;
     }
@@ -105,12 +105,12 @@ type DoubleLinked<T>: struct: GenericLinked<T> {
 };
 
 @export
-fn none DoubleLinked<T>.init(DoubleLinked<T>* this, Allocator* allocator) {
+fn none DoubleLinked<T>.init<T>(DoubleLinked<T>* this, Allocator* allocator) {
     this.allocator = allocator;
 }
 
 @export
-fn DoubleNode<T>* DoubleLinked<T>.push(Linked<T>* this, T value) {
+fn DoubleNode<T>* DoubleLinked<T>.push<T>(Linked<T>* this, T value) {
     DoubleNode<T>* node = this.allocator.alloc(#sizeof(Node<T>));
     node.prev = this.end;
     node.next = null;
@@ -121,7 +121,7 @@ fn DoubleNode<T>* DoubleLinked<T>.push(Linked<T>* this, T value) {
 }
 
 @export
-fn (none | Error::IS_EMPTY) Linked<T>.pop(Linked<T>* this, T value) {
+fn (none | Error::IS_EMPTY) Linked<T>.pop<T>(Linked<T>* this, T value) {
     if (this.len == 0) {
         return Error::IS_EMPTY;
     }
@@ -134,7 +134,7 @@ fn (none | Error::IS_EMPTY) Linked<T>.pop(Linked<T>* this, T value) {
 }
 
 @export
-fn (none | Error::IS_EMPTY) Linked<T>.shift(Linked<T>* this, T value) {
+fn (none | Error::IS_EMPTY) Linked<T>.shift<T>(Linked<T>* this, T value) {
     if (this.len == 0) {
         return Error::IS_EMPTY;
     }
@@ -147,7 +147,7 @@ fn (none | Error::IS_EMPTY) Linked<T>.shift(Linked<T>* this, T value) {
 }
 
 @export
-fn DoubleNode<T>* DoubleLinked<T>.unshift(Linked<T>* this, T value) {
+fn DoubleNode<T>* DoubleLinked<T>.unshift<T>(Linked<T>* this, T value) {
     DoubleNode<T>* node = this.allocator.alloc(#sizeof(Node<T>));
     node.prev = null;
     node.next = this.start;

@@ -30,7 +30,7 @@ type List<T> = struct: Contiguous<T>, AllocatorIndexed<T> {
 fn none List<T>.init<T>(mut List<T>* this, usize len) {
     this.len = len;
     this.capacity = normalize_capacity<T>(len);
-    this.ptr = this.allocator.alloc<T>(len);
+    this.ptr = this.allocator.alloc(#sizeof(T) * len);
 }
 
 @export

@@ -128,3 +128,107 @@ fn uint64 hash(uint8[] data) {
     }
     return v[0] ^ v[1] ^ v[2] ^ v[3];
 }
+
+@export
+type HashSetNode<T> = struct {
+    HashSetNode<T>*? next;
+    T value;
+};
+
+@export
+type HashSet<T> = struct {
+    Allocator* allocator;
+    usize len;
+    usize mask;
+    HashSetNode<T>*?[] data;
+};
+
+@export
+fn none HashSet<T>.init<T>(HashSet<T>* this, Allocator* allocator, usize buckets) {
+    buckets = (1 << buckets) + 1;
+    this.allocator = allocator;
+    this.len = 0;
+    this.mask = buckets - 1;
+    this.data.len = buckets;
+    this.data.ptr = allocator.alloc(#sizeof(HashSetNode<T>*?) * buckets);
+    for (mut usize i = 0; i < buckets; i++) {
+        this.data[i] = null;
+    }
+}
+
+@export
+fn bool HashSet<T>.has<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>* node = this.data[bucket];
+    while (node != null) {
+        if (node.value == value) {
+            return true;
+        }
+        node = node.next;
+    }
+    return false;
+}
+
+@export
+fn bool HashSet<T>.add<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>*? node = this.data[bucket];
+    if (node == null) {
+        node = this.allocator.alloc(#sizeof(HashSetNode<T>));
+        node.next = null;
+        node.value = value;
+        this.data[bucket] = node;
+        this.len++;
+        return true;
+    }
+    if (node.value == value) {
+        return false;
+    }
+    HashSetNode<T>* prev = node;
+    node = node.next;
+    while (node != null) {
+        if (node.value == value) {
+            return false;
+        }
+        prev = node;
+        node = node.next;
+    }
+    HashNode<T>* prev = node;
+    node = this.allocator.alloc(#sizeof(HashSetNode<T>));
+    node.next = null;
+    node.value = value;
+    prev.next = node;
+    this.len++;
+    return true;
+}
+
+@export
+fn bool HashSet<T>.delete<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>*? node = this.data[bucket];
+    if (node == null) {
+        return false;
+    }
+    if (node.value == value) {
+        this.allocator.free(node);
+        this.data[bucket] = null;
+        this.len--;
+        return true;
+    }
+    HashSetNode<T>* prev = node;
+    node = node.next;
+    while (node != null) {
+        if (node.value == value) {
+            prev.next = node.next;
+            this.allocator.free(node);
+            this.len--;
+            return true;
+        }
+        prev = node;
+        node = node.next;
+    }
+    return false;
+}
