@@ -92,12 +92,24 @@ Fields:
 usize*? len;
 ```
 
+### Slices
+
+```
+14 - slice
+
+Flags:
+4 - mutable
+
+Fields:
+#type* of;
+```
+
 ### Functions
 
 There has to be a separate "generic" field for this, because one can have generic type aliases for generic functions.
 
 ```
-14 - function
+15 - function
 
 Flags:
 4 - named
@@ -118,7 +130,7 @@ if generic:
 ### Structs
 
 ```
-15 - struct
+16 - struct
 
 Fields:
 usize size;
@@ -133,7 +145,7 @@ usize size;
 ### Unions
 
 ```
-16 - union
+17 - union
 
 Fields:
 usize size;
@@ -147,7 +159,7 @@ usize size;
 ### Enums
 
 ```
-17 - enum
+18 - enum
 
 Fields:
 #type* backing_type;
@@ -160,7 +172,7 @@ Fields:
 ### Sum types
 
 ```
-18 - sum type
+19 - sum type
 
 Fields:
 usize size;
