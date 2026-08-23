@@ -20,6 +20,7 @@ typedef struct AstConstraintDecl AstConstraintDecl;
 
 typedef struct {
     enum {
+        NAME_ERROR,
         NAME_IDENT,
         NAME_SPLICE,
     } kind;
@@ -41,9 +42,9 @@ typedef struct {
 } AstAttribute;
 
 typedef enum {
-    CONSTRAINT_NONE,
-    CONSTRAINT_NAMED,
-    CONSTRAINT_INLINE,
+    CONSTRAINTREF_ERROR,
+    CONSTRAINTREF_NAMED,
+    CONSTRAINTREF_INLINE,
 } AstConstraintRefKind;
 
 typedef struct {
@@ -76,7 +77,7 @@ typedef struct {
 } AstField;
 
 typedef enum {
-    TYPE_NONE,
+    TYPE_ERROR,
     TYPE_NAMED,
     TYPE_POINTER,
     TYPE_ARRAY,
@@ -86,7 +87,6 @@ typedef enum {
     TYPE_UNION,
     TYPE_ENUM,
     TYPE_SPLICE,
-    TYPE_ERROR,
 } AstTypeKind;
 
 struct AstType {
@@ -140,7 +140,7 @@ struct AstType {
 };
 
 typedef enum {
-    LIT_NONE,
+    LIT_ERROR,
     LIT_INTEGER,
     LIT_FLOAT,
     LIT_STRING,
@@ -155,6 +155,7 @@ typedef struct {
 } AstLiteral;
 
 typedef enum {
+    UNARY_ERROR,
     UNARY_POS,
     UNARY_NEG,
     UNARY_NOT,
@@ -164,6 +165,7 @@ typedef enum {
 } AstUnaryOp;
 
 typedef enum {
+    BINARY_ERROR,
     BINARY_ADD,
     BINARY_SUB,
     BINARY_MUL,
@@ -216,7 +218,6 @@ typedef struct {
 } AstInitField;
 
 typedef enum {
-    EXPR_NONE,
     EXPR_ERROR,
 
     EXPR_LITERAL,
@@ -319,7 +320,6 @@ struct AstExpr {
 };
 
 typedef enum {
-    STMT_NONE,
     STMT_ERROR,
 
     STMT_VAR,
@@ -490,6 +490,7 @@ struct AstConstraintDecl {
 };
 
 typedef enum {
+    CONSTRAINT_ERROR,
     CONSTRAINT_METHOD,
     CONSTRAINT_FIELD,
     CONSTRAINT_EXPR,
@@ -511,7 +512,7 @@ struct AstDecl {
     Span span;
 
     enum {
-        DECL_NONE,
+        DECL_ERROR,
         DECL_INCLUDE,
         DECL_TYPE,
         DECL_VAR,

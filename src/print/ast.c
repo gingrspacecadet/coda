@@ -50,7 +50,6 @@ static void print_name(FILE *out, const AstName *name) {
 
 static const char *type_kind_name(AstTypeKind kind) {
     switch (kind) {
-    case TYPE_NONE:   return "none";
     case TYPE_NAMED:  return "named";
     case TYPE_POINTER: return "pointer";
     case TYPE_ARRAY:  return "array";
@@ -68,7 +67,6 @@ static const char *type_kind_name(AstTypeKind kind) {
 
 static const char *expr_kind_name(AstExprKind kind) {
     switch (kind) {
-    case EXPR_NONE:       return "none";
     case EXPR_ERROR:      return "error";
     case EXPR_LITERAL:    return "literal";
     case EXPR_IDENT:      return "ident";
@@ -91,7 +89,6 @@ static const char *expr_kind_name(AstExprKind kind) {
 
 static const char *stmt_kind_name(AstStmtKind kind) {
     switch (kind) {
-    case STMT_NONE:     return "none";
     case STMT_ERROR:    return "error";
     case STMT_VAR:      return "var";
     case STMT_EXPR:     return "expr";
@@ -111,7 +108,7 @@ static const char *stmt_kind_name(AstStmtKind kind) {
 
 static const char *decl_kind_name(int kind) {
     switch (kind) {
-    case DECL_NONE:       return "none";
+    case DECL_ERROR:       return "none";
     case DECL_INCLUDE:    return "include";
     case DECL_TYPE:       return "type";
     case DECL_VAR:        return "var";
@@ -142,7 +139,7 @@ static void print_literal(
     case LIT_BOOL:
         fputs("bool ", out);
         break;
-    case LIT_NONE:
+    case LIT_ERROR:
         fputs("none ", out);
         break;
     }
@@ -380,7 +377,6 @@ static void print_expr(
         print_expr(out, expr->splice.expression, depth + 1);
         break;
 
-    case EXPR_NONE:
     case EXPR_ERROR:
         break;
     }
@@ -529,7 +525,6 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
             print_expr(out, stmt->_break.value, depth + 1);
         break;
 
-    case STMT_NONE:
     case STMT_ERROR:
         break;
     }
@@ -677,7 +672,6 @@ static void print_type(
         print_expr(out, type->splice.expr, depth + 1);
         break;
 
-    case TYPE_NONE:
     case TYPE_ERROR:
         break;
     }
@@ -859,7 +853,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
         }
         break;
 
-    case DECL_NONE:
+    case DECL_ERROR:
         break;
     }
 }

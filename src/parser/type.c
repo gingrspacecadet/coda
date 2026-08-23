@@ -65,10 +65,10 @@ AstConstraintRef parse_constraint_ref(Parser *p) {
     };
 
     if (at(p, TK_LBRACE)) {
-        ref.kind = CONSTRAINT_INLINE;
+        ref.kind = CONSTRAINTREF_INLINE;
         ref._inline = parse_inline_constraint(p);
     } else {
-        ref.kind = CONSTRAINT_NAMED;
+        ref.kind = CONSTRAINTREF_NAMED;
         ref.path = parse_path(p);
     }
 
