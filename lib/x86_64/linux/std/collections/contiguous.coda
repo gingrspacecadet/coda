@@ -4,6 +4,7 @@ include std::error = _;
 
 @export
 constraint Contiguous<T>: Indexed<T> = {
+    usize len;
     T* ptr;
 };
 
@@ -653,17 +654,20 @@ fn none Contiguous<T>.push_to_list<T>(Contiguous<T>* this, mut List<T>* out, T v
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) List<T>.pop<T>(mut List<T>* this) {
+fn (T | Error::IS_EMPTY) List<T>.pop<T>(mut List<T>* this) {
     if (this.len == 0) {
-        return Error::OUT_OF_BOUNDS;
+        return Error::IS_EMPTY;
     }
     this.len -= 1;
     return this.ptr[this.len];
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.pop_to<T>(Contiguous<T>* this, mut Contiguous<T>* out) {
-    if (this.len == 0 || this.len - 1 > out.len) {
+fn (T | Error::OUT_OF_BOUNDS | Error::IS_EMPTY) Contiguous<T>.pop_to<T>(Contiguous<T>* this, mut Contiguous<T>* out) {
+    if (this.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    if (this.len - 1 > out.len) {
         return Error::OUT_OF_BOUNDS;
     }
     for (mut usize i = 0; i < this.len - 1; i += 1) {
@@ -673,9 +677,9 @@ fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.pop_to<T>(Contiguous<T>* this, mut C
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.pop_to_list<T>(Contiguous<T>* this, mut List<T>* out) {
+fn (T | Error::IS_EMPTY) Contiguous<T>.pop_to_list<T>(Contiguous<T>* this, mut List<T>* out) {
     if (this.len == 0) {
-        return Error::OUT_OF_BOUNDS;
+        return Error::IS_EMPTY;
     }
     out.set_len(this.len - 1)?;
     for (mut usize i = 0; i < this.len - 1; i += 1) {
@@ -685,9 +689,9 @@ fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.pop_to_list<T>(Contiguous<T>* this, 
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) List<T>.shift<T>(mut List<T>* this) {
+fn (T | Error::IS_EMPTY) List<T>.shift<T>(mut List<T>* this) {
     if (this.len == 0) {
-        return Error::OUT_OF_BOUNDS;
+        return Error::IS_EMPTY;
     }
     T out = this.ptr[0];
     this.len -= 1;
@@ -698,8 +702,11 @@ fn (T | Error::OUT_OF_BOUNDS) List<T>.shift<T>(mut List<T>* this) {
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.shift_to<T>(Contiguous<T>* this, mut Contiguous<T>* out) {
-    if (this.len == 0 || this.len - 1 > out.len) {
+fn (T | Error::OUT_OF_BOUNDS | Error::IS_EMPTY) Contiguous<T>.shift_to<T>(Contiguous<T>* this, mut Contiguous<T>* out) {
+    if (this.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    if (this.len - 1 > out.len) {
         return Error::OUT_OF_BOUNDS;
     }
     for (mut usize i = 1; i < this.len; i += 1) {
@@ -709,9 +716,9 @@ fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.shift_to<T>(Contiguous<T>* this, mut
 }
 
 @export
-fn (T | Error::OUT_OF_BOUNDS) Contiguous<T>.shift_to_list<T>(Contiguous<T>* this, mut List<T>* out) {
+fn (T | Error::IS_EMPTY) Contiguous<T>.shift_to_list<T>(Contiguous<T>* this, mut List<T>* out) {
     if (this.len == 0) {
-        return Error::OUT_OF_BOUNDS;
+        return Error::IS_EMPTY;
     }
     out.set_len(this.len - 1)?;
     for (mut usize i = 1; i < this.len; i += 1) {

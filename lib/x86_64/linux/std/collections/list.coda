@@ -22,6 +22,8 @@ fn usize normalize_capacity<T>(usize len) {
 
 @export
 type List<T> = struct: Contiguous<T>, AllocatorIndexed<T> {
+    Allocator* allocator;
+    usize capacity;
 };
 
 @export

@@ -10,6 +10,7 @@ type Error = enum: uint64 {
     ALLOCATION_FAILED,
     NOT_INITIALIZED,
     OUT_OF_BOUNDS,
+    IS_EMPTY,
     INVALID_ENCODED_DATA,
     INVALID_UNICODE_CHAR,
     INVALID_NUMBER,
@@ -17,7 +18,6 @@ type Error = enum: uint64 {
     INVALID_FORMAT_FIELD,
     FORMAT_FIELD_NOT_CLOSED,
     FORMAT_FIELD_NOT_OPENED,
-    IS_EMPTY,
 =};
 
 @export
@@ -28,6 +28,7 @@ string[] ERROR_MEANINGS = {
     .[Error::ALLOCATION_FAILED] = "Allocation failed",
     .[Error::NOT_INITIALIZED] = "Not initialized",
     .[Error::OUT_OF_BOUNDS] = "Out of bounds",
+    .[Error::IS_EMPTY] = "Is empty",
     .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
     .[Error::INVALID_UNICODE_CODEPOINT] = "Invalid Unicode codepoint",
     .[Error::INVALID_NUMBER] = "Invalid number",
@@ -35,7 +36,6 @@ string[] ERROR_MEANINGS = {
     .[Error::INVALID_FORMAT_FIELD] = "Invalid format field",
     .[Error::FORMAT_FIELD_NOT_CLOSED] = "Format field not closed",
     .[Error::FORMAT_FIELD_NOT_OPENED] = "Format field not opened",
-    .[Error::IS_EMPTY] = "Is empty",
 };
 
 @export
