@@ -10,7 +10,7 @@ $fn #code::decl[] create_constant(#code::ident name, #code::num_literal value16,
     #code::ident name64 = name;
     name64.name.add("_64");
     #code::ident func_name = name;
-    func_name.name.map(fn char(char x) {return x.to_lower()});
+    func_name.name.map(char.to_lower);
     func_name.name.add_start("get_");
     return #{
         @export

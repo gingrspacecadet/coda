@@ -12,12 +12,12 @@ type String = List<char>;
 
 @export
 fn none GenericString.to_lower(mut GenericString* this) {
-    #inline(this.map(to_lower));
+    #inline(this.map(char.to_lower));
 }
 
 @export
 fn none GenericString.to_upper(mut GenericString* this) {
-    #inline(this.map(to_upper));
+    #inline(this.map(char.to_upper));
 }
 
 @export
