@@ -100,12 +100,15 @@ There has to be a separate "generic" field for this, because one can have generi
 14 - function
 
 Flags:
-4 - generic
+4 - named
+5 - generic
 
 Fields:
+#type* return_type;
+if named:
+    string* names;
 if generic:
     string*[] fn_generic_names;
-#type* return_type;
 (struct {
     string* name;
     #type* type;
