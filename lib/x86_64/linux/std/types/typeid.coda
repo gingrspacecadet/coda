@@ -283,6 +283,12 @@ fn bool Type.is_array_mutable(Type* this) {
 
 @export
 @inline
+fn bool Type.is_function_named(Type* this) {
+    return this.flags & TypeFlags::FUNCTION_NAMED;
+}
+
+@export
+@inline
 fn bool Type.is_function_generic(Type* this) {
     return this.flags & TypeFlags::FUNCTION_GENERIC;
 }

@@ -11,6 +11,7 @@ type FormatConfig = struct {
 
 type Formatter = struct: String {
     FormatConfig config;
+    FormatConfig global;
     any[] data;
     usize indent;
 };
@@ -199,23 +200,46 @@ fn none Formatter.type_(mut Formatter* this, Type* t) {
     } else if (t.kind == TypeKind::FUNCTION) {
         this.add("(fn ");
         FunctionParameterTypeData[] params;
-        // i'll deal with this not being up to date later
-        if (this.is_function_generic()) {
-            FunctionGenericTypeData* extra = &t.get_extra_data().function_generic;
-            this.type_(extra.return_type);
-            this.add("<");
-            for (mut usize i = 0; i < extra.generic_names.len; i += 1) {
-                this.add(extra.generic_names[i]);
-                if (i != extra.generic_names.len - 1) {
-                    this.add(", ");
+        if (this.is_function_named()) {
+            if (this.is_function_generic()) {
+                FunctionNamedGenericTypeData* extra = &t.get_extra_data().function_named_generic;
+                this.type_(extra.return_type);
+                this.add(" ");
+                this.add(*extra.name);
+                this.add("<");
+                for (mut usize i = 0; i < extra.generic_names.len; i += 1) {
+                    this.add(extra.generic_names[i]);
+                    if (i != extra.generic_names.len - 1) {
+                        this.add(", ");
+                    }
                 }
+                this.add(">");
+                params = extra.params;
+            } else {
+                FunctionNamedNonGenericTypeData* extra = &t.get_extra_data().function_named_non_generic;
+                this.type_(extra.return_type);
+                this.add(" ");
+                this.add(*extra.name);
+                params = extra.params;
             }
-            this.add(">");
-            params = extra.params;
         } else {
-            FunctionNonGenericTypeData* extra = &t.get_extra_data().function_non_generic;
-            this.type_(extra.return_type);
-            params = extra.params;
+            if (this.is_function_generic()) {
+                FunctionNonNamedGenericTypeData* extra = &t.get_extra_data().function_non_named_generic;
+                this.type_(extra.return_type);
+                this.add("<");
+                for (mut usize i = 0; i < extra.generic_names.len; i += 1) {
+                    this.add(extra.generic_names[i]);
+                    if (i != extra.generic_names.len - 1) {
+                        this.add(", ");
+                    }
+                }
+                this.add(">");
+                params = extra.params;
+            } else {
+                FunctionNonNamedNonGenericTypeData* extra = &t.get_extra_data().function_non_named_non_generic;
+                this.type_(extra.return_type);
+                params = extra.params;
+            }
         }
         this.add("(");
         for (mut usize i = 0; i < params.len; i += 1) {
@@ -331,6 +355,19 @@ fn none Formatter.char_(mut Formatter* this, char c) {
     }
 }
 
+@inline
+fn none Formatter.pointer(mut Formatter* this, none* ptr) {
+    usize value = (usize)ptr;
+    if (value == 0) {
+        this.add("0");
+    } else {
+        while (value > 0) {
+            this.push(HEX_DIGITS[value & 0xf]);
+            value >>= 4;
+        }
+    }
+}
+
 fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
     if (t.kind == TypeKind::NONE) {
         this.add("none");
@@ -380,18 +417,10 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
         // format using the type:
         // this.add("(");
         // this.type_(t);
-        // this.add(") 0x");
+        // this.add(") ");
         // format using &:
-        this.add("&0x");
-        usize ptr = *(usize*)value;
-        if (ptr == 0) {
-            this.add("0");
-        } else {
-            while (value > 0) {
-                this.push(HEX_DIGITS[value & 0xf]);
-                value >>= 4;
-            }
-        }
+        this.add("&");
+        this.pointer(*(none**)value);
     } else if (t.kind == TypeKind::ARRAY) {
         Type* of = t.get_extra_data().array.of;
         none[] array = *(none[]*)value;
@@ -413,8 +442,17 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
             this.add("]");
         }
     } else if (t.kind == TypeKind::FUNCTION) {
-        // todo
-        this.add("<function pointer>");
+        this.add("<function pointer");
+        if (this.is_function_named()) {
+            this.add(" to ");
+            if (this.is_function_generic()) {
+                this.add(*(&t.get_extra_data().function_named_generic.name));
+            } else {
+                this.add(*(&t.get_extra_data().function_named_non_generic.name));
+            }
+        }
+        this.add(" at ");
+        this.pointer(*(none**)value);
     } else if (t.kind == TypeKind::STRUCT) {
         StructTypeData* extra = &t.get_extra_data().struct_;
         this.add("struct ");
@@ -451,18 +489,32 @@ fn none Formatter.value(mut Formatter* this, Type* t, none* value) {
         this.add("}");
     } else if (this.kind == TypeKind::ENUM) {
         StructTypeData* extra = &t.get_extra_data().enum_;
-        this.add("(enum");
-        this.try_name(t, false);
-        // todo: add backing type and fix call to compare and finish it up
-        this.add(")");
+        (usize | none) index = none;
         for (mut usize i = 0; i < extra.members.len; i += 1) {
             EnumMemberTypeData* member = &extra.members[i];
-            if (mem::compare(member.value, value)) {
-
+            if (mem::compare_len(member.value, *(uint8*)value, extra.backing_type.sizeof())) {
+                index = i;
+                break;
             }
         }
+        if (#tag_test(index, none)) {
+            this.add("(");
+            if (!this.try_name(t)) {
+                out.add("anonymous enum");
+            }
+            out.add(")");
+        } else {
+            if (!this.try_name(t)) {
+                this.add("(anonymous enum)");
+            }
+            this.add("::");
+            this.add(*extra.members[i].name);
+            &(none*)value;
+        }
     } else if (this.kind == TypeKind::SUM) {
-        // todo
+        // uint8 and uint16 are dummy types
+        (uint8 | uint16) value2 = *((uint8 | uint16)*)value;
+        this.value(t.get_extra_data().sum.members[value.tag], &(none)value);
     } else {
         fatal_error("Fatal error: Invalid typeid kind");
     }
@@ -477,7 +529,7 @@ fn (none | Error::NOT_ENOUGH_FORMAT_ARGS | Error::INVALID_FORMAT_FIELD) Formatte
     }
     any value = this.data[*data_pos];
     *data_pos += 1;
-    this.value(out, (Type*)data_value.typeid, value.value);
+    this.value((Type*)data_value.typeid, value.value);
 }
 
 @export
