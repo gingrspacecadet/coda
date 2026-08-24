@@ -10,7 +10,7 @@ void error_expected_module(Diags *diags, Span span);
 void error_expected_expression(Diags *diags, Span span);
 void error_expected_declaration(Diags *diags, Span span);
 void error_expected_pattern(Diags *diags, Span span);
-void error_unexpected_token(Diags *diags, Span span);
+void error_unexpected_token(Diags *diags, TokenType token, Span span);
 
 static inline bool number_is_float(String s) {
     for (size_t i = 0; i < s.length; i++) {
@@ -144,6 +144,6 @@ void error_expected_type(Diags *diags, Span span);
 void error_expected_expression(Diags *diags, Span span);
 void error_expected_declaration(Diags *diags, Span span);
 void error_expected_pattern(Diags *diags, Span span);
-void error_unexpected_token(Diags *diags, Span span);
+void error_unexpected_token(Diags *diags, TokenType token, Span span);
 
 #endif

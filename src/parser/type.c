@@ -330,7 +330,7 @@ AstType *parse_type_single(Parser *p) {
         }
 
         if (postfix_mut)
-            error_unexpected_token(p->diags, p->previous.span);
+            error_unexpected_token(p->diags, p->current.type, p->previous.span);
 
         break;
     }

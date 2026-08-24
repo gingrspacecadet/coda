@@ -1,19 +1,10 @@
 #include "common.h"
 
 void recover_declaration(Parser *p) {
-    while (!at(p, TK_EOF)) {
-        switch (p->current.type) {
-        case TK_KW_INCLUDE:
-        case TK_KW_TYPE:
-        case TK_KW_FN:
-        case TK_KW_CONSTRAINT:
-        case TK_RBRACE:
-            return;
-
-        default:
-            advance(p);
-            break;
-        }
+    while (!at(p, TK_EOF) &&
+           !match(p, TK_SEMICOLON) &&
+           !match(p, TK_RBRACE)) {
+        advance(p);
     }
 }
 

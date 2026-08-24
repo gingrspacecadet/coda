@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include "common.h"
 
 String token_name(TokenType type) {
@@ -27,6 +28,20 @@ String token_name(TokenType type) {
     }
 }
 
+static char *format(Arena *arena, char *msg, ...) {
+    char *buf;
+    va_list args;
+    va_start(args, msg);
+    int n = vasprintf(&buf, msg, args);
+    if (n == -1) return msg;
+    
+    char *nb = arena_alloc(arena, n);
+    memcpy(nb, buf, n);
+    free(buf);
+
+    return nb;
+}
+
 void error_expected_token(Diags *diags, TokenType expected, Span span) {
     String name = token_name(expected);
 
@@ -35,40 +50,93 @@ void error_expected_token(Diags *diags, TokenType expected, Span span) {
         DIAG_ERROR,
         E_EXPECTED_TOKEN,
         span,
-        string_make("Expected token")
+        string_make(format(diags->arena, "Expected token %.*s.", string_fmt(name)))
     );
 
-    diag_label(&b, span, name);
     diag_finish(&b); 
-    
-    printf("error_expected_token %s\n", TokenTypeNames[expected]);
 }
 
 void error_expected_identifier(Diags *diags, Span span) {
-    printf("error_expected_identifier\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_IDENTIFIER,
+        span,
+        string_make("Expected an identifier.")
+    );
+
+    diag_finish(&b);
 }
 
 void error_expected_type(Diags *diags, Span span) {
-    printf("error_expected_type\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_TYPE,
+        span,
+        string_make("Expected a type.")
+    );
+
+    diag_finish(&b);
 }
 
 void error_expected_module(Diags *diags, Span span) {
-    printf("error_expected_module\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_DECLARATION,
+        span,
+        string_make("Expected a module.")
+    );
+
+    diag_finish(&b);
 }
 
 void error_expected_expression(Diags *diags, Span span) {
-    printf("error_expected_expression\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_EXPRESSION,
+        span,
+        string_make("Expected an expression.")
+    );
+
+    diag_finish(&b);
 }
 
 void error_expected_declaration(Diags *diags, Span span) {
-    printf("error_expected_declaration\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_DECLARATION,
+        span,
+        string_make("Expected a declaration.")
+    );
+
+    diag_finish(&b);
 }
 
 void error_expected_pattern(Diags *diags, Span span) {
-    printf("error_expected_pattern\n");
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_PATTERN,
+        span,
+        string_make("Expected a pattern.")
+    );
+
+    diag_finish(&b);
 }
 
-void error_unexpected_token(Diags *diags, Span span) {
-    printf("error_unexpected_token\n");
+void error_unexpected_token(Diags *diags, TokenType token, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_UNEXPECTED_TOKEN,
+        span,
+        string_make(format(diags->arena, "Unexpected token %s", token_name(token)))
+    );
+
+    diag_finish(&b);
 }
 
