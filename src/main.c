@@ -1,3 +1,4 @@
+#include <time.h>
 #include "lexer.h"
 #include "parser.h"
 #include "print.h"
@@ -89,6 +90,9 @@ void print_diags(Diags *diags) {
 }
 
 int main() {
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     Source s = {
         .contents = string_make(
             "module lambda;\n"
@@ -130,10 +134,9 @@ int main() {
     //     printf("%s", TokenTypeNames[t.type]);
 
     //     if (t.type == TK_STRING || t.type == TK_IDENT) {
-            // printf("    %.*s", (int)t.span.length, &t.span.source->contents.data[t.span.offset]);
+    //         printf("    %.*s", (int)t.span.length, &t.span.source->contents.data[t.span.offset]);
     //     }
-
-
+    
     //     putchar('\n');
     // } while (t.type != TK_EOF);
 
@@ -146,4 +149,9 @@ int main() {
     print_diags(p.diags);
 
     // print_ast_module(stdout, m);
+
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    printf("Compilation took %ld seconds (%ld nanoseconds)\n", end.tv_sec - start.tv_sec, end.tv_nsec - start.tv_nsec);
 }
