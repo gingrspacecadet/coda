@@ -66,7 +66,7 @@ Array parse_attributes(Parser *p) {
 
 AstName parse_name(Parser *p) {
     AstName name = {
-        .kind = NAME_IDENT
+        .kind = AST_NAME_IDENT
     };
 
     if (at(p, TK_IDENT)) {
@@ -76,7 +76,7 @@ AstName parse_name(Parser *p) {
     }
 
     if (at(p, TK_POUND)) {
-        name.kind = NAME_SPLICE;
+        name.kind = AST_NAME_SPLICE;
 
         advance(p);
 

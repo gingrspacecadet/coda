@@ -13,33 +13,33 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->literal = ast_expr->literal;
             break;
         }
-        case EXPR_PATH:
-        case EXPR_IDENT: {
+        case AST_EXPR_PATH:
+        case AST_EXPR_IDENT: {
             hir->type = HIR_EXPR_VAR;
             hir->var.symbol = ast_expr->symbol;
             break;
         }
-        case EXPR_UNARY: {
+        case AST_EXPR_UNARY: {
             hir->type = HIR_EXPR_UNARY;
             hir->unary.op = ast_expr->unary.op;
             hir->unary.operand = lower_expr(ctx, ast_expr->unary.operand);
             break;
         }
-        case EXPR_BINARY: {
+        case AST_EXPR_BINARY: {
             hir->type = HIR_EXPR_BINARY;
             hir->binary.op = ast_expr->binary.op;
             hir->binary.left = lower_expr(ctx, ast_expr->binary.left);
             hir->binary.right = lower_expr(ctx, ast_expr->binary.right);
             break;
         }
-        case EXPR_CALL: {
+        case AST_EXPR_CALL: {
             hir->type = HIR_EXPR_CALL;
             hir->call.args = hirexprs_array_init(ctx->arena);
 
-            bool is_method = (ast_expr->call.callee->type == EXPR_MEMBER && 
+            bool is_method = (ast_expr->call.callee->type == AST_EXPR_MEMBER && 
                               ast_expr->call.callee->symbol && 
                               ast_expr->call.callee->symbol->decl && 
-                              ast_expr->call.callee->symbol->decl->type == DECL_FN);
+                              ast_expr->call.callee->symbol->decl->type == AST_DECL_FN);
 
             if (is_method) {
                 HirExpr *self_arg = lower_expr(ctx, ast_expr->call.callee->member.base);
@@ -58,7 +58,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             }
             break;
         }
-        case EXPR_INDEX: {
+        case AST_EXPR_INDEX: {
             hir->type = HIR_EXPR_ARRAY_INDEX;
             hir->array_index.base = lower_expr(ctx, ast_expr->index.base);
             hir->array_index.index = lower_expr(ctx, ast_expr->index.index);
@@ -71,10 +71,10 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             }
             break;
         }
-        case EXPR_MEMBER: {
+        case AST_EXPR_MEMBER: {
             if (ast_expr->symbol &&
                 ast_expr->symbol->decl &&
-                ast_expr->symbol->decl->type == DECL_FN) {
+                ast_expr->symbol->decl->type == AST_DECL_FN) {
                 hir->type = HIR_EXPR_VAR;
                 hir->var.symbol = ast_expr->symbol;
                 break;
@@ -140,7 +140,7 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             hir->field_offset.byte_offset = offset;
             break;
         }
-        case EXPR_INIT: {
+        case AST_EXPR_INIT: {
             hir->type = HIR_EXPR_INIT;
             hir->init_list.fields = hirinitfields_array_init(ctx->arena);
 
@@ -154,13 +154,13 @@ HirExpr *lower_expr(Analyser *ctx, Expr *ast_expr) {
             }
             break;
         }
-        case EXPR_CAST: {
+        case AST_EXPR_CAST: {
             hir->type = HIR_EXPR_CAST;
             hir->cast.expr = lower_expr(ctx, ast_expr->cast.expr);
             hir->cast.to_type = ast_expr->cast.to;
             break;
         }
-        case EXPR_LAMBDA: {
+        case AST_EXPR_LAMBDA: {
             hir->type = HIR_EXPR_VAR;
             hir->var.symbol = ast_expr->lambda.symbol;
             break;
@@ -174,7 +174,7 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
     HirStmt *hir = arena_calloc(ctx->arena, sizeof(HirStmt));
     
     switch (ast_stmt->type) {
-        case STMT_VAR: {
+        case AST_STMT_VAR: {
             if (!ast_stmt->var->init) {
                 hir->type = HIR_STMT_BLOCK;
                 hir->block.stmts = hirstmts_array_init(ctx->arena);
@@ -192,13 +192,13 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             hir->assign.value = lower_expr(ctx, ast_stmt->var->init);
             break;
         }
-        case STMT_EXPR: {
+        case AST_STMT_EXPR: {
             hir->type = HIR_STMT_EXPR;
             hir->expr = lower_expr(ctx, ast_stmt->expr);
             break;
         }
         case STMT_UNSAFE:
-        case STMT_BLOCK: {
+        case AST_STMT_BLOCK: {
             hir->type = HIR_STMT_BLOCK;
             hir->block.stmts = hirstmts_array_init(ctx->arena);
             for (size_t i = 0; i < ast_stmt->block.stmts.len; i++) {
@@ -206,19 +206,19 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             }
             break;
         }
-        case STMT_RETURN: {
+        case AST_STMT_RETURN: {
             hir->type = HIR_STMT_RETURN;
             hir->_return.value = lower_expr(ctx, ast_stmt->_return.value);
             break;
         }
-        case STMT_IF: {
+        case AST_STMT_IF: {
             hir->type = HIR_STMT_IF;
             hir->_if.cond = lower_expr(ctx, ast_stmt->_if.cond);
             hir->_if.then_block = ast_stmt->_if.then ? lower_stmt(ctx, ast_stmt->_if.then) : NULL;
             hir->_if.else_block = ast_stmt->_if._else ? lower_stmt(ctx, ast_stmt->_if._else) : NULL;
             break;
         }
-        case STMT_FOR: {
+        case AST_STMT_FOR: {
             hir->type = HIR_STMT_BLOCK;
             hir->block.stmts = hirstmts_array_init(ctx->arena);
 
@@ -250,13 +250,13 @@ HirStmt *lower_stmt(Analyser *ctx, Stmt *ast_stmt) {
             hirstmts_array_push(&hir->block.stmts, _while);
             break;
         }
-        case STMT_WHILE: {
+        case AST_STMT_WHILE: {
             hir->type = HIR_STMT_WHILE;
             hir->_while.cond = lower_expr(ctx, ast_stmt->_while.cond);
             hir->_while.body = ast_stmt->_while.body ? lower_stmt(ctx, ast_stmt->_while.body) : NULL;
             break;
         }
-        case STMT_DEFER: {
+        case AST_STMT_DEFER: {
             hir->type = HIR_STMT_DEFER;
             hir->defer.stmt = lower_stmt(ctx, ast_stmt->defer.deferred);
             break;
@@ -320,7 +320,7 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
     if (!stmt) return;
 
     switch (stmt->type) {
-        case STMT_VAR: {
+        case AST_STMT_VAR: {
             Symbol *sym = stmt->var->symbol;
             bool is_param = false;
             for (size_t i = 0; i < params->len; i++) {
@@ -331,22 +331,22 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
             }
             break;
         }
-        case STMT_BLOCK: {
+        case AST_STMT_BLOCK: {
             for (size_t i = 0; i < stmt->block.stmts.len; i++) {
                 collect_ast_locals(locals, params, stmt->block.stmts.data[i]);
             }
             break;
         }
-        case STMT_IF: {
+        case AST_STMT_IF: {
             collect_ast_locals(locals, params, stmt->_if.then);
             collect_ast_locals(locals, params, stmt->_if._else);
             break;
         }
-        case STMT_WHILE: {
+        case AST_STMT_WHILE: {
             collect_ast_locals(locals, params, stmt->_while.body);
             break;
         }
-        case STMT_FOR: {
+        case AST_STMT_FOR: {
             collect_ast_locals(locals, params, stmt->_for.init);
             collect_ast_locals(locals, params, stmt->_for.body);
             break;
@@ -357,7 +357,7 @@ static void collect_ast_locals(syms_array *locals, syms_array *params, Stmt *stm
             }
             break;
         }
-        case STMT_DEFER: {
+        case AST_STMT_DEFER: {
             collect_ast_locals(locals, params, stmt->defer.deferred);
             break;
         }
@@ -372,7 +372,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     hir->globals = hirvardecls_array_init(ctx->arena);
     for (size_t i = 0; i < ast_mod->decls.len; i++) {
         Decl *d = ast_mod->decls.data[i];
-        if (d->type == DECL_FN) {
+        if (d->type == AST_DECL_FN) {
 
             if (d->fn->generic_params.len > 0) continue;
     
@@ -399,7 +399,7 @@ HirModule *hir_lower_module(Analyser *ctx, Module *ast_mod) {
     
             hirfndecls_array_push(&hir->functions, fndecl);
         }
-        else if (d->type == DECL_VAR) {
+        else if (d->type == AST_DECL_VAR) {
             VarDecl *v = d->var;
             HirVarDecl *global = arena_calloc(ctx->arena, sizeof(HirVarDecl));
 
@@ -650,7 +650,7 @@ static void hir_scan_for_generics_expr(Analyser *ctx, HirModule *mod, HirExpr *e
             Symbol *func_sym = callee_expr->var.symbol;
             HirFnDecl *callee_fn = get_hir_fn_by_symbol(mod, func_sym);
             
-            if (callee_fn && func_sym->decl && func_sym->decl->type == DECL_FN) {
+            if (callee_fn && func_sym->decl && func_sym->decl->type == AST_DECL_FN) {
                 FnDecl *ast_fn = func_sym->decl->fn;
                 
                 if (ast_fn->generic_params.len > 0) { 

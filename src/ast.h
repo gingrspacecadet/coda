@@ -20,9 +20,9 @@ typedef struct AstConstraintDecl AstConstraintDecl;
 
 typedef struct {
     enum {
-        NAME_ERROR,
-        NAME_IDENT,
-        NAME_SPLICE,
+        AST_NAME_ERROR,
+        AST_NAME_IDENT,
+        AST_NAME_SPLICE,
     } kind;
 
     union {
@@ -42,9 +42,9 @@ typedef struct {
 } AstAttribute;
 
 typedef enum {
-    CONSTRAINTREF_ERROR,
-    CONSTRAINTREF_NAMED,
-    CONSTRAINTREF_INLINE,
+    AST_CONSTRAINTREF_ERROR,
+    AST_CONSTRAINTREF_NAMED,
+    AST_CONSTRAINTREF_INLINE,
 } AstConstraintRefKind;
 
 typedef struct {
@@ -77,16 +77,16 @@ typedef struct {
 } AstField;
 
 typedef enum {
-    TYPE_ERROR,
-    TYPE_NAMED,
-    TYPE_POINTER,
-    TYPE_ARRAY,
-    TYPE_FN,
-    TYPE_SUM,
-    TYPE_STRUCT,
-    TYPE_UNION,
-    TYPE_ENUM,
-    TYPE_SPLICE,
+    AST_TYPE_ERROR,
+    AST_TYPE_NAMED,
+    AST_TYPE_POINTER,
+    AST_TYPE_ARRAY,
+    AST_TYPE_FN,
+    AST_TYPE_SUM,
+    AST_TYPE_STRUCT,
+    AST_TYPE_UNION,
+    AST_TYPE_ENUM,
+    AST_TYPE_SPLICE,
 } AstTypeKind;
 
 struct AstType {
@@ -140,13 +140,13 @@ struct AstType {
 };
 
 typedef enum {
-    LIT_ERROR,
-    LIT_INTEGER,
-    LIT_FLOAT,
-    LIT_STRING,
-    LIT_CHAR,
-    LIT_BOOL,
-    LIT_NULL,
+    AST_LIT_ERROR,
+    AST_LIT_INTEGER,
+    AST_LIT_FLOAT,
+    AST_LIT_STRING,
+    AST_LIT_CHAR,
+    AST_LIT_BOOL,
+    AST_LIT_NULL,
 } AstLiteralKind;
 
 typedef struct {
@@ -155,60 +155,60 @@ typedef struct {
 } AstLiteral;
 
 typedef enum {
-    UNARY_ERROR,
-    UNARY_POS,
-    UNARY_NEG,
-    UNARY_NOT,
-    UNARY_BIT_NOT,
-    UNARY_DEREF,
-    UNARY_ADDRESS,
+    AST_UNARY_ERROR,
+    AST_UNARY_POS,
+    AST_UNARY_NEG,
+    AST_UNARY_NOT,
+    AST_UNARY_BIT_NOT,
+    AST_UNARY_DEREF,
+    AST_UNARY_ADDRESS,
 } AstUnaryOp;
 
 typedef enum {
-    BINARY_ERROR,
-    BINARY_ADD,
-    BINARY_SUB,
-    BINARY_MUL,
-    BINARY_DIV,
-    BINARY_MOD,
+    AST_BINARY_ERROR,
+    AST_BINARY_ADD,
+    AST_BINARY_SUB,
+    AST_BINARY_MUL,
+    AST_BINARY_DIV,
+    AST_BINARY_MOD,
 
-    BINARY_EQUAL,
-    BINARY_NOT_EQUAL,
-    BINARY_LT,
-    BINARY_LTE,
-    BINARY_GT,
-    BINARY_GTE,
+    AST_BINARY_EQUAL,
+    AST_BINARY_NOT_EQUAL,
+    AST_BINARY_LT,
+    AST_BINARY_LTE,
+    AST_BINARY_GT,
+    AST_BINARY_GTE,
 
-    BINARY_LOGICAL_AND,
-    BINARY_LOGICAL_OR,
+    AST_BINARY_LOGICAL_AND,
+    AST_BINARY_LOGICAL_OR,
 
-    BINARY_BIT_AND,
-    BINARY_BIT_OR,
-    BINARY_BIT_XOR,
+    AST_BINARY_BIT_AND,
+    AST_BINARY_BIT_OR,
+    AST_BINARY_BIT_XOR,
 
-    BINARY_SHL,
-    BINARY_SHR,
+    AST_BINARY_SHL,
+    AST_BINARY_SHR,
 
-    BINARY_ASSIGN,
+    AST_BINARY_ASSIGN,
 
-    BINARY_ADD_ASSIGN,
-    BINARY_SUB_ASSIGN,
-    BINARY_MUL_ASSIGN,
-    BINARY_DIV_ASSIGN,
-    BINARY_MOD_ASSIGN,
+    AST_BINARY_ADD_ASSIGN,
+    AST_BINARY_SUB_ASSIGN,
+    AST_BINARY_MUL_ASSIGN,
+    AST_BINARY_DIV_ASSIGN,
+    AST_BINARY_MOD_ASSIGN,
 
-    BINARY_BIT_AND_ASSIGN,
-    BINARY_BIT_OR_ASSIGN,
-    BINARY_BIT_XOR_ASSIGN,
+    AST_BINARY_BIT_AND_ASSIGN,
+    AST_BINARY_BIT_OR_ASSIGN,
+    AST_BINARY_BIT_XOR_ASSIGN,
 
-    BINARY_SHL_ASSIGN,
-    BINARY_SHR_ASSIGN,
+    AST_BINARY_SHL_ASSIGN,
+    AST_BINARY_SHR_ASSIGN,
 
-    BINARY_NAND,
-    BINARY_NAND_ASSIGN,
+    AST_BINARY_NAND,
+    AST_BINARY_NAND_ASSIGN,
 
-    BINARY_NOR,
-    BINARY_NOR_ASSIGN,
+    AST_BINARY_NOR,
+    AST_BINARY_NOR_ASSIGN,
 } AstBinaryOp;
 
 typedef struct {
@@ -218,26 +218,26 @@ typedef struct {
 } AstInitField;
 
 typedef enum {
-    EXPR_ERROR,
+    AST_EXPR_ERROR,
 
-    EXPR_LITERAL,
-    EXPR_IDENT,
-    EXPR_PATH,
+    AST_EXPR_LITERAL,
+    AST_EXPR_IDENT,
+    AST_EXPR_PATH,
 
-    EXPR_UNARY,
-    EXPR_BINARY,
+    AST_EXPR_UNARY,
+    AST_EXPR_BINARY,
 
-    EXPR_CALL,
-    EXPR_INDEX,
-    EXPR_MEMBER,
-    EXPR_CAST,
+    AST_EXPR_CALL,
+    AST_EXPR_INDEX,
+    AST_EXPR_MEMBER,
+    AST_EXPR_CAST,
 
-    EXPR_INTRINSIC,
-    EXPR_BUBBLE,
-    EXPR_INIT,
-    EXPR_LAMBDA,
+    AST_EXPR_INTRINSIC,
+    AST_EXPR_BUBBLE,
+    AST_EXPR_INIT,
+    AST_EXPR_LAMBDA,
 
-    EXPR_SPLICE,
+    AST_EXPR_SPLICE,
 } AstExprKind;
 
 struct AstExpr {
@@ -320,32 +320,32 @@ struct AstExpr {
 };
 
 typedef enum {
-    STMT_ERROR,
+    AST_STMT_ERROR,
 
-    STMT_VAR,
-    STMT_EXPR,
-    STMT_BLOCK,
+    AST_STMT_VAR,
+    AST_STMT_EXPR,
+    AST_STMT_BLOCK,
 
-    STMT_RETURN,
+    AST_STMT_RETURN,
 
-    STMT_IF,
-    STMT_FOR,
-    STMT_WHILE,
-    STMT_MATCH,
+    AST_STMT_IF,
+    AST_STMT_FOR,
+    AST_STMT_WHILE,
+    AST_STMT_MATCH,
 
-    STMT_BREAK,
-    STMT_CONTINUE,
+    AST_STMT_BREAK,
+    AST_STMT_CONTINUE,
 
-    STMT_DEFER,
+    AST_STMT_DEFER,
 } AstStmtKind;
 
 typedef enum {
-    PATTERN_ERROR,
-    PATTERN_WILDCARD,
-    PATTERN_LITERAL,
-    PATTERN_BINDING,
-    PATTERN_VARIANT,
-    PATTERN_EXPR,
+    AST_PATTERN_ERROR,
+    AST_PATTERN_WILDCARD,
+    AST_PATTERN_LITERAL,
+    AST_PATTERN_BINDING,
+    AST_PATTERN_VARIANT,
+    AST_PATTERN_EXPR,
 } AstPatternKind;
 
 struct AstPattern {
@@ -490,10 +490,10 @@ struct AstConstraintDecl {
 };
 
 typedef enum {
-    CONSTRAINT_ERROR,
-    CONSTRAINT_METHOD,
-    CONSTRAINT_FIELD,
-    CONSTRAINT_EXPR,
+    AST_CONSTRAINT_ERROR,
+    AST_CONSTRAINT_METHOD,
+    AST_CONSTRAINT_FIELD,
+    AST_CONSTRAINT_EXPR,
 } AstConstraintItemKind;
 
 typedef struct {
@@ -512,12 +512,12 @@ struct AstDecl {
     Span span;
 
     enum {
-        DECL_ERROR,
-        DECL_INCLUDE,
-        DECL_TYPE,
-        DECL_VAR,
-        DECL_FN,
-        DECL_CONSTRAINT,
+        AST_DECL_ERROR,
+        AST_DECL_INCLUDE,
+        AST_DECL_TYPE,
+        AST_DECL_VAR,
+        AST_DECL_FN,
+        AST_DECL_CONSTRAINT,
     } kind;
 
     Array(AstAttribute) attrs;

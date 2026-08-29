@@ -187,14 +187,14 @@ bool try_parse_var_decl(Parser *p, AstVarDecl *var) {
     var->span = p->current.span;
     var->type = parse_type(p);
 
-    if (var->type->kind == TYPE_ERROR) {
+    if (var->type->kind == AST_TYPE_ERROR) {
         restore(p, cp);
         return false;
     }
 
     var->name = parse_name(p);
 
-    if (var->name.kind != NAME_IDENT) {
+    if (var->name.kind != AST_NAME_IDENT) {
         restore(p, cp);
         return false;
     }
@@ -236,26 +236,26 @@ AstDecl *parse_decl(Parser *p) {
 
     switch (p->current.type) {
     case TK_KW_INCLUDE:
-        decl->kind = DECL_INCLUDE;
+        decl->kind = AST_DECL_INCLUDE;
         parse_include_decl(p, &decl->include);
         decl->span = decl->include.span;
         return decl;
 
     case TK_KW_TYPE:
-        decl->kind = DECL_TYPE;
+        decl->kind = AST_DECL_TYPE;
         parse_type_decl(p, &decl->type);
         decl->span = decl->type.span;
         return decl;
 
     case TK_KW_FN:
     case TK_DOLLAR:
-        decl->kind = DECL_FN;
+        decl->kind = AST_DECL_FN;
         parse_fn_decl(p, &decl->fn, decl->attrs);
         decl->span = decl->fn.span;
         return decl;
 
     case TK_KW_CONSTRAINT:
-        decl->kind = DECL_CONSTRAINT;
+        decl->kind = AST_DECL_CONSTRAINT;
         parse_constraint_decl(p, &decl->constraint);
         decl->span = decl->constraint.span;
         return decl;
@@ -269,7 +269,7 @@ AstDecl *parse_decl(Parser *p) {
     AstVarDecl var = {0};
 
     if (try_parse_var_decl(p, &var)) {
-        decl->kind = DECL_VAR;
+        decl->kind = AST_DECL_VAR;
         decl->var = var;
         return decl;
     }

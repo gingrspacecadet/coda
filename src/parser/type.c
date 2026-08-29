@@ -10,7 +10,7 @@ AstConstraintItem parse_constraint_item(Parser *p) {
     AstFnDecl *fn = arena_calloc(p->arena, sizeof(*fn));
 
     if (try_parse_fn_decl(p, fn)) {
-        item.kind = CONSTRAINT_METHOD;
+        item.kind = AST_CONSTRAINT_METHOD;
         item.method = fn;
         return item;
     }
@@ -22,14 +22,14 @@ AstConstraintItem parse_constraint_item(Parser *p) {
     AstField field = parse_field(p);
 
     if (match(p, TK_SEMICOLON)) {
-        item.kind = CONSTRAINT_FIELD;
+        item.kind = AST_CONSTRAINT_FIELD;
         item.field = field;
         return item;
     }
 
     restore(p, cp);
 
-    item.kind = CONSTRAINT_EXPR;
+    item.kind = AST_CONSTRAINT_EXPR;
     item.expr = parse_expression(p);
 
     expect(p, TK_SEMICOLON);
@@ -65,10 +65,10 @@ AstConstraintRef parse_constraint_ref(Parser *p) {
     };
 
     if (at(p, TK_LBRACE)) {
-        ref.kind = CONSTRAINTREF_INLINE;
+        ref.kind = AST_CONSTRAINTREF_INLINE;
         ref._inline = parse_inline_constraint(p);
     } else {
-        ref.kind = CONSTRAINTREF_NAMED;
+        ref.kind = AST_CONSTRAINTREF_NAMED;
         ref.path = parse_path(p);
     }
 
@@ -132,7 +132,7 @@ AstField parse_field(Parser *p) {
 AstType *parse_struct_type(Parser *p) {
     AstType *type = arena_calloc(p->arena, sizeof(*type));
 
-    type->kind = TYPE_STRUCT;
+    type->kind = AST_TYPE_STRUCT;
     type->span = p->current.span;
     type->structure.fields = array_create(p->arena, sizeof(AstField));
 
@@ -155,7 +155,7 @@ AstType *parse_struct_type(Parser *p) {
 AstType *parse_union_type(Parser *p) {
     AstType *type = arena_calloc(p->arena, sizeof(*type));
 
-    type->kind = TYPE_UNION;
+    type->kind = AST_TYPE_UNION;
     type->span = p->current.span;
     type->union_.fields = array_create(p->arena, sizeof(AstField));
 
@@ -178,7 +178,7 @@ AstType *parse_union_type(Parser *p) {
 AstType *parse_enum_type(Parser *p) {
     AstType *type = arena_calloc(p->arena, sizeof(*type));
 
-    type->kind = TYPE_ENUM;
+    type->kind = AST_TYPE_ENUM;
     type->span = p->current.span;
     type->enumeration.underlying = NULL;
     type->enumeration.items =
@@ -226,7 +226,7 @@ AstType *parse_type_single(Parser *p) {
         expect(p, TK_LPAREN);
 
         base = arena_calloc(p->arena, sizeof(*base));
-        base->kind = TYPE_FN;
+        base->kind = AST_TYPE_FN;
         base->span = start.span;
         base->fn.ret = ret;
         base->fn.params =
@@ -251,7 +251,7 @@ AstType *parse_type_single(Parser *p) {
         base = parse_enum_type(p);
     } else if (at(p, TK_POUND)) {
         base = arena_calloc(p->arena, sizeof(*base));
-        base->kind = TYPE_SPLICE;
+        base->kind = AST_TYPE_SPLICE;
         base->span = p->current.span;
 
         advance(p);
@@ -263,7 +263,7 @@ AstType *parse_type_single(Parser *p) {
         expect(p, TK_RPAREN);
     } else if (at(p, TK_IDENT)) {
         base = arena_calloc(p->arena, sizeof(*base));
-        base->kind = TYPE_NAMED;
+        base->kind = AST_TYPE_NAMED;
         base->span = p->current.span;
         base->named.path = parse_path(p);
         base->named.args = array_create(p->arena, sizeof(AstType *));
@@ -285,7 +285,7 @@ AstType *parse_type_single(Parser *p) {
         error_expected_type(p->diags, p->current.span);
 
         base = arena_calloc(p->arena, sizeof(*base));
-        base->kind = TYPE_ERROR;
+        base->kind = AST_TYPE_ERROR;
         base->span = p->current.span;
     }
 
@@ -297,7 +297,7 @@ AstType *parse_type_single(Parser *p) {
         if (match(p, TK_STAR)) {
             AstType *ptr = arena_calloc(p->arena, sizeof(*ptr));
 
-            ptr->kind = TYPE_POINTER;
+            ptr->kind = AST_TYPE_POINTER;
             ptr->span = p->previous.span;
             ptr->mutable = postfix_mut;
             ptr->pointer.pointee = base;
@@ -310,7 +310,7 @@ AstType *parse_type_single(Parser *p) {
         if (match(p, TK_LBRACK)) {
             AstType *array = arena_calloc(p->arena, sizeof(*array));
 
-            array->kind = TYPE_ARRAY;
+            array->kind = AST_TYPE_ARRAY;
             array->span = p->previous.span;
             array->mutable = postfix_mut;
             array->array.element = base;
@@ -346,7 +346,7 @@ AstType *parse_type(Parser *p) {
 
     AstType *sum = arena_calloc(p->arena, sizeof(*sum));
 
-    sum->kind = TYPE_SUM;
+    sum->kind = AST_TYPE_SUM;
     sum->span = left->span;
     sum->sum.members = array_create(p->arena, sizeof(AstType *));
 

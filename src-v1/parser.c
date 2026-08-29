@@ -832,10 +832,10 @@ Expr *expr_new_ident(Parser *ctx, Token t) {
     e->token = t;
 
     if (comps.len == 1) {
-        e->type = EXPR_IDENT;
+        e->type = AST_EXPR_IDENT;
         e->ident.name = comps.data[0];
     } else {
-        e->type = EXPR_PATH;
+        e->type = AST_EXPR_PATH;
         e->path.components = comps;
     }
 
@@ -882,7 +882,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
         expect(ctx, TOKENTYPE_LPAREN, "Expected '(' after intrinsic name");
 
         Expr *intr = arena_calloc(ctx->arena, sizeof(Expr));
-        intr->type = EXPR_INTRINSIC;
+        intr->type = AST_EXPR_INTRINSIC;
         intr->token = dollar;
         intr->intrinsic.name = name.value.value;
 
@@ -919,7 +919,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
             expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after type cast");
             Expr *target = parse_expr(ctx, 80);
             Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
-            e->type = EXPR_CAST;
+            e->type = AST_EXPR_CAST;
             e->cast.to = to;
             e->cast.expr = target;
             e->token = start;
@@ -933,7 +933,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
     if (t.value.type == TOKENTYPE_LBRACE) {
         Token lbrace = consume(ctx);
         Expr *expr = arena_calloc(ctx->arena, sizeof(Expr));
-        expr->type = EXPR_INIT;
+        expr->type = AST_EXPR_INIT;
         expr->token = lbrace;
         expr->init_list.fields = initfield_array_init(ctx->arena);
 
@@ -973,7 +973,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
         Token start = consume(ctx);
         Expr *operand = parse_expr(ctx, 80);
         Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
-        e->type = EXPR_UNARY;
+        e->type = AST_EXPR_UNARY;
         e->unary.op = uop;
         e->unary.operand = operand;
         e->token = start;
@@ -983,7 +983,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
     if (t.value.type == TOKENTYPE_FN) {
         Token start = consume(ctx);
         Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
-        e->type = EXPR_LAMBDA;
+        e->type = AST_EXPR_LAMBDA;
         e->token = start;
         e->lambda.ret_type = parse_type(ctx);
         e->lambda.params = param_array_init(ctx->arena);
@@ -1043,7 +1043,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
             Token rp = expect(ctx, TOKENTYPE_RPAREN, "Expected ')' after call arguments");
 
             Expr *call = arena_calloc(ctx->arena, sizeof(Expr));
-            call->type = EXPR_CALL;
+            call->type = AST_EXPR_CALL;
             call->call.callee = left;
             call->call.args = args;
             call->token = left->token;
@@ -1060,7 +1060,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
 
             Expr *index = arena_calloc(ctx->arena, sizeof(Expr));
             index->token = lb;
-            index->type = EXPR_INDEX;
+            index->type = AST_EXPR_INDEX;
             index->index.base = left;
             index->index.index = len;
 
@@ -1075,7 +1075,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
             }
             Expr *m = arena_calloc(ctx->arena, sizeof(Expr));
             m->token = mem;
-            m->type = EXPR_MEMBER;
+            m->type = AST_EXPR_MEMBER;
             m->member.base = left;
             m->member.member = mem.value.value;
             m->member.deref = next.value.type == TOKENTYPE_RARROW;
@@ -1085,7 +1085,7 @@ Expr *expr_handle_postfix(Parser *ctx, Expr *left) {
             Token q = consume(ctx);
             Expr *e = arena_calloc(ctx->arena, sizeof(Expr));
             e->token = q;
-            e->type = EXPR_BUBBLE;
+            e->type = AST_EXPR_BUBBLE;
             e->bubble.expr = left;
             left = e;
             continue;
@@ -1147,7 +1147,7 @@ Expr *parse_expr(Parser *ctx, int min_bp) {
 
         Expr *right = parse_expr(ctx, rbp);
         Expr *b = arena_calloc(ctx->arena, sizeof(Expr));
-        b->type = EXPR_BINARY;
+        b->type = AST_EXPR_BINARY;
         b->binary.op = binop;
         b->binary.left = left;
         b->binary.right = right;
@@ -1229,7 +1229,7 @@ Stmt *parse_return_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
-    s->type = STMT_RETURN;
+    s->type = AST_STMT_RETURN;
     s->_return.value = value;
 
     return s;
@@ -1292,7 +1292,7 @@ Stmt *parse_for_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
-    s->type = STMT_FOR;
+    s->type = AST_STMT_FOR;
     s->_for.init = init;
     s->_for.cond = cond;
     s->_for.post = post;
@@ -1331,7 +1331,7 @@ Stmt *parse_if_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
-    s->type = STMT_IF;
+    s->type = AST_STMT_IF;
     s->_if.cond = cond;
     s->_if.then = then;
     s->_if._else = _else;
@@ -1358,7 +1358,7 @@ Stmt *parse_while_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
-    s->type = STMT_WHILE;
+    s->type = AST_STMT_WHILE;
     s->_while.cond = cond;
     s->_while.body = body;
 
@@ -1394,7 +1394,7 @@ Stmt *parse_var_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = v->token;
-    s->type = STMT_VAR;
+    s->type = AST_STMT_VAR;
     s->var = v;
 
     return s;
@@ -1406,7 +1406,7 @@ Stmt *parse_expr_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = e->token;
-    s->type = STMT_EXPR;
+    s->type = AST_STMT_EXPR;
     s->expr = e;
 
     return s;
@@ -1417,7 +1417,7 @@ Stmt *parse_defer_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = t;
-    s->type = STMT_DEFER;
+    s->type = AST_STMT_DEFER;
     s->defer.deferred = parse_stmt(ctx);
 
     return s; 
@@ -1426,7 +1426,7 @@ Stmt *parse_defer_stmt(Parser *ctx) {
 Stmt *parse_match_stmt(Parser *ctx) {
     Token m = consume(ctx);
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
-    s->type = STMT_MATCH;
+    s->type = AST_STMT_MATCH;
     expect(ctx, TOKENTYPE_LPAREN, "Expected '('");
     s->match.expr = parse_expr(ctx, 0);
     expect(ctx, TOKENTYPE_RPAREN, "Expected ')'");
@@ -1503,7 +1503,7 @@ Stmt *parse_block_stmt(Parser *ctx) {
 
     Stmt *s = arena_calloc(ctx->arena, sizeof(Stmt));
     s->token = start;
-    s->type = STMT_BLOCK;
+    s->type = AST_STMT_BLOCK;
     s->block.stmts = stmts;
 
     return s;
@@ -1608,7 +1608,7 @@ Decl *parse_decl(Parser *ctx) {
     }
 
     if (t.value.type == TOKENTYPE_TYPE) {
-        d->type = DECL_TYPE;
+        d->type = AST_DECL_TYPE;
         d->_type = parse_type_decl(ctx);
         d->token = d->_type->token;
         return d;
@@ -1621,7 +1621,7 @@ Decl *parse_decl(Parser *ctx) {
         token_optional after;
         if (looks_like_type(ctx, &after) && after.has_value && after.value.type == TOKENTYPE_IDENT) {
             restore_checkpoint(ctx, ch);
-            d->type = DECL_FN;
+            d->type = AST_DECL_FN;
             d->fn = parse_fn_decl(ctx);
             d->token = d->fn->token;
             return d;
@@ -1630,7 +1630,7 @@ Decl *parse_decl(Parser *ctx) {
         restore_checkpoint(ctx, ch);
     }
 
-    d->type = DECL_VAR;
+    d->type = AST_DECL_VAR;
     d->var = parse_var_stmt(ctx)->var;
     d->token = d->var->token;
     return d;

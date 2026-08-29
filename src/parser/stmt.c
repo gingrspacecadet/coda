@@ -37,7 +37,7 @@ AstStmt *parse_return_stmt(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_RETURN, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_RETURN, start.span);
 
     if (!at(p, TK_SEMICOLON) &&
         !at(p, TK_RBRACE) &&
@@ -54,7 +54,7 @@ AstStmt *parse_return_stmt(Parser *p) {
 AstStmt *parse_expr_stmt(Parser *p) {
     AstExpr *expr = parse_expression(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_EXPR, expr->span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_EXPR, expr->span);
     stmt->expr.expr = expr;
 
     expect(p, TK_SEMICOLON);
@@ -71,7 +71,7 @@ AstStmt *parse_var_stmt(Parser *p) {
     if (match(p, TK_EQ))
         var->init = parse_expression(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_VAR, var->span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_VAR, var->span);
     stmt->var.var = var;
 
     expect(p, TK_SEMICOLON);
@@ -86,14 +86,14 @@ bool try_parse_var_stmt(Parser *p, AstStmt **out) {
     var->span = p->current.span;
     var->type = parse_type(p);
 
-    if (var->type->kind == TYPE_ERROR) {
+    if (var->type->kind == AST_TYPE_ERROR) {
         restore(p, cp);
         return false;
     }
 
     var->name = parse_name(p);
 
-    if (var->name.kind != NAME_IDENT) {
+    if (var->name.kind != AST_NAME_IDENT) {
         restore(p, cp);
         return false;
     }
@@ -106,7 +106,7 @@ bool try_parse_var_stmt(Parser *p, AstStmt **out) {
         return false;
     }
 
-    AstStmt *stmt = stmt_new(p, STMT_VAR, var->span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_VAR, var->span);
     stmt->var.var = var;
 
     *out = stmt;
@@ -130,7 +130,7 @@ AstStmt *parse_if_stmt(Parser *p) {
     if (match(p, TK_KW_ELSE))
         else_branch = parse_statement(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_IF, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_IF, start.span);
 
     stmt->_if.cond = cond;
     stmt->_if.then = then;
@@ -151,7 +151,7 @@ AstStmt *parse_while_stmt(Parser *p) {
 
     AstStmt *body = parse_statement(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_WHILE, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_WHILE, start.span);
 
     stmt->_while.cond = cond;
     stmt->_while.body = body;
@@ -190,7 +190,7 @@ AstStmt *parse_for_stmt(Parser *p) {
 
     AstStmt *body = parse_statement(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_FOR, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_FOR, start.span);
 
     stmt->_for.init = init;
     stmt->_for.cond = cond;
@@ -204,7 +204,7 @@ AstStmt *parse_defer_stmt(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_DEFER, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_DEFER, start.span);
     stmt->defer.deferred = parse_statement(p);
 
     return stmt;
@@ -214,7 +214,7 @@ AstStmt *parse_break_stmt(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_BREAK, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_BREAK, start.span);
     stmt->_break.value = NULL;
 
     expect(p, TK_SEMICOLON);
@@ -225,7 +225,7 @@ AstStmt *parse_continue_stmt(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_CONTINUE, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_CONTINUE, start.span);
     stmt->_continue.value = NULL;
 
     expect(p, TK_SEMICOLON);
@@ -236,7 +236,7 @@ AstStmt *parse_block(Parser *p) {
     Token start = p->current;
     expect(p, TK_LBRACE);
 
-    AstStmt *stmt = stmt_new(p, STMT_BLOCK, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_BLOCK, start.span);
 
     stmt->block.stmts = array_create(p->arena, sizeof(AstStmt *));
 
@@ -266,7 +266,7 @@ AstPattern *parse_pattern(Parser *p) {
 
     if (token_is_identifier(p, "_")) {
         advance(p);
-        pattern->kind = PATTERN_WILDCARD;
+        pattern->kind = AST_PATTERN_WILDCARD;
         return pattern;
     }
 
@@ -276,7 +276,7 @@ AstPattern *parse_pattern(Parser *p) {
         at(p, TK_KW_TRUE) ||
         at(p, TK_KW_FALSE) ||
         at(p, TK_KW_NULL)) {
-        pattern->kind = PATTERN_LITERAL;
+        pattern->kind = AST_PATTERN_LITERAL;
         pattern->literal = parse_literal(p)->lit.literal;
         return pattern;
     }
@@ -285,18 +285,18 @@ AstPattern *parse_pattern(Parser *p) {
         AstName name = parse_name(p);
 
         if (at(p, TK_IDENT)) {
-            pattern->kind = PATTERN_VARIANT;
+            pattern->kind = AST_PATTERN_VARIANT;
             pattern->variant.name = name;
             pattern->variant.binding = parse_name(p);
             return pattern;
         }
 
-        pattern->kind = PATTERN_BINDING;
+        pattern->kind = AST_PATTERN_BINDING;
         pattern->binding = name;
         return pattern;
     }
 
-    pattern->kind = PATTERN_EXPR;
+    pattern->kind = AST_PATTERN_EXPR;
     pattern->expr = parse_expression(p);
     return pattern;
 }
@@ -316,7 +316,7 @@ AstStmt *parse_match_stmt(Parser *p) {
     Token start = p->current;
     advance(p);
 
-    AstStmt *stmt = stmt_new(p, STMT_MATCH, start.span);
+    AstStmt *stmt = stmt_new(p, AST_STMT_MATCH, start.span);
 
     stmt->match.cases =
         array_create(p->arena, sizeof(AstMatchCase));

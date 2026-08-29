@@ -36,11 +36,11 @@ static void print_path(FILE *out, const Path *path) {
 
 static void print_name(FILE *out, const AstName *name) {
     switch (name->kind) {
-    case NAME_IDENT:
+    case AST_NAME_IDENT:
         print_string(out, name->ident);
         break;
 
-    case NAME_SPLICE:
+    case AST_NAME_SPLICE:
         fputs("#(", out);
         /* Expression printer goes here. */
         fputs("...)", out);
@@ -50,16 +50,16 @@ static void print_name(FILE *out, const AstName *name) {
 
 static const char *type_kind_name(AstTypeKind kind) {
     switch (kind) {
-    case TYPE_NAMED:  return "named";
-    case TYPE_POINTER: return "pointer";
-    case TYPE_ARRAY:  return "array";
-    case TYPE_FN:     return "fn";
-    case TYPE_SUM:    return "sum";
-    case TYPE_STRUCT: return "struct";
-    case TYPE_UNION:  return "union";
-    case TYPE_ENUM:   return "enum";
-    case TYPE_SPLICE: return "splice";
-    case TYPE_ERROR:  return "error";
+    case AST_TYPE_NAMED:  return "named";
+    case AST_TYPE_POINTER: return "pointer";
+    case AST_TYPE_ARRAY:  return "array";
+    case AST_TYPE_FN:     return "fn";
+    case AST_TYPE_SUM:    return "sum";
+    case AST_TYPE_STRUCT: return "struct";
+    case AST_TYPE_UNION:  return "union";
+    case AST_TYPE_ENUM:   return "enum";
+    case AST_TYPE_SPLICE: return "splice";
+    case AST_TYPE_ERROR:  return "error";
     }
 
     return "?";
@@ -67,21 +67,21 @@ static const char *type_kind_name(AstTypeKind kind) {
 
 static const char *expr_kind_name(AstExprKind kind) {
     switch (kind) {
-    case EXPR_ERROR:      return "error";
-    case EXPR_LITERAL:    return "literal";
-    case EXPR_IDENT:      return "ident";
-    case EXPR_PATH:       return "path";
-    case EXPR_UNARY:      return "unary";
-    case EXPR_BINARY:     return "binary";
-    case EXPR_CALL:       return "call";
-    case EXPR_INDEX:      return "index";
-    case EXPR_MEMBER:     return "member";
-    case EXPR_CAST:       return "cast";
-    case EXPR_INTRINSIC:  return "intrinsic";
-    case EXPR_BUBBLE:     return "bubble";
-    case EXPR_INIT:       return "init";
-    case EXPR_LAMBDA:     return "lambda";
-    case EXPR_SPLICE:     return "splice";
+    case AST_EXPR_ERROR:      return "error";
+    case AST_EXPR_LITERAL:    return "literal";
+    case AST_EXPR_IDENT:      return "ident";
+    case AST_EXPR_PATH:       return "path";
+    case AST_EXPR_UNARY:      return "unary";
+    case AST_EXPR_BINARY:     return "binary";
+    case AST_EXPR_CALL:       return "call";
+    case AST_EXPR_INDEX:      return "index";
+    case AST_EXPR_MEMBER:     return "member";
+    case AST_EXPR_CAST:       return "cast";
+    case AST_EXPR_INTRINSIC:  return "intrinsic";
+    case AST_EXPR_BUBBLE:     return "bubble";
+    case AST_EXPR_INIT:       return "init";
+    case AST_EXPR_LAMBDA:     return "lambda";
+    case AST_EXPR_SPLICE:     return "splice";
     }
 
     return "?";
@@ -89,18 +89,18 @@ static const char *expr_kind_name(AstExprKind kind) {
 
 static const char *stmt_kind_name(AstStmtKind kind) {
     switch (kind) {
-    case STMT_ERROR:    return "error";
-    case STMT_VAR:      return "var";
-    case STMT_EXPR:     return "expr";
-    case STMT_BLOCK:    return "block";
-    case STMT_RETURN:   return "return";
-    case STMT_IF:       return "if";
-    case STMT_FOR:      return "for";
-    case STMT_WHILE:    return "while";
-    case STMT_MATCH:    return "match";
-    case STMT_BREAK:    return "break";
-    case STMT_CONTINUE: return "continue";
-    case STMT_DEFER:    return "defer";
+    case AST_STMT_ERROR:    return "error";
+    case AST_STMT_VAR:      return "var";
+    case AST_STMT_EXPR:     return "expr";
+    case AST_STMT_BLOCK:    return "block";
+    case AST_STMT_RETURN:   return "return";
+    case AST_STMT_IF:       return "if";
+    case AST_STMT_FOR:      return "for";
+    case AST_STMT_WHILE:    return "while";
+    case AST_STMT_MATCH:    return "match";
+    case AST_STMT_BREAK:    return "break";
+    case AST_STMT_CONTINUE: return "continue";
+    case AST_STMT_DEFER:    return "defer";
     }
 
     return "?";
@@ -108,12 +108,12 @@ static const char *stmt_kind_name(AstStmtKind kind) {
 
 static const char *decl_kind_name(int kind) {
     switch (kind) {
-    case DECL_ERROR:       return "none";
-    case DECL_INCLUDE:    return "include";
-    case DECL_TYPE:       return "type";
-    case DECL_VAR:        return "var";
-    case DECL_FN:         return "fn";
-    case DECL_CONSTRAINT: return "constraint";
+    case AST_DECL_ERROR:       return "none";
+    case AST_DECL_INCLUDE:    return "include";
+    case AST_DECL_TYPE:       return "type";
+    case AST_DECL_VAR:        return "var";
+    case AST_DECL_FN:         return "fn";
+    case AST_DECL_CONSTRAINT: return "constraint";
     }
 
     return "?";
@@ -124,22 +124,22 @@ static void print_literal(
     const AstLiteral *literal
 ) {
     switch (literal->kind) {
-    case LIT_INTEGER:
+    case AST_LIT_INTEGER:
         fputs("integer ", out);
         break;
-    case LIT_FLOAT:
+    case AST_LIT_FLOAT:
         fputs("float ", out);
         break;
-    case LIT_STRING:
+    case AST_LIT_STRING:
         fputs("string ", out);
         break;
-    case LIT_CHAR:
+    case AST_LIT_CHAR:
         fputs("char ", out);
         break;
-    case LIT_BOOL:
+    case AST_LIT_BOOL:
         fputs("bool ", out);
         break;
-    case LIT_ERROR:
+    case AST_LIT_ERROR:
         fputs("none ", out);
         break;
     }
@@ -149,12 +149,12 @@ static void print_literal(
 
 static const char *unary_op_name(AstUnaryOp op) {
     switch (op) {
-    case UNARY_POS:     return "+";
-    case UNARY_NEG:     return "-";
-    case UNARY_NOT:     return "!";
-    case UNARY_BIT_NOT: return "~";
-    case UNARY_DEREF:   return "*";
-    case UNARY_ADDRESS: return "&";
+    case AST_UNARY_POS:     return "+";
+    case AST_UNARY_NEG:     return "-";
+    case AST_UNARY_NOT:     return "!";
+    case AST_UNARY_BIT_NOT: return "~";
+    case AST_UNARY_DEREF:   return "*";
+    case AST_UNARY_ADDRESS: return "&";
     }
 
     return "?";
@@ -162,39 +162,39 @@ static const char *unary_op_name(AstUnaryOp op) {
 
 static const char *binary_op_name(AstBinaryOp op) {
     switch (op) {
-    case BINARY_ADD:          return "+";
-    case BINARY_SUB:          return "-";
-    case BINARY_MUL:          return "*";
-    case BINARY_DIV:          return "/";
-    case BINARY_MOD:          return "%";
-    case BINARY_EQUAL:        return "==";
-    case BINARY_NOT_EQUAL:    return "!=";
-    case BINARY_LT:           return "<";
-    case BINARY_LTE:          return "<=";
-    case BINARY_GT:           return ">";
-    case BINARY_GTE:          return ">=";
-    case BINARY_LOGICAL_AND:  return "&&";
-    case BINARY_LOGICAL_OR:   return "||";
-    case BINARY_BIT_AND:      return "&";
-    case BINARY_BIT_OR:       return "|";
-    case BINARY_BIT_XOR:      return "^";
-    case BINARY_SHL:          return "<<";
-    case BINARY_SHR:          return ">>";
-    case BINARY_ASSIGN:       return "=";
-    case BINARY_ADD_ASSIGN:   return "+=";
-    case BINARY_SUB_ASSIGN:   return "-=";
-    case BINARY_MUL_ASSIGN:   return "*=";
-    case BINARY_DIV_ASSIGN:   return "/=";
-    case BINARY_MOD_ASSIGN:   return "%=";
-    case BINARY_BIT_AND_ASSIGN: return "&=";
-    case BINARY_BIT_OR_ASSIGN:  return "|=";
-    case BINARY_BIT_XOR_ASSIGN: return "^=";
-    case BINARY_SHL_ASSIGN:      return "<<=";
-    case BINARY_SHR_ASSIGN:      return ">>=";
-    case BINARY_NAND:            return "!&";
-    case BINARY_NAND_ASSIGN:     return "!&=";
-    case BINARY_NOR:             return "~|";
-    case BINARY_NOR_ASSIGN:      return "~|=";
+    case AST_BINARY_ADD:          return "+";
+    case AST_BINARY_SUB:          return "-";
+    case AST_BINARY_MUL:          return "*";
+    case AST_BINARY_DIV:          return "/";
+    case AST_BINARY_MOD:          return "%";
+    case AST_BINARY_EQUAL:        return "==";
+    case AST_BINARY_NOT_EQUAL:    return "!=";
+    case AST_BINARY_LT:           return "<";
+    case AST_BINARY_LTE:          return "<=";
+    case AST_BINARY_GT:           return ">";
+    case AST_BINARY_GTE:          return ">=";
+    case AST_BINARY_LOGICAL_AND:  return "&&";
+    case AST_BINARY_LOGICAL_OR:   return "||";
+    case AST_BINARY_BIT_AND:      return "&";
+    case AST_BINARY_BIT_OR:       return "|";
+    case AST_BINARY_BIT_XOR:      return "^";
+    case AST_BINARY_SHL:          return "<<";
+    case AST_BINARY_SHR:          return ">>";
+    case AST_BINARY_ASSIGN:       return "=";
+    case AST_BINARY_ADD_ASSIGN:   return "+=";
+    case AST_BINARY_SUB_ASSIGN:   return "-=";
+    case AST_BINARY_MUL_ASSIGN:   return "*=";
+    case AST_BINARY_DIV_ASSIGN:   return "/=";
+    case AST_BINARY_MOD_ASSIGN:   return "%=";
+    case AST_BINARY_BIT_AND_ASSIGN: return "&=";
+    case AST_BINARY_BIT_OR_ASSIGN:  return "|=";
+    case AST_BINARY_BIT_XOR_ASSIGN: return "^=";
+    case AST_BINARY_SHL_ASSIGN:      return "<<=";
+    case AST_BINARY_SHR_ASSIGN:      return ">>=";
+    case AST_BINARY_NAND:            return "!&";
+    case AST_BINARY_NAND_ASSIGN:     return "!&=";
+    case AST_BINARY_NOR:             return "~|";
+    case AST_BINARY_NOR_ASSIGN:      return "~|=";
     }
 
     return "?";
@@ -229,38 +229,38 @@ static void print_expr(
     fputc('\n', out);
 
     switch (expr->kind) {
-    case EXPR_LITERAL:
+    case AST_EXPR_LITERAL:
         indent(out, depth + 1);
         print_literal(out, &expr->lit.literal);
         fputc('\n', out);
         break;
 
-    case EXPR_IDENT:
+    case AST_EXPR_IDENT:
         indent(out, depth + 1);
         print_name(out, &expr->ident.name);
         fputc('\n', out);
         break;
 
-    case EXPR_PATH:
+    case AST_EXPR_PATH:
         indent(out, depth + 1);
         print_path(out, &expr->path.path);
         fputc('\n', out);
         break;
 
-    case EXPR_UNARY:
+    case AST_EXPR_UNARY:
         indent(out, depth + 1);
         fprintf(out, "op %s\n", unary_op_name(expr->unary.op));
         print_expr(out, expr->unary.operand, depth + 1);
         break;
 
-    case EXPR_BINARY:
+    case AST_EXPR_BINARY:
         indent(out, depth + 1);
         fprintf(out, "op %s\n", binary_op_name(expr->binary.op));
         print_expr(out, expr->binary.left, depth + 1);
         print_expr(out, expr->binary.right, depth + 1);
         break;
 
-    case EXPR_CALL:
+    case AST_EXPR_CALL:
         print_expr(out, expr->call.callee, depth + 1);
 
         if (expr->call.generic_args.len != 0) {
@@ -289,12 +289,12 @@ static void print_expr(
         }
         break;
 
-    case EXPR_INDEX:
+    case AST_EXPR_INDEX:
         print_expr(out, expr->index.object, depth + 1);
         print_expr(out, expr->index.index, depth + 1);
         break;
 
-    case EXPR_MEMBER:
+    case AST_EXPR_MEMBER:
         print_expr(out, expr->member.object, depth + 1);
 
         indent(out, depth + 1);
@@ -303,12 +303,12 @@ static void print_expr(
         fputc('\n', out);
         break;
 
-    case EXPR_CAST:
+    case AST_EXPR_CAST:
         print_type(out, expr->cast.type, depth + 1);
         print_expr(out, expr->cast.operand, depth + 1);
         break;
 
-    case EXPR_INTRINSIC:
+    case AST_EXPR_INTRINSIC:
         indent(out, depth + 1);
         fputs("name ", out);
         print_path(out, &expr->intrinsic.name);
@@ -325,11 +325,11 @@ static void print_expr(
         }
         break;
 
-    case EXPR_BUBBLE:
+    case AST_EXPR_BUBBLE:
         print_expr(out, expr->bubble.operand, depth + 1);
         break;
 
-    case EXPR_INIT:
+    case AST_EXPR_INIT:
         for (size_t i = 0;
              i < expr->init.fields.len;
              ++i) {
@@ -351,7 +351,7 @@ static void print_expr(
         }
         break;
 
-    case EXPR_LAMBDA:
+    case AST_EXPR_LAMBDA:
         print_type(out, expr->lambda.ret, depth + 1);
 
         for (size_t i = 0;
@@ -373,11 +373,11 @@ static void print_expr(
         print_stmt(out, expr->lambda.body, depth + 1);
         break;
 
-    case EXPR_SPLICE:
+    case AST_EXPR_SPLICE:
         print_expr(out, expr->splice.expression, depth + 1);
         break;
 
-    case EXPR_ERROR:
+    case AST_EXPR_ERROR:
         break;
     }
 }
@@ -390,39 +390,39 @@ static void print_pattern(
     indent(out, depth);
 
     switch (pattern->kind) {
-    case PATTERN_ERROR:
+    case AST_PATTERN_ERROR:
         fputs("pattern error", out);
         break;
 
-    case PATTERN_WILDCARD:
+    case AST_PATTERN_WILDCARD:
         fputs("pattern wildcard", out);
         break;
 
-    case PATTERN_LITERAL:
+    case AST_PATTERN_LITERAL:
         fputs("pattern literal ", out);
         print_literal(out, &pattern->literal);
         break;
 
-    case PATTERN_BINDING:
+    case AST_PATTERN_BINDING:
         fputs("pattern binding ", out);
         print_name(out, &pattern->binding);
         break;
 
-    case PATTERN_VARIANT:
+    case AST_PATTERN_VARIANT:
         fputs("pattern variant ", out);
         print_name(out, &pattern->variant.name);
         fputc(' ', out);
         print_name(out, &pattern->variant.binding);
         break;
 
-    case PATTERN_EXPR:
+    case AST_PATTERN_EXPR:
         fputs("pattern expr", out);
         break;
     }
 
     fputc('\n', out);
 
-    if (pattern->kind == PATTERN_EXPR)
+    if (pattern->kind == AST_PATTERN_EXPR)
         print_expr(out, pattern->expr, depth + 1);
 }
 
@@ -446,7 +446,7 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
     fputc('\n', out);
 
     switch (stmt->kind) {
-    case STMT_VAR:
+    case AST_STMT_VAR:
         print_name(out, &stmt->var.var->name);
         fputc('\n', out);
         print_type(out, stmt->var.var->type, depth + 1);
@@ -455,11 +455,11 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
             print_expr(out, stmt->var.var->init, depth + 1);
         break;
 
-    case STMT_EXPR:
+    case AST_STMT_EXPR:
         print_expr(out, stmt->expr.expr, depth + 1);
         break;
 
-    case STMT_BLOCK:
+    case AST_STMT_BLOCK:
         for (size_t i = 0;
              i < stmt->block.stmts.len;
              ++i) {
@@ -471,23 +471,23 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
         }
         break;
 
-    case STMT_RETURN:
+    case AST_STMT_RETURN:
         if (stmt->_return.value != NULL)
             print_expr(out, stmt->_return.value, depth + 1);
         break;
 
-    case STMT_IF:
+    case AST_STMT_IF:
         print_expr(out, stmt->_if.cond, depth + 1);
         print_stmt(out, stmt->_if.then, depth + 1);
         print_stmt(out, stmt->_if._else, depth + 1);
         break;
 
-    case STMT_WHILE:
+    case AST_STMT_WHILE:
         print_expr(out, stmt->_while.cond, depth + 1);
         print_stmt(out, stmt->_while.body, depth + 1);
         break;
 
-    case STMT_FOR:
+    case AST_STMT_FOR:
         print_stmt(out, stmt->_for.init, depth + 1);
 
         if (stmt->_for.cond != NULL)
@@ -499,11 +499,11 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
         print_stmt(out, stmt->_for.body, depth + 1);
         break;
 
-    case STMT_DEFER:
+    case AST_STMT_DEFER:
         print_stmt(out, stmt->defer.deferred, depth + 1);
         break;
 
-    case STMT_MATCH:
+    case AST_STMT_MATCH:
         print_expr(out, stmt->match.expr, depth + 1);
 
         for (size_t i = 0;
@@ -519,13 +519,13 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
         }
         break;
 
-    case STMT_BREAK:
-    case STMT_CONTINUE:
+    case AST_STMT_BREAK:
+    case AST_STMT_CONTINUE:
         if (stmt->_break.value != NULL)
             print_expr(out, stmt->_break.value, depth + 1);
         break;
 
-    case STMT_ERROR:
+    case AST_STMT_ERROR:
         break;
     }
 }
@@ -563,7 +563,7 @@ static void print_type(
     fputc('\n', out);
 
     switch (type->kind) {
-    case TYPE_NAMED:
+    case AST_TYPE_NAMED:
         indent(out, depth + 1);
         fputs("path ", out);
         print_path(out, &type->named.path);
@@ -578,7 +578,7 @@ static void print_type(
         }
         break;
 
-    case TYPE_POINTER:
+    case AST_TYPE_POINTER:
         indent(out, depth + 1);
         fprintf(
             out,
@@ -588,7 +588,7 @@ static void print_type(
         print_type(out, type->pointer.pointee, depth + 1);
         break;
 
-    case TYPE_ARRAY:
+    case AST_TYPE_ARRAY:
         indent(out, depth + 1);
         fprintf(
             out,
@@ -602,7 +602,7 @@ static void print_type(
         print_type(out, type->array.element, depth + 1);
         break;
 
-    case TYPE_FN:
+    case AST_TYPE_FN:
         print_type(out, type->fn.ret, depth + 1);
 
         for (size_t i = 0; i < type->fn.params.len; ++i) {
@@ -614,7 +614,7 @@ static void print_type(
         }
         break;
 
-    case TYPE_SUM:
+    case AST_TYPE_SUM:
         for (size_t i = 0; i < type->sum.members.len; ++i) {
             AstType **member = array_at(
                 (Array *)&type->sum.members,
@@ -624,7 +624,7 @@ static void print_type(
         }
         break;
 
-    case TYPE_STRUCT:
+    case AST_TYPE_STRUCT:
         for (size_t i = 0; i < type->structure.fields.len; ++i) {
             AstField *field = array_at(
                 (Array *)&type->structure.fields,
@@ -634,7 +634,7 @@ static void print_type(
         }
         break;
 
-    case TYPE_UNION:
+    case AST_TYPE_UNION:
         for (size_t i = 0; i < type->union_.fields.len; ++i) {
             AstField *field = array_at(
                 (Array *)&type->union_.fields,
@@ -644,7 +644,7 @@ static void print_type(
         }
         break;
 
-    case TYPE_ENUM:
+    case AST_TYPE_ENUM:
         if (type->enumeration.underlying != NULL)
             print_type(
                 out,
@@ -668,11 +668,11 @@ static void print_type(
         }
         break;
 
-    case TYPE_SPLICE:
+    case AST_TYPE_SPLICE:
         print_expr(out, type->splice.expr, depth + 1);
         break;
 
-    case TYPE_ERROR:
+    case AST_TYPE_ERROR:
         break;
     }
 }
@@ -721,7 +721,7 @@ static void print_constraint_item(
     indent(out, depth);
 
     switch (item->kind) {
-    case CONSTRAINT_METHOD:
+    case AST_CONSTRAINT_METHOD:
         fputs("constraint method\n", out);
 
         if (item->method->receiver != NULL)
@@ -749,12 +749,12 @@ static void print_constraint_item(
             print_stmt(out, item->method->body, depth + 1);
         break;
 
-    case CONSTRAINT_FIELD:
+    case AST_CONSTRAINT_FIELD:
         fputs("constraint field\n", out);
         print_field(out, &item->field, depth + 1);
         break;
 
-    case CONSTRAINT_EXPR:
+    case AST_CONSTRAINT_EXPR:
         fputs("constraint expression\n", out);
         print_expr(out, item->expr, depth + 1);
         break;
@@ -775,7 +775,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
     print_attributes(out, &decl->attrs, depth + 1);
 
     switch (decl->kind) {
-    case DECL_INCLUDE:
+    case AST_DECL_INCLUDE:
         indent(out, depth + 1);
         fputs("path ", out);
         print_path(out, &decl->include.path);
@@ -786,7 +786,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
         fputc('\n', out);
         break;
 
-    case DECL_TYPE:
+    case AST_DECL_TYPE:
         indent(out, depth + 1);
         fputs("name ", out);
         print_name(out, &decl->type.name);
@@ -795,7 +795,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
         print_type(out, decl->type.type, depth + 1);
         break;
 
-    case DECL_VAR:
+    case AST_DECL_VAR:
         indent(out, depth + 1);
         fputs("name ", out);
         print_name(out, &decl->var.name);
@@ -807,7 +807,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
             print_expr(out, decl->var.init, depth + 1);
         break;
 
-    case DECL_FN:
+    case AST_DECL_FN:
         indent(out, depth + 1);
         fputs("fn ", out);
         print_name(out, &decl->fn.name);
@@ -836,7 +836,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
             print_stmt(out, decl->fn.body, depth + 1);
         break;
 
-    case DECL_CONSTRAINT:
+    case AST_DECL_CONSTRAINT:
         indent(out, depth + 1);
         fputs("name ", out);
         print_name(out, &decl->constraint.name);
@@ -853,7 +853,7 @@ static void print_decl(FILE *out, const AstDecl *decl, unsigned depth) {
         }
         break;
 
-    case DECL_ERROR:
+    case AST_DECL_ERROR:
         break;
     }
 }

@@ -100,7 +100,7 @@ TypeRef *unwrap_type(TypeRef *type) {
         }
 
         Symbol *sym = type->type_symbol;
-        if (!sym || !sym->decl || sym->decl->type != DECL_TYPE) {
+        if (!sym || !sym->decl || sym->decl->type != AST_DECL_TYPE) {
             break;
         }
 
@@ -123,7 +123,7 @@ TypeRef *resolve_type_alias(TypeRef *t) {
         if ((t->type == TYPEREF_NAMED || t->type == TYPEREF_PATH) && t->type_symbol) {
             Symbol *sym = t->type_symbol;
 
-            if (sym->decl && sym->decl->type == DECL_TYPE) {
+            if (sym->decl && sym->decl->type == AST_DECL_TYPE) {
                 TypeDecl *ty = sym->decl->_type;
                 if (ty && ty->alias && ty->alias != t) {
                     t = ty->alias;
@@ -322,7 +322,7 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
         
         bool found = false;
         switch (d->type) {
-            case DECL_FN: {
+            case AST_DECL_FN: {
                 if (string_eq(a->name, string_make("extern"))) {
                     found = true;
                     d->fn->is_extern = true;
@@ -330,10 +330,10 @@ void validate_decl_attrs(Analyser *ctx, Decl *d) {
                 }
                 break;
             }
-            case DECL_TYPE: {
+            case AST_DECL_TYPE: {
                 break;
             }
-            case DECL_VAR: {
+            case AST_DECL_VAR: {
                 break;
             }
             default: break;
@@ -359,7 +359,7 @@ void register_globals(Analyser *ctx, Module *mod) {
         validate_decl_attrs(ctx, d);
 
         switch (d->type) {
-            case DECL_FN: {
+            case AST_DECL_FN: {
                 uint32_t flags = SYMFLAG_FN;
                 if (d->is_export) flags |= SYMFLAG_EXPORT;
                 if (d->fn->is_extern) flags |= SYMFLAG_EXTERN;
@@ -377,7 +377,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->fn->symbol = sym;
                 break;
             }
-            case DECL_TYPE: {
+            case AST_DECL_TYPE: {
                 Symbol *sym = declare_symbol(ctx, d->_type->name, SYMFLAG_TYPE);
                 sym->decl = d;
                 sym->type = d->_type->alias;
@@ -385,7 +385,7 @@ void register_globals(Analyser *ctx, Module *mod) {
                 d->_type->symbol = sym;
                 break;
             }
-            case DECL_VAR: {
+            case AST_DECL_VAR: {
                 uint32_t flags = SYMFLAG_VAR;
                 if (d->is_export) flags |= SYMFLAG_EXPORT;
 
@@ -703,7 +703,7 @@ static void calculate_union_layout(TypeRef *unn) {
 }
 
 static TypeRef *check_expr_with_target(Analyser *ctx, Expr *expr, TypeRef *target_type) {
-    if (expr->type == EXPR_INIT) {
+    if (expr->type == AST_EXPR_INIT) {
         TypeRef *resolved = resolve_type_alias(target_type);
 
         if (!resolved || resolved->type != TYPEREF_STRUCT) {
@@ -784,7 +784,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
         Decl *d = mod->decls.data[i];
 
         switch (d->type) {
-            case DECL_FN: {
+            case AST_DECL_FN: {
                 enter_scope(ctx, NULL);
 
                 declare_generic_type_params(ctx, &d->fn->generic_params);
@@ -805,7 +805,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 break;
             }
 
-            case DECL_TYPE: {
+            case AST_DECL_TYPE: {
                 TypeDecl *ty = d->_type;
 
                 enter_scope(ctx, NULL);
@@ -857,7 +857,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
                 break;
             }
 
-            case DECL_VAR: {
+            case AST_DECL_VAR: {
                 VarDecl *v = d->var;
 
                 resolve_typeref(ctx, v->type);
@@ -865,7 +865,7 @@ void resolve_types(Analyser *ctx, Module *mod) {
 
                 if (v->init) {
                     TypeRef *init_type;
-                    if (v->init->type == EXPR_INIT) {
+                    if (v->init->type == AST_EXPR_INIT) {
                         init_type = check_expr_with_target(ctx, v->init, v->type);
                     } else {
                         init_type = check_expr(ctx, v->init);
@@ -898,7 +898,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
     switch (stmt->type) {
         case STMT_UNSAFE:
-        case STMT_BLOCK: {
+        case AST_STMT_BLOCK: {
             enter_scope(ctx, NULL);
             for (size_t i = 0; i < stmt->block.stmts.len; i++) {
                 Stmt *s = stmt->block.stmts.data[i];
@@ -907,12 +907,12 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             leave_scope(ctx);
             break;
         }
-        case STMT_VAR: {
+        case AST_STMT_VAR: {
             VarDecl *var = stmt->var;
             resolve_typeref(ctx, var->type);
 
             if (var->init) {
-                if (var->init->type == EXPR_INIT) {
+                if (var->init->type == AST_EXPR_INIT) {
                     var->init->resolved_type = var->type;
                 }
 
@@ -936,7 +936,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             var->symbol = sym;
             break;
         }
-        case STMT_RETURN: {
+        case AST_STMT_RETURN: {
             if (stmt->_return.value) {
                 TypeRef *ret_type = check_expr(ctx, stmt->_return.value);
                 if (!types_compatible(ret_type, ctx->current_function->ret_type)) {
@@ -950,11 +950,11 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             }
             break;
         }
-        case STMT_EXPR: {
+        case AST_STMT_EXPR: {
             check_expr(ctx, stmt->expr);
             break;
         }
-        case STMT_IF: {
+        case AST_STMT_IF: {
             if (stmt->_if.cond) {
                 TypeRef *cond_type = check_expr(ctx, stmt->_if.cond);
                 if (!cond_type || !string_eq(cond_type->type_symbol->name, string_make("bool"))) {
@@ -968,7 +968,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             }
             break;
         }
-        case STMT_WHILE: {
+        case AST_STMT_WHILE: {
             if (stmt->_while.cond) {
                 TypeRef *cond_type = check_expr(ctx, stmt->_while.cond);
                 if (!cond_type || !string_eq(cond_type->type_symbol->name, string_make("bool"))) {
@@ -979,7 +979,7 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
             check_stmt(ctx, stmt->_while.body);
             break;
         }
-        case STMT_FOR: {
+        case AST_STMT_FOR: {
             enter_scope(ctx, NULL);
 
             if (stmt->_for.init) {
@@ -1005,11 +1005,11 @@ void check_stmt(Analyser *ctx, Stmt *stmt) {
 
             break;
         }
-        case STMT_DEFER: {
+        case AST_STMT_DEFER: {
             check_stmt(ctx, stmt->defer.deferred);
             break;
         }
-        case STMT_MATCH: {
+        case AST_STMT_MATCH: {
             for (size_t i = 0; i < stmt->match.cases.len; i++) {
                 check_stmt(ctx, stmt->match.cases.data[i].body);
             }
@@ -1060,7 +1060,7 @@ void check_bodies(Analyser *ctx, Module *mod) {
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
-        if (d->type == DECL_FN) {
+        if (d->type == AST_DECL_FN) {
             if (d->fn->body && d->fn->is_extern) {
                 error(d->fn->token, format("Extern function '%.*s' cannot have a body definition", string_fmt(d->fn->name)));
             }
@@ -1182,7 +1182,7 @@ TypeRef *check_expr_call(Analyser *ctx, Expr *expr) {
     bool is_method_call = false;
     Expr *method_base = NULL;
 
-    if (callee->type == EXPR_MEMBER) {
+    if (callee->type == AST_EXPR_MEMBER) {
         method_base = callee->member.base;
         is_method_call = true;
     }
@@ -1216,7 +1216,7 @@ TypeRef *check_expr_call(Analyser *ctx, Expr *expr) {
         TypeRef *param_type = callee_type->fn.params.data[i].type;
 
         bool pushed_generic_scope = false;
-        if (callee_sym && callee_sym->decl && callee_sym->decl->type == DECL_FN) {
+        if (callee_sym && callee_sym->decl && callee_sym->decl->type == AST_DECL_FN) {
             FnDecl *fn = callee_sym->decl->fn;
             if (fn->generic_params.len > 0) {
                 enter_scope(ctx, NULL);
@@ -1247,7 +1247,7 @@ TypeRef *check_expr_call(Analyser *ctx, Expr *expr) {
             if (param_type->type == TYPEREF_POINTER && arg_type->type != TYPEREF_POINTER) {
                 if (types_compatible(arg_type, param_type->pointer.pointee)) {
                     Expr *implicit_addr = arena_calloc(ctx->arena, sizeof(Expr));
-                    implicit_addr->type = EXPR_UNARY;
+                    implicit_addr->type = AST_EXPR_UNARY;
                     implicit_addr->unary.op = UOP_ADDR;
                     implicit_addr->unary.operand = method_base;
                     implicit_addr->token = method_base->token;
@@ -1258,9 +1258,9 @@ TypeRef *check_expr_call(Analyser *ctx, Expr *expr) {
                     ptr_type->is_mutable = param_type->is_mutable;
                     implicit_addr->resolved_type = ptr_type;
 
-                    if (expr->call.callee->type == EXPR_MEMBER) {
+                    if (expr->call.callee->type == AST_EXPR_MEMBER) {
                         expr->call.callee->member.base = implicit_addr;
-                    } else if (expr->call.callee->type == EXPR_SPECIALISE && expr->call.callee->specialise.expr->type == EXPR_MEMBER) {
+                    } else if (expr->call.callee->type == EXPR_SPECIALISE && expr->call.callee->specialise.expr->type == AST_EXPR_MEMBER) {
                         expr->call.callee->specialise.expr->member.base = implicit_addr;
                     }
 
@@ -1479,7 +1479,7 @@ TypeRef *check_expr_index(Analyser *ctx, Expr *expr) {
 TypeRef *check_expr_cast(Analyser *ctx, Expr *expr) {
     resolve_typeref(ctx, expr->cast.to);
     
-    if (expr->cast.expr->type == EXPR_INIT) {
+    if (expr->cast.expr->type == AST_EXPR_INIT) {
         expr->cast.expr->resolved_type = expr->cast.to;
     }
 
@@ -1619,7 +1619,7 @@ TypeRef *check_expr_path(Analyser *ctx, Expr *expr) {
             return target_sym->type;
         }
 
-        case DECL_TYPE: {
+        case AST_DECL_TYPE: {
             TypeRef *alias = resolve_type_alias(current_sym->type);
             if (!alias) {
                 error(expr->token, format("Invalid type alias '%.*s'", string_fmt(current_sym->name)));
@@ -1739,7 +1739,7 @@ TypeRef *check_expr_lambda(Analyser *ctx, Expr *expr) {
     fndecl->token = expr->token;
 
     Decl *decl = arena_calloc(ctx->arena, sizeof(Decl));
-    decl->type = DECL_FN;
+    decl->type = AST_DECL_FN;
     decl->token = expr->token;
     decl->fn = fndecl;
 
@@ -1770,18 +1770,18 @@ TypeRef *check_expr(Analyser *ctx, Expr *expr) {
     TypeRef *result_type = NULL;
     switch (expr->type) {
         case EXPR_LIT: result_type = check_expr_lit(ctx, expr); break;
-        case EXPR_IDENT: result_type = check_expr_ident(ctx, expr); break;
-        case EXPR_BINARY: result_type = check_expr_binary(ctx, expr); break;
-        case EXPR_CALL: result_type = check_expr_call(ctx, expr); break;
-        case EXPR_MEMBER: result_type = check_expr_member(ctx, expr); break;
-        case EXPR_UNARY: result_type = check_expr_unary(ctx, expr); break;
-        case EXPR_INDEX: result_type = check_expr_index(ctx, expr); break;
-        case EXPR_CAST: result_type = check_expr_cast(ctx, expr); break;
-        case EXPR_INTRINSIC: result_type = check_expr_intrinsic(ctx, expr); break;
-        case EXPR_PATH: result_type = check_expr_path(ctx, expr); break;
-        case EXPR_BUBBLE: result_type = check_expr_bubble(ctx, expr); break;
-        case EXPR_INIT: result_type = check_expr_init(ctx, expr); break;
-        case EXPR_LAMBDA: result_type = check_expr_lambda(ctx, expr); break;
+        case AST_EXPR_IDENT: result_type = check_expr_ident(ctx, expr); break;
+        case AST_EXPR_BINARY: result_type = check_expr_binary(ctx, expr); break;
+        case AST_EXPR_CALL: result_type = check_expr_call(ctx, expr); break;
+        case AST_EXPR_MEMBER: result_type = check_expr_member(ctx, expr); break;
+        case AST_EXPR_UNARY: result_type = check_expr_unary(ctx, expr); break;
+        case AST_EXPR_INDEX: result_type = check_expr_index(ctx, expr); break;
+        case AST_EXPR_CAST: result_type = check_expr_cast(ctx, expr); break;
+        case AST_EXPR_INTRINSIC: result_type = check_expr_intrinsic(ctx, expr); break;
+        case AST_EXPR_PATH: result_type = check_expr_path(ctx, expr); break;
+        case AST_EXPR_BUBBLE: result_type = check_expr_bubble(ctx, expr); break;
+        case AST_EXPR_INIT: result_type = check_expr_init(ctx, expr); break;
+        case AST_EXPR_LAMBDA: result_type = check_expr_lambda(ctx, expr); break;
         default: break;
     }
 
@@ -1919,7 +1919,7 @@ static String mangle_generic_name(Arena *arena, String base_name, typerefs_array
 static FnDecl *find_generic_fn_template(Module *mod, String name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
-        if (decl->type == DECL_FN && string_eq(decl->fn->name, name)) {
+        if (decl->type == AST_DECL_FN && string_eq(decl->fn->name, name)) {
             if (decl->fn->generic_params.len > 0) {
                 return decl->fn;
             }
@@ -1958,7 +1958,7 @@ static FnDecl *find_generic_fn_template_by_path(Module *mod, string_array path) 
 static TypeDecl *find_generic_struct_template(Module *mod, String name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
-        if (decl->type != DECL_TYPE) continue;
+        if (decl->type != AST_DECL_TYPE) continue;
         if (!string_eq(decl->_type->name, name)) continue;
         if (decl->_type->generic_params.len == 0) continue;
 
@@ -2042,7 +2042,7 @@ static Symbol *monomorphise_struct(Module *mod, TypeDecl *template, typerefs_arr
 
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *d = mod->decls.data[i];
-        if (d->type == DECL_TYPE && string_eq(d->_type->name, mangled_name)) {
+        if (d->type == AST_DECL_TYPE && string_eq(d->_type->name, mangled_name)) {
             return d->symbol;
         }
     }
@@ -2087,7 +2087,7 @@ static Symbol *monomorphise_struct(Module *mod, TypeDecl *template, typerefs_arr
     new_type->token = template->token;
 
     Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
-    new_decl->type = DECL_TYPE;
+    new_decl->type = AST_DECL_TYPE;
     new_decl->_type = new_type;
     new_decl->token = template->token;
 
@@ -2124,7 +2124,7 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
     dst->resolved_type = ast_substitute_type(mod, src->resolved_type, params, args);
 
     switch (src->type) {
-        case EXPR_INTRINSIC:
+        case AST_EXPR_INTRINSIC:
             if (src->intrinsic.is_arg_type) {
                 dst->intrinsic.type = ast_substitute_type(mod, src->intrinsic.type, params, args);
             } else {
@@ -2141,7 +2141,7 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
             }
             break;
 
-        case EXPR_CALL:
+        case AST_EXPR_CALL:
             dst->call.callee = clone_ast_expr(mod, src->call.callee, params, args);
             dst->call.args = exprs_array_init(mod->arena);
             for (size_t i = 0; i < src->call.args.len; i++) {
@@ -2150,25 +2150,25 @@ static Expr *clone_ast_expr(Module *mod, Expr *src, genparam_array params, typer
             }
             break;
 
-        case EXPR_UNARY:
+        case AST_EXPR_UNARY:
             dst->unary.operand = clone_ast_expr(mod, src->unary.operand, params, args);
             break;
 
-        case EXPR_BINARY:
+        case AST_EXPR_BINARY:
             dst->binary.left = clone_ast_expr(mod, src->binary.left, params, args);
             dst->binary.right = clone_ast_expr(mod, src->binary.right, params, args);
             break;
 
-        case EXPR_MEMBER:
+        case AST_EXPR_MEMBER:
             dst->member.base = clone_ast_expr(mod, src->member.base, params, args);
             break;
 
-        case EXPR_INDEX:
+        case AST_EXPR_INDEX:
             dst->index.base = clone_ast_expr(mod, src->index.base, params, args);
             dst->index.index = clone_ast_expr(mod, src->index.index, params, args);
             break;
 
-        case EXPR_CAST:
+        case AST_EXPR_CAST:
             dst->cast.expr = clone_ast_expr(mod, src->cast.expr, params, args);
             dst->cast.to = ast_substitute_type(mod, src->cast.to, params, args);
             break;
@@ -2186,19 +2186,19 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
     *dst = *src;
 
     switch (src->type) {
-        case STMT_EXPR:
+        case AST_STMT_EXPR:
             dst->expr = clone_ast_expr(mod, src->expr, params, args);
             break;
 
-        case STMT_DEFER:
+        case AST_STMT_DEFER:
             dst->defer.deferred = clone_ast_stmt(mod, src->defer.deferred, params, args);
             break;
 
-        case STMT_RETURN:
+        case AST_STMT_RETURN:
             dst->_return.value = clone_ast_expr(mod, src->_return.value, params, args);
             break;
 
-        case STMT_BLOCK:
+        case AST_STMT_BLOCK:
             dst->block.stmts = stmts_array_init(mod->arena);
             for (size_t i = 0; i < src->block.stmts.len; i++) {
                 stmts_array_push(&dst->block.stmts, 
@@ -2206,32 +2206,32 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
             }
             break;
 
-        case STMT_IF:
+        case AST_STMT_IF:
             dst->_if.cond = clone_ast_expr(mod, src->_if.cond, params, args);
             dst->_if.then = clone_ast_stmt(mod, src->_if.then, params, args);
             dst->_if._else = clone_ast_stmt(mod, src->_if._else, params, args);
             break;
 
-        case STMT_WHILE:
+        case AST_STMT_WHILE:
             dst->_while.body = clone_ast_stmt(mod, src->_while.body, params, args);
             dst->_while.cond = clone_ast_expr(mod, src->_while.cond, params, args);
             break;
 
-        case STMT_FOR:
+        case AST_STMT_FOR:
             dst->_for.body = clone_ast_stmt(mod, src->_for.body, params, args);
             dst->_for.cond = clone_ast_expr(mod, src->_for.cond, params, args);
             dst->_for.init = clone_ast_stmt(mod, src->_for.init, params, args);
             dst->_for.post = clone_ast_expr(mod, src->_for.post, params, args);
             break;
 
-        case STMT_VAR:
+        case AST_STMT_VAR:
             dst->var = arena_calloc(mod->arena, sizeof(VarDecl));
             *dst->var = *src->var;
             dst->var->init = clone_ast_expr(mod, src->var->init, params, args);
             dst->var->type = ast_substitute_type(mod, src->var->type, params, args);
             break;
 
-        case STMT_MATCH:
+        case AST_STMT_MATCH:
             dst->match.expr = clone_ast_expr(mod, src->match.expr, params, args);
             dst->match.cases = case_array_init(mod->arena);
             for (size_t i = 0; i < src->match.cases.len; i++) {
@@ -2258,7 +2258,7 @@ static Stmt *clone_ast_stmt(Module *mod, Stmt *src, genparam_array params, typer
 static bool concrete_fn_exists(Module *mod, String mangled_name) {
     for (size_t i = 0; i < mod->decls.len; i++) {
         Decl *decl = mod->decls.data[i];
-        if (decl->type == DECL_FN && string_eq(decl->fn->name, mangled_name)) {
+        if (decl->type == AST_DECL_FN && string_eq(decl->fn->name, mangled_name)) {
             return true;
         }
     }
@@ -2333,9 +2333,9 @@ static void scan_expr(Module *mod, Expr *expr) {
         case EXPR_SPECIALISE: {
             String base_name;
 
-            if (expr->specialise.expr->type == EXPR_IDENT) {
+            if (expr->specialise.expr->type == AST_EXPR_IDENT) {
                 base_name = expr->specialise.expr->ident.name;
-            } else if (expr->specialise.expr->type == EXPR_PATH) {
+            } else if (expr->specialise.expr->type == AST_EXPR_PATH) {
                 if (expr->specialise.expr->path.components.len == 0) break;
                 base_name = expr->specialise.expr->path.components.data[expr->specialise.expr->path.components.len - 1];
             } else {
@@ -2349,9 +2349,9 @@ static void scan_expr(Module *mod, Expr *expr) {
             if (!concrete_fn_exists(mod, mangled_name)) {
                 FnDecl *template = NULL;
                 
-                if(expr->specialise.expr->type == EXPR_IDENT) {
+                if(expr->specialise.expr->type == AST_EXPR_IDENT) {
                     template = find_generic_fn_template(mod, base_name);
-                } else if (expr->specialise.expr->type == EXPR_PATH) {
+                } else if (expr->specialise.expr->type == AST_EXPR_PATH) {
                     template = find_generic_fn_template_by_path(mod, expr->specialise.expr->path.components);
                 }
 
@@ -2380,7 +2380,7 @@ static void scan_expr(Module *mod, Expr *expr) {
                 }
 
                 Decl *new_decl = arena_calloc(mod->arena, sizeof(Decl));
-                new_decl->type = DECL_FN;
+                new_decl->type = AST_DECL_FN;
                 new_decl->fn = concrete_fn;
                 new_decl->token = template->token;
                 
@@ -2406,43 +2406,43 @@ static void scan_expr(Module *mod, Expr *expr) {
                 decls_array_push(&mod->decls, new_decl);
             }
 
-            expr->type = EXPR_IDENT;
+            expr->type = AST_EXPR_IDENT;
             expr->ident.name = mangled_name;
             break;
         }
 
-        case EXPR_CALL:
+        case AST_EXPR_CALL:
             scan_expr(mod, expr->call.callee);
             for (size_t i = 0; i < expr->call.args.len; i++) {
                 scan_expr(mod, expr->call.args.data[i]);
             }
             break;
 
-        case EXPR_UNARY:
+        case AST_EXPR_UNARY:
             scan_expr(mod, expr->unary.operand);
             break;
 
-        case EXPR_BINARY:
+        case AST_EXPR_BINARY:
             scan_expr(mod, expr->binary.left);
             scan_expr(mod, expr->binary.right);
             break;
 
-        case EXPR_INTRINSIC:
+        case AST_EXPR_INTRINSIC:
             if (!expr->intrinsic.is_arg_type) {
                 scan_expr(mod, expr->intrinsic.expr);
             }
             break;
 
-        case EXPR_INDEX:
+        case AST_EXPR_INDEX:
             scan_expr(mod, expr->index.base);
             scan_expr(mod, expr->index.index);
             break;
 
-        case EXPR_MEMBER:
+        case AST_EXPR_MEMBER:
             scan_expr(mod, expr->member.base);
             break;
 
-        case EXPR_CAST:
+        case AST_EXPR_CAST:
             scan_expr(mod, expr->cast.expr);
             break;
 
@@ -2454,36 +2454,36 @@ static void scan_stmt(Module *mod, Stmt *stmt) {
     if (!stmt) return;
 
     switch (stmt->type) {
-        case STMT_EXPR: {
+        case AST_STMT_EXPR: {
             scan_expr(mod, stmt->expr);
             break;
         }
             
-        case STMT_BLOCK: {
+        case AST_STMT_BLOCK: {
             for (size_t i = 0; i < stmt->block.stmts.len; i++) {
                 scan_stmt(mod, stmt->block.stmts.data[i]);
             }
             break;
         }
             
-        case STMT_RETURN: {
+        case AST_STMT_RETURN: {
             scan_expr(mod, stmt->_return.value);
             break;
         }
             
-        case STMT_DEFER: {
+        case AST_STMT_DEFER: {
             scan_stmt(mod, stmt->defer.deferred);
             break;
         }
             
-        case STMT_IF: {
+        case AST_STMT_IF: {
             scan_expr(mod, stmt->_if.cond);
             scan_stmt(mod, stmt->_if.then);
             scan_stmt(mod, stmt->_if._else);
             break;
         }
 
-        case STMT_VAR: {
+        case AST_STMT_VAR: {
             scan_expr(mod, stmt->var->init);
 
             if (stmt->var->type && stmt->var->type->type == TYPEREF_NAMED) {
@@ -2495,7 +2495,7 @@ static void scan_stmt(Module *mod, Stmt *stmt) {
             break;
         }
 
-        // ... add STMT_FOR, STMT_WHILE, STMT_MATCH matching structures
+        // ... add AST_STMT_FOR, AST_STMT_WHILE, AST_STMT_MATCH matching structures
         default: break;
     }
 }
@@ -2505,7 +2505,7 @@ void ast_pass_monomorphise(Module *mod) {
         Decl *decl = mod->decls.data[i];
         
         // only look inside function bodies that are NOT themselves generic templates
-        if (decl->type == DECL_FN && decl->fn->generic_params.len == 0) {
+        if (decl->type == AST_DECL_FN && decl->fn->generic_params.len == 0) {
             scan_stmt(mod, decl->fn->body);
         }
     }

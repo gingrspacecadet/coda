@@ -135,19 +135,19 @@ INSTANTIATE(Param, param, ARRAY_TEMPLATE)
 struct Expr {
     enum {
         EXPR_LIT,
-        EXPR_IDENT,
-        EXPR_PATH,
-        EXPR_UNARY,
-        EXPR_BINARY,
-        EXPR_CALL,
-        EXPR_INDEX,
-        EXPR_MEMBER,
-        EXPR_CAST,
-        EXPR_INTRINSIC,
-        EXPR_BUBBLE,
-        EXPR_INIT,
+        AST_EXPR_IDENT,
+        AST_EXPR_PATH,
+        AST_EXPR_UNARY,
+        AST_EXPR_BINARY,
+        AST_EXPR_CALL,
+        AST_EXPR_INDEX,
+        AST_EXPR_MEMBER,
+        AST_EXPR_CAST,
+        AST_EXPR_INTRINSIC,
+        AST_EXPR_BUBBLE,
+        AST_EXPR_INIT,
         EXPR_SPECIALISE,
-        EXPR_LAMBDA,
+        AST_EXPR_LAMBDA,
     } type;
 
     union {
@@ -220,16 +220,16 @@ INSTANTIATE(Case, case, ARRAY_TEMPLATE)
 
 struct Stmt {
     enum {
-        STMT_VAR,
-        STMT_EXPR,
-        STMT_BLOCK,
-        STMT_RETURN,
-        STMT_IF,
-        STMT_FOR,
-        STMT_WHILE,
+        AST_STMT_VAR,
+        AST_STMT_EXPR,
+        AST_STMT_BLOCK,
+        AST_STMT_RETURN,
+        AST_STMT_IF,
+        AST_STMT_FOR,
+        AST_STMT_WHILE,
         STMT_UNSAFE,
-        STMT_DEFER,
-        STMT_MATCH,
+        AST_STMT_DEFER,
+        AST_STMT_MATCH,
     } type;
 
     union {
@@ -307,9 +307,9 @@ struct FnDecl {
 
 struct Decl {
     enum {
-        DECL_FN,
-        DECL_VAR,
-        DECL_TYPE,
+        AST_DECL_FN,
+        AST_DECL_VAR,
+        AST_DECL_TYPE,
         DECL_NAMESPACE,
     } type;
 

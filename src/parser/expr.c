@@ -5,147 +5,147 @@ int binary_binding_power(TokenType type, bool *right_assoc, AstBinaryOp *op) {
 
     switch (type) {
     case TK_STAR:
-        *op = BINARY_MUL;
+        *op = AST_BINARY_MUL;
         return 60;
 
     case TK_SLASH:
-        *op = BINARY_DIV;
+        *op = AST_BINARY_DIV;
         return 60;
 
     case TK_PERCENT:
-        *op = BINARY_MOD;
+        *op = AST_BINARY_MOD;
         return 60;
 
     case TK_PLUS:
-        *op = BINARY_ADD;
+        *op = AST_BINARY_ADD;
         return 50;
 
     case TK_MINUS:
-        *op = BINARY_SUB;
+        *op = AST_BINARY_SUB;
         return 50;
 
     case TK_SHL:
-        *op = BINARY_SHL;
+        *op = AST_BINARY_SHL;
         return 45;
 
     case TK_SHR:
-        *op = BINARY_SHR;
+        *op = AST_BINARY_SHR;
         return 45;
 
     case TK_LT:
-        *op = BINARY_LT;
+        *op = AST_BINARY_LT;
         return 40;
 
     case TK_LT_EQ:
-        *op = BINARY_LTE;
+        *op = AST_BINARY_LTE;
         return 40;
 
     case TK_GT:
-        *op = BINARY_GT;
+        *op = AST_BINARY_GT;
         return 40;
 
     case TK_GT_EQ:
-        *op = BINARY_GTE;
+        *op = AST_BINARY_GTE;
         return 40;
 
     case TK_EQ_EQ:
-        *op = BINARY_EQUAL;
+        *op = AST_BINARY_EQUAL;
         return 35;
 
     case TK_BANG_EQ:
-        *op = BINARY_NOT_EQUAL;
+        *op = AST_BINARY_NOT_EQUAL;
         return 35;
 
     case TK_AMP:
-        *op = BINARY_BIT_AND;
+        *op = AST_BINARY_BIT_AND;
         return 32;
 
     case TK_CARET:
-        *op = BINARY_BIT_XOR;
+        *op = AST_BINARY_BIT_XOR;
         return 28;
 
     case TK_PIPE:
-        *op = BINARY_BIT_OR;
+        *op = AST_BINARY_BIT_OR;
         return 24;
 
     case TK_BANG_AMP:
-        *op = BINARY_NAND;
+        *op = AST_BINARY_NAND;
         return 24;
 
     case TK_TILDE_PIPE:
-        *op = BINARY_NOR;
+        *op = AST_BINARY_NOR;
         return 24;
 
     case TK_AMP_AMP:
-        *op = BINARY_LOGICAL_AND;
+        *op = AST_BINARY_LOGICAL_AND;
         return 15;
 
     case TK_PIPE_PIPE:
-        *op = BINARY_LOGICAL_OR;
+        *op = AST_BINARY_LOGICAL_OR;
         return 10;
 
     case TK_EQ:
-        *op = BINARY_ASSIGN;
+        *op = AST_BINARY_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_PLUS_EQ:
-        *op = BINARY_ADD_ASSIGN;
+        *op = AST_BINARY_ADD_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_MINUS_EQ:
-        *op = BINARY_SUB_ASSIGN;
+        *op = AST_BINARY_SUB_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_STAR_EQ:
-        *op = BINARY_MUL_ASSIGN;
+        *op = AST_BINARY_MUL_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_SLASH_EQ:
-        *op = BINARY_DIV_ASSIGN;
+        *op = AST_BINARY_DIV_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_PERCENT_EQ:
-        *op = BINARY_MOD_ASSIGN;
+        *op = AST_BINARY_MOD_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_AMP_EQ:
-        *op = BINARY_BIT_AND_ASSIGN;
+        *op = AST_BINARY_BIT_AND_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_PIPE_EQ:
-        *op = BINARY_BIT_OR_ASSIGN;
+        *op = AST_BINARY_BIT_OR_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_CARET_EQ:
-        *op = BINARY_BIT_XOR_ASSIGN;
+        *op = AST_BINARY_BIT_XOR_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_SHL_EQ:
-        *op = BINARY_SHL_ASSIGN;
+        *op = AST_BINARY_SHL_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_SHR_EQ:
-        *op = BINARY_SHR_ASSIGN;
+        *op = AST_BINARY_SHR_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_BANG_AMP_EQ:
-        *op = BINARY_NAND_ASSIGN;
+        *op = AST_BINARY_NAND_ASSIGN;
         *right_assoc = true;
         return 5;
 
     case TK_TILDE_PIPE_EQ:
-        *op = BINARY_NOR_ASSIGN;
+        *op = AST_BINARY_NOR_ASSIGN;
         *right_assoc = true;
         return 5;
 
@@ -158,34 +158,34 @@ AstExpr *parse_literal(Parser *p) {
     AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = p->current.span;
-    expr->kind = EXPR_LITERAL;
+    expr->kind = AST_EXPR_LITERAL;
 
     switch (p->current.type) {
     case TK_NUMBER:
         expr->lit.literal.kind = number_is_float(span_to_string(p->current.span))
-            ? LIT_FLOAT
-            : LIT_INTEGER;
+            ? AST_LIT_FLOAT
+            : AST_LIT_INTEGER;
         break;
 
     case TK_STRING:
-        expr->lit.literal.kind = LIT_STRING;
+        expr->lit.literal.kind = AST_LIT_STRING;
         break;
 
     case TK_CHAR:
-        expr->lit.literal.kind = LIT_CHAR;
+        expr->lit.literal.kind = AST_LIT_CHAR;
         break;
 
     case TK_KW_TRUE:
     case TK_KW_FALSE:
-        expr->lit.literal.kind = LIT_BOOL;
+        expr->lit.literal.kind = AST_LIT_BOOL;
         break;
 
     case TK_KW_NULL:
-        expr->lit.literal.kind = LIT_NULL;
+        expr->lit.literal.kind = AST_LIT_NULL;
         break;
 
     default:
-        expr->kind = EXPR_ERROR;
+        expr->kind = AST_EXPR_ERROR;
         return expr;
     }
 
@@ -203,10 +203,10 @@ AstExpr *parse_identifier_or_path(Parser *p) {
     Path path = parse_path(p);
 
     if (path.parts.len == 1) {
-        expr->kind = EXPR_IDENT;
-        expr->ident.name = (AstName){.kind = NAME_IDENT, .ident = *(String *)array_at(&path.parts, 0)};
+        expr->kind = AST_EXPR_IDENT;
+        expr->ident.name = (AstName){.kind = AST_NAME_IDENT, .ident = *(String *)array_at(&path.parts, 0)};
     } else {
-        expr->kind = EXPR_PATH;
+        expr->kind = AST_EXPR_PATH;
         expr->path.path = path;
     }
 
@@ -216,27 +216,27 @@ AstExpr *parse_identifier_or_path(Parser *p) {
 bool token_to_unary(TokenType type, AstUnaryOp *op) {
     switch (type) {
     case TK_PLUS:
-        *op = UNARY_POS;
+        *op = AST_UNARY_POS;
         return true;
 
     case TK_MINUS:
-        *op = UNARY_NEG;
+        *op = AST_UNARY_NEG;
         return true;
 
     case TK_BANG:
-        *op = UNARY_NOT;
+        *op = AST_UNARY_NOT;
         return true;
 
     case TK_TILDE:
-        *op = UNARY_BIT_NOT;
+        *op = AST_UNARY_BIT_NOT;
         return true;
 
     case TK_STAR:
-        *op = UNARY_DEREF;
+        *op = AST_UNARY_DEREF;
         return true;
 
     case TK_AMP:
-        *op = UNARY_ADDRESS;
+        *op = AST_UNARY_ADDRESS;
         return true;
 
     default:
@@ -277,11 +277,11 @@ AstExpr *parse_expression_prefix(Parser *p) {
 
         AstType *type = parse_type(p);
 
-        if (type->kind != TYPE_ERROR && match(p, TK_RPAREN)) {
+        if (type->kind != AST_TYPE_ERROR && match(p, TK_RPAREN)) {
             AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
             expr->span = start.span;
-            expr->kind = EXPR_CAST;
+            expr->kind = AST_EXPR_CAST;
             expr->cast.type = type;
             expr->cast.operand = parse_expression_bp(p, 70);
 
@@ -311,7 +311,7 @@ AstExpr *parse_expression_prefix(Parser *p) {
         AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
         expr->span = start.span;
-        expr->kind = EXPR_UNARY;
+        expr->kind = AST_EXPR_UNARY;
         expr->unary.op = op;
         expr->unary.operand = parse_expression_bp(p, 80);
 
@@ -325,7 +325,7 @@ AstExpr *parse_expression_prefix(Parser *p) {
 
     AstExpr *error = arena_calloc(p->arena, sizeof(*error));
     error->span = p->current.span;
-    error->kind = EXPR_ERROR;
+    error->kind = AST_EXPR_ERROR;
 
     if (!at(p, TK_EOF))
         advance(p);
@@ -341,7 +341,7 @@ AstExpr *parse_hash_expression(Parser *p) {
         AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
         expr->span = start.span;
-        expr->kind = EXPR_SPLICE;
+        expr->kind = AST_EXPR_SPLICE;
         expr->splice.expression = parse_expression(p);
 
         expect(p, TK_RPAREN);
@@ -352,7 +352,7 @@ AstExpr *parse_hash_expression(Parser *p) {
     AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
-    expr->kind = EXPR_INTRINSIC;
+    expr->kind = AST_EXPR_INTRINSIC;
     expr->intrinsic.name = parse_path(p);
     expr->intrinsic.args = array_create(
         p->arena,
@@ -383,7 +383,7 @@ AstExpr *parse_init_expression(Parser *p) {
     AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
-    expr->kind = EXPR_INIT;
+    expr->kind = AST_EXPR_INIT;
     expr->init.fields = array_create(
         p->arena,
         sizeof(AstInitField)
@@ -431,7 +431,7 @@ AstExpr *parse_lambda_expression(Parser *p) {
     AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
     expr->span = start.span;
-    expr->kind = EXPR_LAMBDA;
+    expr->kind = AST_EXPR_LAMBDA;
 
     expr->lambda.generics = array_create(p->arena, sizeof(AstGenericParam));
 
@@ -476,7 +476,7 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
     for (;;) {
         AstType *type = parse_type(p);
 
-        if (type->kind == TYPE_ERROR) {
+        if (type->kind == AST_TYPE_ERROR) {
             restore(p, cp);
             return false;
         }
@@ -507,7 +507,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             AstExpr *call = arena_calloc(p->arena, sizeof(*call));
 
             call->span = left->span;
-            call->kind = EXPR_CALL;
+            call->kind = AST_EXPR_CALL;
             call->call.callee = left;
             call->call.generic_args =
                 array_create(p->arena, sizeof(AstType *));
@@ -539,7 +539,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             AstExpr *call = arena_calloc(p->arena, sizeof(*call));
 
             call->span = left->span;
-            call->kind = EXPR_CALL;
+            call->kind = AST_EXPR_CALL;
             call->call.callee = left;
             call->call.generic_args = generic_args;
             call->call.args =
@@ -565,7 +565,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             AstExpr *index = arena_calloc(p->arena, sizeof(*index));
 
             index->span = p->previous.span;
-            index->kind = EXPR_INDEX;
+            index->kind = AST_EXPR_INDEX;
             index->index.object = left;
             index->index.index = parse_expression(p);
 
@@ -579,7 +579,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             AstExpr *member = arena_calloc(p->arena, sizeof(*member));
 
             member->span = p->previous.span;
-            member->kind = EXPR_MEMBER;
+            member->kind = AST_EXPR_MEMBER;
             member->member.object = left;
             member->member.member = parse_name(p);
 
@@ -591,7 +591,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             AstExpr *bubble = arena_calloc(p->arena, sizeof(*bubble));
 
             bubble->span = p->previous.span;
-            bubble->kind = EXPR_BUBBLE;
+            bubble->kind = AST_EXPR_BUBBLE;
             bubble->bubble.operand = left;
 
             left = bubble;
@@ -626,7 +626,7 @@ AstExpr *parse_expression_bp(Parser *p, int min_bp) {
         AstExpr *binary = arena_calloc(p->arena, sizeof(*binary));
 
         binary->span = left->span;
-        binary->kind = EXPR_BINARY;
+        binary->kind = AST_EXPR_BINARY;
         binary->binary.op = op;
         binary->binary.left = left;
         binary->binary.right = right;
