@@ -1,0 +1,560 @@
+
+module =
+    "module", path, ";",
+    { declaration }
+;
+
+declaration =
+    { attribute },
+    (
+        include_decl
+      | variable_decl
+      | type_decl
+      | constraint_decl
+      | function_decl
+    )
+;
+
+attribute =
+    "@", identifier,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
+
+include_decl =
+    "include",
+    path,
+    [ "=", identifier ],
+    ";"
+;
+
+variable_decl =
+    type,
+    identifier,
+    [ "=", expression ],
+    ";"
+;
+
+type_decl =
+    "type",
+    identifier,
+    [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
+    [ "=", type ],
+    ";"
+;
+
+constraint_decl =
+    "constraint",
+    identifier,
+    [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
+    [ "=", constraint ],
+    ";"
+;
+
+function_decl =
+    [ "$" ],
+    "fn",
+    type,
+    identifier,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    "{",
+    { statement },
+    "}"
+;
+
+parameter_spec =
+    type,
+    identifier
+;
+
+generic_decl_item =
+    "<",
+    generic_field,
+    { ",", generic_field },
+    ">"
+;
+
+generic_field =
+    identifier,
+    [
+        ":",
+        constraint,
+    ]
+;
+
+statement =
+    [ "$" ],
+    (
+        expr_stmt
+      | declaration
+      | block_stmt
+      | if_stmt
+      | for_stmt
+      | while_stmt
+      | break_stmt
+      | continue_stmt
+      | match_stmt
+      | defer_stmt
+    ),
+    ";"
+;
+
+expr_stmt =
+    expression
+;
+
+block_stmt =
+    "{",
+    { statement },
+    "}"
+;
+
+if_stmt =
+    "if",
+    "(", expression, ")",
+    statement,
+    [
+        "else",
+        statement
+    ]
+;
+
+for_stmt =
+    "for",
+    "(",
+    statement,
+    expression, ";",
+    expression,
+    ")",
+    statement
+;
+
+while_stmt =
+    "while",
+    "(", expression, ")",
+    statement
+;
+
+break_stmt =
+    "break",
+    [ expression ]
+;
+
+continue_stmt =
+    "break",
+    [ expression ]
+;
+
+match_stmt =
+    "match",
+    "(", expression, ")",
+    "{",
+    { match_part },
+    "}",
+;
+
+match_part =
+    type,
+    [ identifier ],
+    block_stmt,
+;
+
+defer_stmt =
+    "defer",
+    [ expression ]
+;
+
+
+expression =
+        identifier
+      | literal
+      | initializer
+      | parenthesised_expr
+      | unary_expr
+      | binary_expr
+      | assignment_expr
+      | conditional_expr
+      | call_expr
+      | index_expr
+      | member_expr
+      | cast_expr
+      | deref_expr
+      | intrinsic_expr
+      | bubble_expr
+      | lambda_expr
+      | code_expr
+      | splice_expr
+      | type
+      | constraint
+;
+
+identifier = ? defined in tokenisation ?;
+
+literal =
+        null_literal
+      | integer_literal
+      | float_literal
+      | boolean_literal
+      | char_literal
+      | string_literal
+;
+
+null_literal = ? defined in tokenisation ?;
+
+integer_literal = ? defined in tokenisation ?;
+
+float_literal = ? defined in tokenisation ?;
+
+boolean_literal = ? defined in tokenisation ?;
+
+char_literal = ? defined in tokenisation ?;
+
+string_literal = ? defined in tokenisation ?;
+
+initializer =
+    "{",
+    { init_field },
+    "}"
+;
+
+init_field =
+    [
+        ".",
+        ( 
+            identifier
+            |
+            "[", expression, "]"
+        ),
+        "="
+    ],
+    expression
+;
+
+parenthesised_expr =
+    "(", expression, ")"
+;
+
+unary_expr =
+    unary_op,
+    expression
+;
+
+unary_op =
+        "+" | "-"
+      | "~"
+      | "!"
+      | "&"
+;
+
+binary_expr =
+    expression,
+    binary_op,
+    expression
+;
+
+binary_op =
+        "+" | "-" | "*" | "/" | "%"
+      | "&" | "|" | "^" | "~&" | "~|" | "<<" | ">>" | ">>>"
+      | "&&" | "||" | "!&" | "!|"
+      | "==" | "!=" | "<" | "<=" | ">" | ">="
+;
+
+assignment_expr =
+    lvalue,
+    assignment_op,
+    expression
+;
+
+assignment_op =
+        "="
+      | "+=" | "-=" | "*=" | "/=" | "%="
+      | "&=" | "|=" | "^=" | "~&=" | "~|=" | "<<=" | ">>=" | ">>>="
+      | "&&=" | "||=" | "!&=" | "!|="
+;
+
+lvalue =
+        identifier
+      | member_expr
+      | index_expr
+      | deref_expr
+;
+
+conditional_expr =
+    expression,
+    "?",
+    expression,
+    ":",
+    expression
+;
+
+call_expr =
+    expression,
+    "(",
+    [
+        expression,
+        { ",", expression }
+    ],
+    ")"
+;
+
+index_expr =
+    expression,
+    "[",
+    expression,
+    "]"
+;
+
+member_expr =
+    expression,
+    ".",
+    identifier
+;
+
+cast_expr =
+    "(",
+    type,
+    ")",
+    expression,
+;
+
+deref_expr =
+    "*",
+    expression
+;
+
+intrinsic_expr =
+    "#",
+    path,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
+
+bubble_expr =
+    expression,
+    "?"
+;
+
+lambda_expr =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    "{",
+    { statement },
+    "}"
+;
+
+code_expr =
+    "#",
+    "{",
+    ? tbd ?,
+    "}"
+;
+
+splice_expr =
+    "#",
+    "(",
+    expression,
+    ")"
+;
+
+type =
+        type_literal
+      | identifier
+      | intrinsic_type
+      | generic_type
+      | mutable_type
+      | pointer_type
+      | array_type
+      | function_type
+      | struct_type
+      | union_type
+      | enum_type
+      | sum_type
+;
+
+type_literal =
+        "none"
+      | "null"
+      | "bool"
+      | "int8" | "int16" | "int32" | "int64"
+      | "uint8" | "uint16" | "uint32" | "uint64"
+      | "ssize" | "usize"
+      | "float16" | "float32" | "float64"
+      | "any"
+;
+
+intrinsic_type =
+    "#",
+    path
+;
+
+generic_type =
+    type,
+    "<",
+    type,
+    { ",", type },
+    ">"
+;
+
+mutable_type =
+    "mut",
+    type
+;
+
+pointer_type =
+    type,
+    [ "mut" ],
+    "*",
+    [ "?" ]
+;
+
+array_type =
+    type,
+    [ "mut" ],
+    "[",
+    [ expression ],
+    "]"
+;
+
+function_type =
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+;
+
+struct_type =
+    "struct",
+    [ ":", constraint ],
+    "{",
+    { struct_member },
+    "}"
+;
+
+struct_member =
+    { attribute },
+    type,
+    identifier,
+    ";"
+;
+
+union_type =
+    "union",
+    "{",
+    { union_member },
+    "}"
+;
+
+union_member =
+    { attribute },
+    type,
+    identifier,
+    ";"
+;
+
+enum_type =
+    "enum",
+    [ ":", type ],
+    "{",
+    { enum_member },
+    "}"
+;
+
+enum_member =
+    identifier,
+    [ "=", expression ]
+;
+
+sum_type =
+    type,
+    "|", type,
+    { "|", type}
+;
+
+constraint =
+    (
+        identifier,
+        [
+            "<",
+            ( type | constraint ),
+            {
+                ",",
+                ( type | constraint)
+            },
+            ">"
+        ]
+    ) | (
+        "{",
+        {
+            constraint_member
+          | constraint_method
+          | ( expression, ";" )
+        },
+        "}"
+    )
+;
+
+constraint_member =
+    type,
+    identifier,
+    ";"
+;
+
+constraint_method =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    ";"
+;
+
+path =
+    identifier,
+    { "::", identifier }
+;
