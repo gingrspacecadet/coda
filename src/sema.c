@@ -1,206 +1,123 @@
 #include "sema.h"
 
-static uint64_t hash_string(String s) {
-    uint64_t hash = UINT64_C(14695981039346656037);
-
-    for (size_t i = 0; i < s.length; ++i) {
-        hash ^= (unsigned char)s.data[i];
-        hash *= UINT64_C(1099511628211);
-    }
-
-    return hash;
+//! TODO: hash table / binary lookup
+//! TODO: report duplicated symbols
+void scope_insert(Scope *scope, Symbol sym) {
+    array_push(&scope->syms, &sym);
 }
 
-static void scope_init(Sema *sema, Scope *scope, size_t cap) {
-    scope->cap = cap;
-    scope->len = 0;
-
-    scope->entries = arena_calloc(sema->arena, sizeof(*scope->entries) * cap);
+Symbol *scope_lookup(Scope *scope, String name) {
+    return NULL;
 }
 
-static bool scope_grow(Sema *sema, Scope *scope) {
-    size_t old_cap = scope->cap;
-    size_t new_cap = old_cap ? old_cap * 2 : 64;
+Symbol *sema_lookup(Sema *sema, String name) {
+    for (size_t i = sema->scopes.len; i > 0; --i) {
+        Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
+        Symbol *symbol = scope_lookup(scope, name);
 
-    ScopeEntry *old_entries = scope->entries;
-
-    scope->entries = arena_calloc(sema->arena, sizeof(*scope->entries) * new_cap);
-
-    scope->cap = new_cap;
-    scope->len = 0;
-
-    for (size_t i = 0; i < old_cap; ++i) {
-        Symbol *symbol = old_entries[i].symbol;
-
-        if (symbol == NULL)
-            continue;
-
-        size_t index = hash_string(symbol->name) % scope->cap;
-
-        while (scope->entries[index].symbol != NULL)
-            index = (index + 1) % scope->cap;
-
-        scope->entries[index].symbol = symbol;
-        scope->len++;
-    }
-
-    return true;
-}
-
-static Symbol *scope_lookup(const Scope *scope, String name) {
-    if (scope->cap == 0)
-        return NULL;
-
-    size_t index = hash_string(name) % scope->cap;
-
-    for (;;) {
-        Symbol *symbol = scope->entries[index].symbol;
-
-        if (symbol == NULL)
-            return NULL;
-
-        if (string_eq(symbol->name, name))
+        if (symbol != NULL)
             return symbol;
+    }
 
-        index = (index + 1) % scope->cap;
+    return scope_lookup(&sema->global_scope, name);
+}
+
+void collect_decls(Sema *sema, Array(AstDecl *) decls) {
+    for (size_t i = 0; i < decls.len; i++) {
+        AstDecl *d = ((AstDecl**)decls.data)[i];
+        
+        Symbol sym = { .decl = d };
+        switch (d->kind) {
+            case AST_DECL_TYPE: {
+                sym.kind = SYMBOL_TYPE;
+                sym.name = d->type.name;
+                break;
+            }
+
+            case AST_DECL_FN: {
+                sym.kind = SYMBOL_FN;
+                sym.name = d->fn.name;
+                break;
+            }
+
+            case AST_DECL_VAR: {
+                sym.kind = SYMBOL_GLOBAL;
+                sym.name = d->var.name;
+                break;
+            }
+
+            case AST_DECL_CONSTRAINT: {
+                sym.kind = SYMBOL_CONSTRAINT;
+                sym.name = d->constraint.name;
+                break;
+            }
+
+            // includes are managed later, ignore for now
+            case AST_DECL_INCLUDE: {
+                break;
+            }
+
+            //! TODO: report internal error
+            default: {
+                break;
+            }
+        }
+        scope_insert(&sema->global_scope, sym);
     }
 }
 
-static bool scope_insert(Sema *sema, Scope *scope, Symbol *symbol) {
-    if (scope->cap == 0)
-        scope_init(sema, scope, 64);
+HirType *sema_type(Sema *sema, AstType *ast);
+HirExpr *sema_expr(Sema *sema, AstExpr *ast);
+HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
+void sema_fn_decl(Sema *sema, AstFnDecl *ast);
+void sema_type_decl(Sema *sema, AstTypeDecl *ast);
+void sema_var_decl(Sema *sema, AstVarDecl *ast);
+void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
+void sema_include_decl(Sema *sema, AstIncludeDecl *ast);
 
-    if ((scope->len + 1) * 10 >= scope->cap * 7)
-        scope_grow(sema, scope);
+void sema_decl(Sema *sema, AstDecl *ast) {
+    switch (ast->kind) {
+        case AST_DECL_FN:
+            sema_fn_decl(sema, &ast->fn);
+            break;
 
-    size_t index = hash_string(symbol->name) % scope->cap;
+        case AST_DECL_TYPE:
+            sema_type_decl(sema, &ast->type);
+            break;
 
-    while (scope->entries[index].symbol != NULL) {
-        Symbol *existing = scope->entries[index].symbol;
+        case AST_DECL_VAR:
+            sema_var_decl(sema, &ast->var);
+            break;
 
-        if (string_eq(existing->name, symbol->name))
-            return false;
+        case AST_DECL_CONSTRAINT:
+            sema_constraint_decl(sema, &ast->constraint);
+            break;
 
-        index = (index + 1) % scope->cap;
-    }
+        case AST_DECL_INCLUDE:
+            sema_include_decl(sema, &ast->include);
+            break;
 
-    scope->entries[index].symbol = symbol;
-    scope->len++;
+        //! TODO: internal compiler error
 
-    return true;
-}
-
-static Symbol *symbol_create(Sema *sema, SymbolKind kind, String name, AstDecl *decl) {
-    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
-
-    symbol->kind = kind;
-    symbol->name = name;
-    symbol->decl = decl;
-
-    return symbol;
-}
-
-static String decl_name(const AstDecl *decl) {
-    switch (decl->kind) {
-    case AST_DECL_TYPE:
-        if (decl->type.name.kind == AST_NAME_IDENT)
-            return decl->type.name.ident;
-        break;
-
-    case AST_DECL_FN:
-        if (decl->fn.name.kind == AST_NAME_IDENT)
-            return decl->fn.name.ident;
-        break;
-
-    case AST_DECL_VAR:
-        if (decl->var.name.kind == AST_NAME_IDENT)
-            return decl->var.name.ident;
-        break;
-
-    case AST_DECL_CONSTRAINT:
-        if (decl->constraint.name.kind == AST_NAME_IDENT)
-            return decl->constraint.name.ident;
-        break;
-
-    case AST_DECL_INCLUDE:
-    case AST_DECL_ERROR:
-        break;
-    }
-
-    return (String){0};
-}
-
-static SymbolKind decl_symbol_kind(const AstDecl *decl) {
-    switch (decl->kind) {
-    case AST_DECL_TYPE:
-        return SYMBOL_TYPE;
-
-    case AST_DECL_FN:
-        return SYMBOL_FUNCTION;
-
-    case AST_DECL_VAR:
-        return SYMBOL_GLOBAL;
-
-    case AST_DECL_CONSTRAINT:
-        return SYMBOL_CONSTRAINT;
-
-    case AST_DECL_INCLUDE:
-    case AST_DECL_ERROR:
-        return SYMBOL_INVALID;
-    }
-
-    return SYMBOL_INVALID;
-}
-
-static void collect_decl(Sema *sema, AstDecl *decl) {
-    SymbolKind kind = decl_symbol_kind(decl);
-
-    if (kind == SYMBOL_INVALID)
-        return;
-
-    String name = decl_name(decl);
-
-    if (name.length == 0)
-        return;
-
-    Symbol *symbol = symbol_create(sema, kind, name, decl);
-
-    if (!scope_insert(sema, &sema->module_scope, symbol)) {
-        DiagBuilder b = diag_begin(sema->diags, DIAG_ERROR, 2000, decl->span, string_make("Duplicate declaration"));
-
-        diag_finish(&b);
-        return;
-    }
-}
-
-Sema *sema_create(Arena *arena, Diags *diags) {
-    Sema *sema = arena_calloc(arena, sizeof(*sema));
-
-    sema->arena = arena;
-    sema->diags = diags;
-    sema->hir = NULL;
-
-    scope_init(sema, &sema->module_scope, 64);
-
-    return sema;
-}
-
-static void collect_module_symbols(Sema *sema, AstModule *module) {
-    for (size_t i = 0; i < module->decls.len; ++i) {
-        AstDecl **decl = array_at(
-            &module->decls,
-            i
-        );
- 
-        collect_decl(sema, *decl);
+        case AST_DECL_ERROR:
+        default:
+            break;
     }
 }
 
 HirModule *sema_analyse(Sema *sema, AstModule *module) {
-    collect_module_symbols(sema, module);
+    sema->module = module;
+    HirModule *hmod = arena_alloc(sema->arena, sizeof(HirModule));
 
-    /*
-     * HIR construction comes next.
-     */
-    return sema->hir;
+    collect_decls(sema, module->decls);
+
+    for (size_t i = 0; i < module->decls.len; i++) {
+        AstDecl *d = ((AstDecl **)module->decls.data)[i];
+        sema_decl(sema, d);
+    }
+
+    if (diags_has_errors(sema->diags))
+        return NULL;
+
+    return hmod;
 }

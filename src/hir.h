@@ -34,6 +34,9 @@ typedef enum {
     HIR_TYPE_ENUM,
 } HirTypeKind;
 
+//! TODO: built in types
+typedef int BuiltinType;
+
 struct HirType {
     HirTypeKind kind;
     bool mutable;
@@ -252,5 +255,27 @@ struct HirModule {
     Array(HirFunction) functions;
     Array(HirGlobal) globals;
 };
+
+typedef enum {
+    SYMBOL_ERROR,
+    SYMBOL_TYPE,
+    SYMBOL_FN,
+    SYMBOL_GLOBAL,
+    SYMBOL_LOCAL,
+    SYMBOL_PARAMETER,
+    SYMBOL_FIELD,
+    SYMBOL_ENUM_ITEM,
+    SYMBOL_CONSTRAINT,
+} SymbolKind;
+
+struct Symbol {
+    SymbolKind kind;
+    AstDecl *decl;
+    AstName name;
+};
+
+typedef struct {
+    Array(Symbol) syms;
+} Scope;
 
 #endif

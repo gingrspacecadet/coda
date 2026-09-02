@@ -6,7 +6,15 @@
 #include "diag.h"
 #include "arena.h"
 
-typedef struct Sema Sema;
+typedef struct {
+    AstModule *module;
+
+    Array(Scope) scopes;
+    Scope global_scope;
+
+    Diags *diags;
+    Arena *arena;
+} Sema;
 
 Sema *sema_create(Arena *arena, Diags *diags);
 
