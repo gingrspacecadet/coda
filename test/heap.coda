@@ -1,7 +1,7 @@
 module heap;
 
 include std::mem;
-include std::io = io;
+include std::io : io;
 
 @export
 fn int main() {

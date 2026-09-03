@@ -1,8 +1,13 @@
 {
   "name": "coda-lsp",
+  "publisher": "gingrspacecadet",
   "displayName": "coda-lsp",
+  "icon": "icon.png",
   "description": "coda lsp",
   "version": "0.0.1",
+  "repository": {
+    "url": "https://github.com/gingrspacecadet/coda"
+  },
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -45,7 +50,9 @@
     "build:server": "npx tsc -p server/tsconfig.json",
     "build:client": "npx tsc -p client/tsconfig.json",
     "build": "npm run build:server && npm run build:client",
-    "watch": "npx tsc -w -p ."
+    "watch": "npx tsc -w -p .",
+
+    "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
     "typescript": "^5.4.4",
