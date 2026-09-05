@@ -39,7 +39,7 @@ Heap default_heap;
 @export
 fn mut T *allocate<T, A: fn mut uint8 *? alloc(mut A *self, uint64 count)>(uint64 count, mut A *alloc) {
     uint64 total_size = count * $sizeof(T);
-    mut uint8 *? raw = alloc->alloc(total_size);
+    mut uint8 *? raw = alloc.alloc(total_size);
     if (raw == null) {
         // TODO: abort
     }

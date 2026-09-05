@@ -1,0 +1,234 @@
+module std::collections;
+
+// SipHash implementation
+// https://web.archive.org/web/20170327151630/https://131002.net/siphash/siphash.pdf
+// https://github.com/veorq/SipHash/blob/master/siphash.c
+
+// todo: test it and verify that it works
+
+@export
+mut uint64[2] hash_key;
+
+// security parameters
+uint64 C_ROUNDS = 2;
+uint64 D_ROUNDS = 4;
+
+@inline
+fn uint64 rotl(uint64 x, uint64 b) {
+    return (x << b) | (x >> (64 - b));
+}
+
+@inline
+fn uint8[4] uint32_to_uint8_le(uint32 value) {
+    uint8[4] out;
+    out[0] = value & 0xff;
+    out[1] = (value >> 8) & 0xff;
+    out[2] = (value >> 16) & 0xff;
+    out[3] = value >> 24;
+    return out;
+}
+
+@inline
+fn uint8[8] uint64_to_uint8_le(uint64 value) {
+    uint8[8] out;
+    out[0] = value & 0xff;
+    out[1] = (value >> 8) & 0xff;
+    out[2] = (value >> 16) & 0xff;
+    out[3] = (value >> 24) & 0xff;
+    out[4] = (value >> 32) & 0xff;
+    out[5] = (value >> 40) & 0xff;
+    out[6] = (value >> 48) & 0xff;
+    out[7] = value >> 56;
+    return out;
+}
+
+@inline
+fn uint64 uint8_to_uint64_le(uint8[] value) {
+    uint64 out = 0;
+    out |= value[0];
+    out |= value[1] << 8;
+    out |= value[2] << 16;
+    out |= value[3] << 24;
+    out |= value[4] << 32;
+    out |= value[5] << 40;
+    out |= value[6] << 48;
+    out |= value[7] << 56;
+    return out;
+}
+
+@inline
+fn none round(mut uint64[] v) {
+    v[0] += v[1];
+    v[1] = rotl(v[1], 13);
+    v[1] ^= v[0];
+    v[0] = rotl(v[0], 32);
+    v[2] += v[3];
+    v[3] = rotl(v[3], 16);
+    v[3] ^= v[2];
+    v[0] += v[3];
+    v[3] = rotl(v[3], 21);
+    v[3] ^= v[0];
+    v[2] += v[1];
+    v[1] = rotl(v[1], 17);
+    v[1] ^= v[2];
+    v[2] = rotl(v[2], 32);
+}
+
+@export
+fn uint64 hash(uint8[] data) {
+    uint64 k0 = hash_key[0];
+    uint64 k1 = hash_key[1];
+    mut uint64[4] v = {
+        0x736f6d6570736575 ^ k0,
+        0x646f72616e646f6d ^ k1,
+        0x6c7967656e657261 ^ k0,
+        0x7465646279746573 ^ k1,
+    };
+    // this works because floor division
+    usize word_count = data.len / 8;
+    for (mut usize word = 0; word < word_count; word++) {
+        uint64 word = uint8_to_uint64_le(data.view(word * 8, word * 8 + 8));
+        v[3] ^= word;
+        for (mut uint32 i = 0; i < C_ROUNDS; i++) {
+            round(v);
+        }
+        v[0] ^= word;
+    }
+    uint8[] extra = data.view(word_count * 8, data.len);
+    uint64 end = ((uint64)(data.len) & 0xff) << 56;
+    if (extra.len >= 7) {
+        end |= (uint64)extra[6] << 48;
+    }
+    if (extra.len >= 6) {
+        end |= (uint64)extra[5] << 40;
+    }
+    if (extra.len >= 5) {
+        end |= (uint64)extra[4] << 32;
+    }
+    if (extra.len >= 4) {
+        end |= (uint64)extra[3] << 24;
+    }
+    if (extra.len >= 3) {
+        end |= (uint64)extra[2] << 16;
+    }
+    if (extra.len >= 2) {
+        end |= (uint64)extra[1] << 8;
+    }
+    if (extra.len >= 1) {
+        end |= (uint64)extra[0];
+    }
+    v[3] ^= end;
+    for (mut uint32 i = 0; i < C_ROUNDS; i++) {
+        round(v);
+    }
+    v[0] ^= end;
+    v[2] ^= 0xff;
+    for (mut usize i = 0; i < D_ROUNDS; i++) {
+        round(v);
+    }
+    return v[0] ^ v[1] ^ v[2] ^ v[3];
+}
+
+@export
+type HashSetNode<T> = struct {
+    HashSetNode<T>*? next;
+    T value;
+};
+
+@export
+type HashSet<T> = struct {
+    Allocator* allocator;
+    usize len;
+    usize mask;
+    HashSetNode<T>*?[] data;
+};
+
+@export
+fn none HashSet<T>.init<T>(HashSet<T>* this, Allocator* allocator, usize buckets) {
+    buckets = (1 << buckets) + 1;
+    this.allocator = allocator;
+    this.len = 0;
+    this.mask = buckets - 1;
+    this.data.len = buckets;
+    this.data.ptr = allocator.alloc(#sizeof(HashSetNode<T>*?) * buckets);
+    for (mut usize i = 0; i < buckets; i++) {
+        this.data[i] = null;
+    }
+}
+
+@export
+fn bool HashSet<T>.has<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>* node = this.data[bucket];
+    while (node != null) {
+        if (node.value == value) {
+            return true;
+        }
+        node = node.next;
+    }
+    return false;
+}
+
+@export
+fn bool HashSet<T>.add<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>*? node = this.data[bucket];
+    if (node == null) {
+        node = this.allocator.alloc(#sizeof(HashSetNode<T>));
+        node.next = null;
+        node.value = value;
+        this.data[bucket] = node;
+        this.len++;
+        return true;
+    }
+    if (node.value == value) {
+        return false;
+    }
+    HashSetNode<T>* prev = node;
+    node = node.next;
+    while (node != null) {
+        if (node.value == value) {
+            return false;
+        }
+        prev = node;
+        node = node.next;
+    }
+    HashNode<T>* prev = node;
+    node = this.allocator.alloc(#sizeof(HashSetNode<T>));
+    node.next = null;
+    node.value = value;
+    prev.next = node;
+    this.len++;
+    return true;
+}
+
+@export
+fn bool HashSet<T>.delete<T>(HashSet<T>* this, T value) {
+    uint64 hash_value = hash(value);
+    usize bucket = hash_value & this.data.len;
+    HashSetNode<T>*? node = this.data[bucket];
+    if (node == null) {
+        return false;
+    }
+    if (node.value == value) {
+        this.allocator.free(node);
+        this.data[bucket] = null;
+        this.len--;
+        return true;
+    }
+    HashSetNode<T>* prev = node;
+    node = node.next;
+    while (node != null) {
+        if (node.value == value) {
+            prev.next = node.next;
+            this.allocator.free(node);
+            this.len--;
+            return true;
+        }
+        prev = node;
+        node = node.next;
+    }
+    return false;
+}

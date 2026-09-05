@@ -1,0 +1,406 @@
+module std::text;
+
+include std::error = _;
+include std::collections = _;
+include math;
+
+@export
+constraint GenericString = Contiguous<char>;
+
+@export
+type String = List<char>;
+
+@export
+fn none GenericString.to_lower(mut GenericString* this) {
+    #inline(this.map(char.to_lower));
+}
+
+@export
+fn none GenericString.to_upper(mut GenericString* this) {
+    #inline(this.map(char.to_upper));
+}
+
+@export
+fn none GenericString.capitalize(mut GenericString* this) {
+    if (this.len == 0) {
+        return;
+    }
+    this.ptr[0] = this.ptr[0].to_upper();
+}
+
+string BASE_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
+@export
+fn (uint64 | Error::INVALID_NUMBER) GenericString.to_unsigned_with_base(GenericString mut* this, uint8 base) {
+    if (this.len == 0) {
+        // empty
+        return Error::INVALID_NUMBER;
+    }
+    mut usize i;
+    mut uint64 out = 0;
+    for (i = 0; i < this.len; i += 1) {
+        char c = this.ptr[i].to_lower();
+        (usize | none) index = BASE_CHARS.index_of(c);
+        if (#tag_test(index, none)) {
+            // invalid character
+            return Error::INVALID_NUMBER;
+        } else if (index > base) {
+            if (c == 'e') {
+                break;
+            }
+            // invalid character for base
+            return Error::INVALID_NUMBER;
+        } else {
+            if (out == 0) {
+                out = index;
+            } else {
+                out = (out * base) + index;
+            }
+        }
+    }
+    if (i >= this.len) {
+        return out;
+    }
+    char c = this.ptr[i].to_lower();
+    if (c != 'e') {
+        fatal_error("Fatal error: Bug in GenericString.to_unsigned_with_base()");
+    }
+    i += 1;
+    if (i >= this.len) {
+        // nothing after 'e'
+        return Error::INVALID_NUMBER;
+    }
+    mut uint64 exp = 0;
+    for (; i < this.len; i += 1) {
+        char c = this.ptr[i].to_lower();
+        (usize | none) index = BASE_CHARS.index_of(c);
+        if (#tag_test(index, none)) {
+            // invalid character
+            return Error::INVALID_NUMBER;
+        } else if (index > base) {
+            // invalid character for base
+            return Error::INVALID_NUMBER;
+        } else {
+            if (exp == 0) {
+                exp = index;
+            } else {
+                exp = (exp * base) + index;
+            }
+        }
+    }
+    return math::pow(out, exp);
+}
+
+@export
+fn (uint64 | Error::INVALID_NUMBER) GenericString.to_unsigned(GenericString* this) {
+    if (this.len == 0) {
+        // empty
+        return Error::INVALID_NUMBER;
+    }
+    uint8 base = 10;
+    if (this.ptr[0] == '0' && this.len > 1) {
+        char c = this.ptr[1].to_lower();
+        bool found = true;
+        if (c == 'b') {
+            base = 2;
+        } else if (c == 'o') {
+            base = 8;
+        } else if (c == 'd') {
+            base = 10;
+        } else if (c == 'x') {
+            base = 16;
+        } else {
+            found = false;
+        }
+        if (found) {
+            this = this.view(2, this.len);
+        }
+    }
+    return this.to_unsigned_with_base(base);
+}
+
+@export
+fn (int64 | Error::INVALID_NUMBER) GenericString.to_signed_with_base(GenericString mut* this, uint8 base) {
+    if (this.len == 0) {
+        // empty
+        return Error::INVALID_NUMBER;
+    }
+    bool negative = false;
+    if (this.ptr[0] == '+') {
+        this = this.view(1, this.len);
+    } else if (this.ptr[0] == '-') {
+        negative = true;
+        this = this.view(1, this.len);
+    }
+    int64 out = this.to_unsigned();
+    if (negative) {
+        out = -out;
+    }
+    return out;
+}
+
+@export
+fn (int64 | Error::INVALID_NUMBER) GenericString.to_signed(GenericString mut* this) {
+    if (this.len == 0) {
+        // empty
+        return Error::INVALID_NUMBER;
+    }
+    bool negative = false;
+    if (this.ptr[0] == '+') {
+        this = this.view(1, this.len);
+    } else if (this.ptr[0] == '-') {
+        negative = true;
+        this = this.view(1, this.len);
+    }
+    if (this.len == 0) {
+        // nothing after sign
+        return Error::INVALID_NUMBER;
+    }
+    uint8 base = 10;
+    if (this.ptr[0] == '0' && this.len > 1) {
+        char c = this.ptr[1].to_lower();
+        bool found = true;
+        if (c == 'b') {
+            base = 2;
+        } else if (c == 'o') {
+            base = 8;
+        } else if (c == 'd') {
+            base = 10;
+        } else if (c == 'x') {
+            base = 16;
+        } else {
+            found = false;
+        }
+        if (found) {
+            this = this.view(2, this.len);
+        }
+    }
+    int64 out = this.to_unsigned_with_base(base);
+    if (negative) {
+        out = -out;
+    }
+    return out;
+}
+
+type FloatParserOut = struct {
+    float64 out;
+    usize i;
+};
+
+fn (FloatParserOut | Error::INVALID_NUMBER) _parse_float(GenericString* this, uint8 base, mut usize i, bool e_allowed) {
+    float64 out = 0;
+    bool found_dp = false;
+    uint64 dp_index;
+    for (; i < this.len; i += 1) {
+        char c = this.ptr[i].to_lower();
+        if (c == '.') {
+            if (found_dp) {
+                // two decimal points
+                return Error::INVALID_NUMBER;
+            }
+            found_dp = true;
+        }
+        (usize | none) index = BASE_CHARS.index_of(c);
+        if (#tag_test(index, none)) {
+            // invalid character
+            return Error::INVALID_NUMBER;
+        } else if (index > base) {
+            if (e_allowed && c == 'e') {
+                break;
+            }
+            // invalid character for base
+            return Error::INVALID_NUMBER;
+        } else {
+            if (found_dp) {
+                out += (float64)index / (float64)math::pow(10, base);
+            } else {
+                if (out == 0) {
+                    out = index;
+                } else {
+                    out = (out * base) + index;
+                }
+            }
+        }
+    }
+    return {.out = out, .i = i};
+}
+
+@export
+fn (float64 | Error::INVALID_NUMBER) GenericString.to_float(GenericString mut* this, uint8 base) {
+    if (this.len == 0) {
+        // empty
+        return Error::INVALID_NUMBER;
+    }
+    bool negative = false;
+    if (this.ptr[0] == '+') {
+        this = this.view(1, this.len);
+    } else if (this.ptr[0] == '-') {
+        negative = true;
+        this = this.view(1, this.len);
+    }
+    if (this.len == 0) {
+        // nothing after sign
+        return Error::INVALID_NUMBER;
+    }
+    uint8 base;
+    if (this.eq("NaN")) {
+        return math::NAN_64;
+    } else if (this.eq("Infinity")) {
+        if (negative) {
+            return -math::INFINITY_64;
+        } else {
+            return math::INFINITY_64;
+        }
+    } else if (this.ptr[0] == '0') {
+        if (this.len == 1) {
+            return 0;
+        }
+        char c = this.ptr[1].to_lower();
+        bool found = true;
+        if (c == 'b') {
+            base = 2;
+        } else if (c == 'o') {
+            base = 8;
+        } else if (c == 'd') {
+            base = 10;
+        } else if (c == 'x') {
+            base = 16;
+        } else {
+            found = false;
+        }
+        if (found) {
+            this = this.view(2, this.len);
+        }
+    } else {
+        base = 10;
+    }
+    FloatParserOut data = _parse_float(this, base, 0, true);
+    float64 out = data.out;
+    usize i = data.i;
+    if (i >= this.len) {
+        return out;
+    }
+    char c = this.ptr[i].to_lower();
+    if (c != 'e') {
+        fatal_error("Fatal error: Bug in GenericString.to_float()");
+    }
+    i += 1;
+    if (i >= this.len) {
+        // nothing after 'e'
+        return Error::INVALID_NUMBER;
+    }
+    FloatParserOut data2 = _parse_float(this, base, i, false);
+    return math::pow(out, data2.out);
+}
+
+@export
+fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_ENCODED_DATA) Contiguous<uint8>.utf8_decode(Contiguous<uint8>* this, mut GenricWString* out) {
+    mut usize loc = 0;
+    for (mut usize i = 0; i < this.len; i += 1) {
+        wchar value = this.ptr[i];
+        if (value < 0x80) {
+            // do nothing
+        } else if (value < 0xc0) {
+            // unexpected continuation byte
+            return Error::INVALID_ENCODED_DATA;
+        } else if (value < 0xe0) {
+            // one continuation byte
+            value = (value & 0x1f) << 6;
+            uint8 a = this.ptr[i + 1];
+            i += 1;
+            if (!(a >= 0x80 && a < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f);
+        } else if (value < 0xf0) {
+            // two continuation bytes
+            value = (value & 0x1f) << 12;
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            i += 2;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f) << 6;
+            value |= (b & 0x3f);
+        } else if (value < 0xf7) {
+            // three continuation bytes
+            value = (value & 0x1f) << 18;
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            uint8 c = this.ptr[i + 3];
+            i += 3;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f) << 12;
+            value |= (b & 0x3f) << 6;
+            value |= (c & 0x3f);
+        } else {
+            // invalid byte
+            return Error::INVALID_ENCODED_DATA;
+        }
+        if (loc >= out.len) {
+            return Error::OUT_OF_BOUNDS;
+        }
+        out.ptr[loc] = value;
+        loc += 1;
+    }
+}
+
+@export
+fn (mut WString* | Error::INVALID_ENCODED_DATA) Contiguous<uint8>.utf8_decode_alloc(Contiguous<uint8>* this, Allocator allocator) {
+    mut WString* out;
+    out.init(allocator, 0)
+    for (mut usize i = 0; i < this.len; i += 1) {
+        wchar value = this.ptr[i];
+        if (value < 0x80) {
+            // do nothing
+        } else if (value < 0xc0) {
+            // unexpected continuation byte
+            return Error::INVALID_ENCODED_DATA;
+        } else if (value < 0xe0) {
+            // one continuation byte
+            value = (value & 0x1f) << 6;
+            uint8 a = this.ptr[i + 1];
+            i += 1;
+            if (!(a >= 0x80 && a < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f);
+        } else if (value < 0xf0) {
+            // two continuation bytes
+            value = (value & 0x1f) << 12;
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            i += 2;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f) << 6;
+            value |= (b & 0x3f);
+        } else if (value < 0xf7) {
+            // three continuation bytes
+            value = (value & 0x1f) << 18;
+            uint8 a = this.ptr[i + 1];
+            uint8 b = this.ptr[i + 2];
+            uint8 c = this.ptr[i + 3];
+            i += 3;
+            if (!(a >= 0x80 && a < 0xc0 && b >= 0x80 && b < 0xc0 && c >= 0x80 && c < 0xc0)) {
+                // not a continuation byte
+                return Error::INVALID_ENCODED_DATA;
+            }
+            value |= (a & 0x3f) << 12;
+            value |= (b & 0x3f) << 6;
+            value |= (c & 0x3f);
+        } else {
+            // invalid byte
+            return Error::INVALID_ENCODED_DATA;
+        }
+        out.push(value);
+    }
+}

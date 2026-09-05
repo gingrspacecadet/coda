@@ -1,0 +1,78 @@
+module std::text;
+
+include std::mem = _;
+include std::collections = _;
+
+@export
+constraint GenericWString = Contiguous<wchar>;
+
+@export
+type WString = List<wchar>;
+
+@export
+fn (none | Error::OUT_OF_BOUNDS | Error::INVALID_UNICODE_CODEPOINT) Contiguous<uint32>.utf8_encode(Contiguous<uint32>* this, Contiguous<uint8>* out) {
+    mut usize loc = 0;
+    for (mut usize i = 0; i < this.len; i += 1) {
+        wchar c = this.ptr[i];
+        if (c < 0x80) {
+            if (loc + 1 >= out.len) {
+                return Error::OUT_OF_BOUNDS;
+            }
+            out.ptr[loc] = c;
+            loc++;
+        } else if (c < 0x800) {
+            if (loc + 2 >= out.len) {
+                return Error::OUT_OF_BOUNDS;
+            }
+            out.ptr[loc] = 0xc0 | (c >> 6);
+            out.ptr[loc + 1] = 0x80 | (c & 0x3f);
+            loc += 2;
+        } else if (c < 0x10000) {
+            if (loc + 3 >= out.len) {
+                return Error::OUT_OF_BOUNDS;
+            }
+            out.ptr[loc] = 0xe0 | (c >> 12);
+            out.ptr[loc + 1] = 0x80 | ((c >> 6) & 0x3f);
+            out.ptr[loc + 2] = 0x80 | (c & 0x3f);
+            loc += 3;
+        } else if (c < 0x110000) {
+            if (loc + 4 >= out.len) {
+                return Error::OUT_OF_BOUNDS;
+            }
+            out.ptr[loc] = 0xf0 | (c >> 18);
+            out.ptr[loc + 1] = 0x80 | ((c >> 12) & 0x3f);
+            out.ptr[loc + 2] = 0x80 | ((c >> 6) & 0x3f);
+            out.ptr[loc + 3] = 0x80 | (c & 0x3f);
+            loc += 4;
+        } else {
+            return Error::INVALID_UNICODE_CODEPOINT;
+        }
+    }
+}
+
+@export
+fn (mut List<uint8> | Error::INVALID_UNICODE_CODEPOINT) Contiguous<uint32>.utf8_encode_alloc(Contiguous<uint32>* this, Allocator* allocator) {
+    mut List<uint8> out;
+    out.init(allocator, 0);
+    for (mut usize i = 0; i < this.len; i += 1) {
+        wchar c = this.ptr[i];
+        if (c < 0x80) {
+            out.push(c);
+        } else if (c < 0x800) {
+            out.push(0xc0 | (c >> 6));
+            out.push(0x80 | (c & 0x3f));
+        } else if (c < 0x10000) {
+            out.push(0xe0 | (c >> 12));
+            out.push(0x80 | ((c >> 6) & 0x3f));
+            out.push(0x80 | (c & 0x3f));
+        } else if (c < 0x110000) {
+            out.push(0xf0 | (c >> 18));
+            out.push(0x80 | ((c >> 12) & 0x3f));
+            out.push(0x80 | ((c >> 6) & 0x3f));
+            out.push(0x80 | (c & 0x3f));
+        } else {
+            return Error::INVALID_UNICODE_CODEPOINT;
+        }
+    }
+    return out;
+}
