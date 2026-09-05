@@ -58,7 +58,7 @@
                 },
                 {
                     "name": "keyword.other.coda storage.type.coda",
-                    "match": "\\b(fn|type|constraint)\\b"
+                    "match": "\\b(fn|type|constraint|struct|union|enum)\\b"
                 },
                 {
                     "name": "keyword.other.coda storage.modifier.coda",
