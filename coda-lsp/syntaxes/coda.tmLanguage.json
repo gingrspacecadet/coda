@@ -256,13 +256,13 @@
                     "begin": "/\\*",
                     "beginCaptures": {
                         "0": {
-                            "name": "punctuation.definition.comment.begin"
+                            "name": "punctuation.definition.comment.begin.coda"
                         }
                     },
                     "end": "\\*/",
                     "endCaptures": {
                         "0": {
-                            "name": "punctuation.definition.comment.end"
+                            "name": "punctuation.definition.comment.end.coda"
                         }
                     }
                 }
