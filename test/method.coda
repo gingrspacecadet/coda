@@ -1,14 +1,16 @@
 module method;
 
-struct Vec3 {
-    int x; int y; int z;
-}
+type Vec3 = struct {
+    int x;
+    int y;
+    int z;
+};
 
 fn Vec3 Vec3.dot(Vec3 *self, Vec3 *other) {
     return (Vec3){
-        .x = self->x * other->x,
-        .y = self->y * other->y,
-        .z = self->z * other->z
+        .x = self.x * other.x,
+        .y = self.y * other.y,
+        .z = self.z * other.z
     };
 }
 
