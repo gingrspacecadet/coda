@@ -17,9 +17,9 @@ typedef struct { \
     bool alive; \
     Arena *arena; \
 } N##_array; \
-static N##_array N##_array_empty = {}; \
+static N##_array N##_array_empty = {0}; \
 static inline N##_array N##_array##_init(Arena *arena) { \
-    N##_array v = {}; \
+    N##_array v = {0}; \
     v.data = arena_calloc(arena, sizeof(T)); \
     v.len = 0; \
     v.cap = 1; \

@@ -263,7 +263,7 @@ void leave_scope(Analyser *ctx) {
 Symbol *declare_symbol(Analyser *ctx, String name, uint32_t flags) {
     for (size_t i = 0; i < ctx->current_scope->symbols.len; i++) {
         Symbol *sym = ctx->current_scope->symbols.data[i];
-        if (string_eq(sym->name, name)) {
+        if (string_eq(sym->name, name) && !string_eq(name, string_make(""))) {
             if (sym->decl) {
                 error(sym->decl->token, format("Redeclaration of symbol '%.*s'", string_fmt(sym->name)));
             } else {
@@ -1089,7 +1089,7 @@ static bool is_integer_type(TypeRef *type) {
 }
 
 static Symbol *find_struct_method(Analyser *ctx, Scope *scope, TypeRef *owner, String method) {
-    return lookup_symbol_scoped(scope, mangle_symbol(ctx->arena, ctx->module, owner, method, (typerefs_array){}));
+    return lookup_symbol_scoped(scope, mangle_symbol(ctx->arena, ctx->module, owner, method, (typerefs_array){0}));
 }
 
 TypeRef *check_expr_lit(Analyser *ctx, Expr *expr) {
@@ -1448,6 +1448,8 @@ TypeRef *check_expr_unary(Analyser *ctx, Expr *expr) {
             error(operand_type->token, "Cannot dereference non-pointer");
         }
     }
+
+    return NULL;
 }
 
 TypeRef *check_expr_index(Analyser *ctx, Expr *expr) {
@@ -2651,7 +2653,7 @@ void populate_module_namespaces(Analyser *ctx, Module *mod) {
                 if (existing_sym->decl && existing_sym->decl->type == DECL_NAMESPACE) {
                     current_scope = existing_sym->decl->namespace->scope;
                 } else {
-                    fprintf(stderr, "\e[1;37merror:\e[0m Namespace ''%.*s'' is already defined.\n", string_fmt(part));
+                    fprintf(stderr, "\x1b[1;37merror:\x1b[0m Namespace ''%.*s'' is already defined.\n", string_fmt(part));
                     exit(1);
                 }
             } else {

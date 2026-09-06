@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Werror -Wextra -Wall -Wpedantic -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -g -Werror -Wextra -Wall  -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
 
 SRC := src
 

@@ -287,7 +287,7 @@ static void print_lir_operand(LirOperand op) {
             printf("v%u", op.vreg);
             break;
         case LIR_IMM:
-            printf("%lld", op.imm);
+            printf("%ld", op.imm);
             break;
         case LIR_MEM:
             if (op.mem.offset == 0) {
@@ -312,7 +312,7 @@ static void print_lir_operand(LirOperand op) {
 
 static void print_lir_instr(LirInstr *instr) {
     if (instr->opcode == LIR_LABEL) {
-        printf("L%lld:\n", instr->dest.imm);
+        printf("L%ld:\n", instr->dest.imm);
         return;
     }
 
@@ -331,7 +331,7 @@ static void print_lir_instr(LirInstr *instr) {
 
         case LIR_JMP:
         case LIR_JCC:
-            printf("L%lld", instr->dest.imm);
+            printf("L%ld", instr->dest.imm);
             break;
         case LIR_SETCC:
             print_lir_operand(instr->dest);

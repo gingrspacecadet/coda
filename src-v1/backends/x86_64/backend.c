@@ -115,14 +115,14 @@ static void clear_block_marks(MirBlock *block) {
 
 static void format_rbp_operand(char *buf, size_t len, int64_t off) {
     if (off == 0) snprintf(buf, len, "QWORD PTR [rbp]");
-    else if (off > 0) snprintf(buf, len, "QWORD PTR [rbp+%lld]", off);
-    else snprintf(buf, len, "QWORD PTR [rbp%lld]", off);
+    else if (off > 0) snprintf(buf, len, "QWORD PTR [rbp+%ld]", off);
+    else snprintf(buf, len, "QWORD PTR [rbp%ld]", off);
 }
 
 static void format_rbp_address(char *buf, size_t len, int64_t off) {
     if (off == 0) snprintf(buf, len, "[rbp]");
-    else if (off > 0) snprintf(buf, len, "[rbp+%lld]", off);
-    else snprintf(buf, len, "[rbp%lld]", off);
+    else if (off > 0) snprintf(buf, len, "[rbp+%ld]", off);
+    else snprintf(buf, len, "[rbp%ld]", off);
 }
 
 static int64_t lookup_symbol_offset(MirFunction *fn, SymbolOffset *offsets, Symbol *sym) {
@@ -174,15 +174,15 @@ static void resolve_operand_string(MirFunction *fn, SymbolOffset *offsets, TempL
 static void emit_operand_addr(FILE *out, const char *reg, MirFunction *fn, SymbolOffset *offsets, TempLayout *temps, MirOperand op) {
     if (op.type == MIR_VAL_SYMBOL) {
         int64_t off = lookup_symbol_offset(fn, offsets, op.symbol);
-        fprintf(out, "    lea %s, [rbp%s%lld]\n", reg, off >= 0 ? "+" : "", off);
+        fprintf(out, "    lea %s, [rbp%s%ld]\n", reg, off >= 0 ? "+" : "", off);
     } else if (op.type == MIR_VAL_TEMP) {
         int64_t off = temp_offset(temps, op.temp);
-        fprintf(out, "    lea %s, [rbp%s%lld]\n", reg, off >= 0 ? "+" : "", off);
+        fprintf(out, "    lea %s, [rbp%s%ld]\n", reg, off >= 0 ? "+" : "", off);
     } else if (op.type == MIR_VAL_LIT && op.lit.type == LITERAL_STRING) {
         fprintf(out, "    lea %s, [rip + .Lstr_%zu]\n", reg, op.lit.str_id);
     } else if (op.type == MIR_VAL_MEM) {
         int64_t off = mem_operand_offset(fn, offsets, temps, op);
-        fprintf(out, "    lea %s, [rbp%s%lld]\n", reg, off >= 0 ? "+" : "", off);
+        fprintf(out, "    lea %s, [rbp%s%ld]\n", reg, off >= 0 ? "+" : "", off);
     }
 }
 
@@ -196,8 +196,8 @@ static void emit_load(FILE *out, const char *reg, MirFunction *fn, SymbolOffset 
 
     if (op.type == MIR_VAL_MEM && op.base_symbol && op.base_symbol->type && op.base_symbol->type->type == TYPEREF_POINTER) {
         int64_t sym_off = lookup_symbol_offset(fn, offsets, op.base_symbol);
-        fprintf(out, "    mov rcx, QWORD PTR [rbp%s%lld]\n", sym_off >= 0 ? "+" : "", sym_off);
-        fprintf(out, "    mov %s, QWORD PTR [rcx%s%lld]\n", reg, op.offset >= 0 ? "+" : "", op.offset);
+        fprintf(out, "    mov rcx, QWORD PTR [rbp%s%ld]\n", sym_off >= 0 ? "+" : "", sym_off);
+        fprintf(out, "    mov %s, QWORD PTR [rcx%s%ld]\n", reg, op.offset >= 0 ? "+" : "", op.offset);
         return;
     }
 
@@ -376,7 +376,7 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
                     inst->result.resolved_type->type == TYPEREF_POINTER &&
                     inst->lhs.type == MIR_VAL_SYMBOL) {
                     int64_t off = lookup_symbol_offset(fn, offsets, inst->lhs.symbol);
-                    fprintf(out, "    lea rax, [rbp%s%lld]\n", off >= 0 ? "+" : "", off);
+                    fprintf(out, "    lea rax, [rbp%s%ld]\n", off >= 0 ? "+" : "", off);
                     emitted = true;
                 }
                 if (!emitted) emit_load(out, "rax", fn, offsets, temps, inst->lhs);
@@ -476,7 +476,7 @@ static void emit_instruction(FILE *out, MirFunction *fn, MirInstr *inst, SymbolO
                     if (size == 0) size = 8;
                     size = align8(size);
 
-                    fprintf(out, "    mov rdi, QWORD PTR [rbp%+lld]\n", ret_ptr_off);
+                    fprintf(out, "    mov rdi, QWORD PTR [rbp%+ld]\n", ret_ptr_off);
                     emit_operand_addr(out, "rsi", fn, offsets, temps, ret_val);
                     emit_copy_aggregate(out, "rdi", "rsi", size);
                 }
@@ -589,7 +589,7 @@ void backend(FILE *out, MirBuilder *builder, MirModule *mod) {
 
         size_t reg_idx = fn_returns_indirect(fn) ? 1 : 0;
         if (fn_returns_indirect(fn)) {
-            fprintf(out, "    mov QWORD PTR [rbp%+lld], rdi\n", ret_ptr_off);
+            fprintf(out, "    mov QWORD PTR [rbp%+ld], rdi\n", ret_ptr_off);
         }
 
         for (size_t i = 0; i < fn->params.len && reg_idx < 6; i++) {
@@ -600,12 +600,12 @@ void backend(FILE *out, MirBuilder *builder, MirModule *mod) {
             sz = align8(sz);
 
             if (sz > 8) {
-                fprintf(out, "    mov QWORD PTR [rbp%s%lld], %s\n", off >= 0 ? "+" : "", off, ABI_ARG_REGS[reg_idx++]);
+                fprintf(out, "    mov QWORD PTR [rbp%s%ld], %s\n", off >= 0 ? "+" : "", off, ABI_ARG_REGS[reg_idx++]);
                 if (reg_idx < 6) {
-                    fprintf(out, "    mov QWORD PTR [rbp%s%lld], %s\n", (off + 8) >= 0 ? "+" : "", off + 8, ABI_ARG_REGS[reg_idx++]);
+                    fprintf(out, "    mov QWORD PTR [rbp%s%ld], %s\n", (off + 8) >= 0 ? "+" : "", off + 8, ABI_ARG_REGS[reg_idx++]);
                 }
             } else {
-                fprintf(out, "    mov QWORD PTR [rbp%s%lld], %s\n", off >= 0 ? "+" : "", off, ABI_ARG_REGS[reg_idx++]);
+                fprintf(out, "    mov QWORD PTR [rbp%s%ld], %s\n", off >= 0 ? "+" : "", off, ABI_ARG_REGS[reg_idx++]);
             }
         }
 

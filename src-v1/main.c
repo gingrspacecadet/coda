@@ -24,7 +24,7 @@
     #define PATH_SEP "\\"
     #define ROOT "C:\\ProgramData\\coda"
     #define TEMP_EXE "coda_run_tmp.exe"
-#elifdef __APPLE__
+#elif defined(__APPLE__)
     #include <dlfcn.h>
     #include <unistd.h>
     #include <sys/wait.h>
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
     }
 
     if (!source_path) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Missing source file\n", argv[0]);
+        fprintf(stderr, "\x1b[1;37m%s:\x1b[0m \x1b[1;31merror:\x1b[0m Missing source file\n", argv[0]);
         return 1;
     }
 
@@ -168,20 +168,20 @@ int main(int argc, char **argv) {
 
     lib_handle handle = load_lib((char*)backend_path);
     if (!handle) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open target backend shared library: %s\n", argv[0], backend_path);
+        fprintf(stderr, "\x1b[1;37m%s:\x1b[0m \x1b[1;31merror:\x1b[0m Failed to open target backend shared library: %s\n", argv[0], backend_path);
         return 1;
     }
     typedef void (*backend_fn)(FILE *, MirBuilder *, MirModule *);
     backend_fn backend = (backend_fn)load_sym(handle, "backend");
     if (!backend) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to locate backend entry symbol from file %s\n", argv[0], backend_path);
+        fprintf(stderr, "\x1b[1;37m%s:\x1b[0m \x1b[1;31merror:\x1b[0m Failed to locate backend entry symbol from file %s\n", argv[0], backend_path);
         close_lib(handle);
         return 1;
     }
 
     FILE *output = fopen(output_file, "w");
     if (!output) {
-        fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to open output file %s\n", argv[0], output_file);
+        fprintf(stderr, "\x1b[1;37m%s:\x1b[0m \x1b[1;31merror:\x1b[0m Failed to open output file %s\n", argv[0], output_file);
         close_lib(handle);
         return 1;
     }
@@ -190,17 +190,17 @@ int main(int argc, char **argv) {
     fclose(output);
 
     if (run_mode) {
-        char compile_cmd[1024];
+        char compile_cmd[1065];
 #ifdef WIN32
-        snprintf(compile_cmd, sizeof(compile_cmd), "gcc %s -o %s \"%s\"", 
-                 output_file, TEMP_EXE, libcoda_file);
+        snprintf(compile_cmd, sizeof(compile_cmd), "gcc %s -o " TEMP_EXE " \"%s\"", 
+                 output_file, libcoda_file);
 #else
-        snprintf(compile_cmd, sizeof(compile_cmd), "gcc %s -o %s \"%s\" -Wl,-rpath,\"%s\"", 
-                 output_file, TEMP_EXE, libcoda_file, stdlib_dir);
+        snprintf(compile_cmd, sizeof(compile_cmd), "gcc %s -o " TEMP_EXE " \"%s\" -Wl,-rpath,\"%s\"", 
+                 output_file, libcoda_file, stdlib_dir);
 #endif
 
         if (system(compile_cmd) != 0) {
-            fprintf(stderr, "\e[1;37m%s:\e[0m \e[1;31merror:\e[0m Failed to assemble and link generated assembly file\n", argv[0]);
+            fprintf(stderr, "\x1b[1;37m%s:\x1b[0m \x1b[1;31merror:\x1b[0m Failed to assemble and link generated assembly file\n", argv[0]);
             return 1;
         }
 

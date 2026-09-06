@@ -8,9 +8,9 @@ static Token peek(Parser *ctx) {
     return ctx->current;
 }
 
-#define BOLD_WHITE "\e[1;37m"
-#define RED "\e[1;31m"
-#define RESET "\e[0m"
+#define BOLD_WHITE "\x1b[1;37m"
+#define RED "\x1b[1;31m"
+#define RESET "\x1b[0m"
 
 __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     Token t = peek(ctx);
@@ -79,7 +79,7 @@ __attribute__((noreturn)) void error_parser(Parser *ctx, const char *msg) {
     char_array_push(&underline, ' ');
     char_array_push(&underline, '|');
     char_array_push(&underline, ' ');
-    char_array_push(&underline, '\e');
+    char_array_push(&underline, '\x1b');
     char_array_push(&underline, '[');
     char_array_push(&underline, '1');
     char_array_push(&underline, ';');
@@ -153,7 +153,7 @@ __attribute__((noreturn)) void error_sema(Token t, const char *msg) {
     char_array_push(&underline, ' ');
     char_array_push(&underline, '|');
     char_array_push(&underline, ' ');
-    char_array_push(&underline, '\e');
+    char_array_push(&underline, '\x1b');
     char_array_push(&underline, '[');
     char_array_push(&underline, '1');
     char_array_push(&underline, ';');

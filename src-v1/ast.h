@@ -119,7 +119,7 @@ typedef struct {
 
 INSTANTIATE(InitField, initfield, ARRAY_TEMPLATE)
 INSTANTIATE(TypeRef *, typerefs, ARRAY_TEMPLATE)
-INSTANTIATE(Attribute, attr, ARRAY_TEMPLATE);
+INSTANTIATE(Attribute, attr, ARRAY_TEMPLATE)
 
 struct Param {
     TypeRef *type;

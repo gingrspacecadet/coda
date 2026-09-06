@@ -68,11 +68,11 @@ static void emit_operand(FILE *out, LirOperand op, PhysReg fallback_reg, string_
         case LIR_STACK: {
             int64_t base_offset = get_vreg_offset(op.mem.base_vreg);
             if (op.mem.offset == 0) {
-                fprintf(out, "[rfp - #%lld]", base_offset);
+                fprintf(out, "[rfp - #%ld]", base_offset);
             } else if (op.mem.offset > 0) {
-                fprintf(out, "[rfp - #%lld + #%d]", base_offset, op.mem.offset);
+                fprintf(out, "[rfp - #%ld + #%d]", base_offset, op.mem.offset);
             } else {
-                fprintf(out, "[rfp - #%lld - #%d]", base_offset, -op.mem.offset);
+                fprintf(out, "[rfp - #%ld - #%d]", base_offset, -op.mem.offset);
             }
             break;
         }
@@ -82,7 +82,7 @@ static void emit_operand(FILE *out, LirOperand op, PhysReg fallback_reg, string_
             if (op.string_const.str.length > 0) {
                 fprintf(out, ".LC%u", op.string_const.id);
             } else {
-                fprintf(out, "#%lld", op.imm);
+                fprintf(out, "#%ld", op.imm);
             }
             break;
         }
@@ -113,7 +113,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
     for (LirInstr *instr = fn->first; instr != NULL; instr = instr->next) {
         switch (instr->opcode) {
             case LIR_LABEL: {
-                fprintf(out, ".L%lld:\n", instr->dest.imm);
+                fprintf(out, ".L%ld:\n", instr->dest.imm);
                 break;
             }
             case LIR_MOV: {
@@ -234,13 +234,13 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
             }
 
             case LIR_JMP: {
-                fprintf(out, "    jmp .L%lld\n", instr->dest.imm);
+                fprintf(out, "    jmp .L%ld\n", instr->dest.imm);
                 break;
             }
 
             case LIR_JCC: {
                 static const char* jcc_strs[] = { "je", "jne", "jl", "jle", "jg", "jge", "" };
-                fprintf(out, "    %s .L%lld\n", jcc_strs[instr->cond], instr->dest.imm);
+                fprintf(out, "    %s .L%ld\n", jcc_strs[instr->cond], instr->dest.imm);
                 break;
             }
 

@@ -61,7 +61,7 @@ static void emit_imm(FILE *out, LirOperand op, string_const_array *string_consts
         if (op.string_const.str.length > 0) {
             fprintf(out, ".LC%u", op.string_const.id);
         } else {
-            fprintf(out, "%lld", op.imm);
+            fprintf(out, "%ld", op.imm);
         }
     }
 }
@@ -96,7 +96,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
     for (LirInstr *instr = fn->first; instr != NULL; instr = instr->next) {
         switch (instr->opcode) {
             case LIR_LABEL: {
-                fprintf(out, ">L%lld\n", instr->dest.imm);
+                fprintf(out, ">L%ld\n", instr->dest.imm);
                 break;
             }
 
@@ -136,7 +136,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                     if (instr->src.type == LIR_REG_PHYSICAL) {
                         fprintf(out, "    add zr, %s, r1\n", phys_reg_names[instr->src.preg]);
                     } else if (instr->src.type == LIR_IMM) {
-                        fprintf(out, "    lli r1, %lld\n", instr->src.imm);
+                        fprintf(out, "    lli r1, %ld\n", instr->src.imm);
                     } else if (instr->src.type == LIR_STACK) {
                         fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
                         fprintf(out, "    load r19, r1\n");
@@ -150,7 +150,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                     if (instr->src.type == LIR_REG_PHYSICAL) {
                         fprintf(out, "    add zr, %s, r1\n", phys_reg_names[instr->src.preg]);
                     } else if (instr->src.type == LIR_IMM) {
-                        fprintf(out, "    lli r1, %lld\n", instr->src.imm);
+                        fprintf(out, "    lli r1, %ld\n", instr->src.imm);
                     } else if (instr->src.type == LIR_REG_VIRTUAL) {
                         fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.vreg));
                         fprintf(out, "    load r19, r1\n");
@@ -174,7 +174,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                 if (instr->src.type == LIR_REG_PHYSICAL) {
                     fprintf(out, "    add zr, %s, r1\n", phys_reg_names[instr->src.preg]);
                 } else if (instr->src.type == LIR_IMM) {
-                    fprintf(out, "    lli r1, %lld\n", instr->src.imm);
+                    fprintf(out, "    lli r1, %ld\n", instr->src.imm);
                 } else if (instr->src.type == LIR_STACK) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
                     fprintf(out, "    load r19, r1\n");
@@ -192,7 +192,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.mem.base_vreg));
                     fprintf(out, "    load r19, r2\n");
                 } else if (instr->dest.type == LIR_IMM) {
-                    fprintf(out, "    lli r2, %lld\n", instr->dest.imm);
+                    fprintf(out, "    lli r2, %ld\n", instr->dest.imm);
                 }
 
                 fprintf(out, "    %s r2, r1, r3\n", op_str);
@@ -227,7 +227,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->dest.mem.base_vreg));
                     fprintf(out, "    load r19, r1\n");
                 } else if (instr->dest.type == LIR_IMM) {
-                    fprintf(out, "    lli r1, %lld\n", instr->dest.imm);
+                    fprintf(out, "    lli r1, %ld\n", instr->dest.imm);
                 }
 
                 if (instr->src.type == LIR_REG_PHYSICAL) {
@@ -239,7 +239,7 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
                     fprintf(out, "    subi r20, %d, r19\n", get_vreg_offset(instr->src.mem.base_vreg));
                     fprintf(out, "    load r19, r2\n");
                 } else if (instr->src.type == LIR_IMM) {
-                    fprintf(out, "    lli r2, %lld\n", instr->src.imm);
+                    fprintf(out, "    lli r2, %ld\n", instr->src.imm);
                 }
 
                 fprintf(out, "    cmps r1, r2, r1\n");
@@ -308,19 +308,19 @@ void codegen(FILE *out, LirFunction *fn, string_const_array *string_consts) {
             }
 
             case LIR_JMP: {
-                fprintf(out, "    jmp <L%lld\n", instr->dest.imm);
+                fprintf(out, "    jmp <L%ld\n", instr->dest.imm);
                 break;
             }
 
             case LIR_JCC: {
                 switch (instr->cond) {
-                    case COND_E:  fprintf(out, "    bei <L%lld\n", instr->dest.imm); break;
-                    case COND_NE: fprintf(out, "    bnei <L%lld\n", instr->dest.imm); break;
-                    case COND_L:  fprintf(out, "    bli <L%lld\n", instr->dest.imm); break;
-                    case COND_LE: fprintf(out, "    blei <L%lld\n", instr->dest.imm); break;
-                    case COND_G:  fprintf(out, "    bgi <L%lld\n", instr->dest.imm); break;
-                    case COND_GE: fprintf(out, "    bgei <L%lld\n", instr->dest.imm); break;
-                    default:      fprintf(out, "    jmp <L%lld\n", instr->dest.imm); break;
+                    case COND_E:  fprintf(out, "    bei <L%ld\n", instr->dest.imm); break;
+                    case COND_NE: fprintf(out, "    bnei <L%ld\n", instr->dest.imm); break;
+                    case COND_L:  fprintf(out, "    bli <L%ld\n", instr->dest.imm); break;
+                    case COND_LE: fprintf(out, "    blei <L%ld\n", instr->dest.imm); break;
+                    case COND_G:  fprintf(out, "    bgi <L%ld\n", instr->dest.imm); break;
+                    case COND_GE: fprintf(out, "    bgei <L%ld\n", instr->dest.imm); break;
+                    default:      fprintf(out, "    jmp <L%ld\n", instr->dest.imm); break;
                 }
                 break;
             }

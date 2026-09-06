@@ -1004,7 +1004,7 @@ Expr *parse_expr_prefix(Parser *ctx) {
 
             Param p = (Param) {
                 .type = param_type,
-                .name = name.value.has_value ? name.value.value : (String){},
+                .name = name.value.has_value ? name.value.value : (String){0},
                 .attributes = attrs,
                 .token = start,
             };
@@ -1542,11 +1542,18 @@ FnDecl *parse_fn_signature(Parser *ctx) {
         collect_attributes(ctx, &attrs);
 
         TypeRef *param_type = parse_type(ctx);
-        Token name = expect(ctx, TOKENTYPE_IDENT, "Expected param name");
+        t = peek(ctx);
+        String name;
+        if (t.has_value && t.value.type == TOKENTYPE_IDENT) {
+            name = t.value.value.value;
+            consume(ctx);
+        } else {
+            name = string_make("");
+        }
 
         Param p = (Param){
             .type = param_type,
-            .name = name.value.value,
+            .name = name,
             .attributes = attrs,
             .token = param_start,
         };
