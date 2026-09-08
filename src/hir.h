@@ -34,8 +34,18 @@ typedef enum {
     HIR_TYPE_ENUM,
 } HirTypeKind;
 
-//! TODO: built in types
-typedef int BuiltinType;
+typedef enum {
+    BUILTIN_UINT8,
+    BUILTIN_UINT16,
+    BUILTIN_UINT32,
+    BUILTIN_UINT64,
+    BUILTIN_INT8,
+    BUILTIN_INT16,
+    BUILTIN_INT32,
+    BUILTIN_INT64,
+    BUILTIN_BOOL,
+    BUILTIN_NONE,
+} BuiltinType;
 
 struct HirType {
     HirTypeKind kind;
@@ -272,10 +282,13 @@ struct Symbol {
     SymbolKind kind;
     AstDecl *decl;
     AstName name;
+    HirType *type;
 };
 
 typedef struct {
     Array(Symbol) syms;
 } Scope;
+
+
 
 #endif

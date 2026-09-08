@@ -6,8 +6,42 @@ void scope_insert(Scope *scope, Symbol *sym) {
     array_push(&scope->syms, sym);
 }
 
-Symbol *scope_lookup(Scope *scope, AstName name);
-Symbol *sema_lookup(Sema *sema, AstName name);
+static inline bool ast_name_equal(AstName *a, AstName *b) {
+    if (a->kind != AST_NAME_IDENT || b->kind != AST_NAME_IDENT)
+        return false;
+
+    return string_eq(a->ident, b->ident);
+}
+
+Symbol *scope_lookup(Scope *scope, AstName name) {
+    for (size_t i = scope->syms.len; i > 0; --i) {
+        Symbol *sym = (Symbol *)array_at(&scope->syms, i - 1);
+
+        if (ast_name_equal(&sym->name, &name))
+            return sym;
+    }
+
+    return NULL;
+}
+
+Symbol *sema_lookup(Sema *sema, AstName name) {
+    for (size_t i = sema->scopes.len; i > 0; --i) {
+        Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
+        Symbol *symbol = scope_lookup(scope, name);
+
+        if (symbol != NULL)
+            return symbol;
+    }
+
+    return scope_lookup(&sema->global_scope, name);
+}
+
+Symbol *sema_lookup_path(Sema *sema, Path path);
+
+//! TODO: comptime stuff!
+HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
+    return expr;
+}
 
 void collect_decls(Sema *sema, Array(AstDecl *) decls) {
     for (size_t i = 0; i < decls.len; i++) {
@@ -65,6 +99,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
     }
 }
 
+HirExpr *sema_expr(Sema *sema, AstExpr *ast);
 HirType *sema_type(Sema *sema, AstType *ast) {
     HirType *hir = arena_alloc(sema->arena, sizeof(HirType));
 
@@ -73,7 +108,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
     switch (ast->kind) {
         //! TODO: builtin types!
         case AST_TYPE_NAMED: {
-            Symbol *symbol = sema_lookup(sema, ast->named.path);
+            Symbol *symbol = sema_lookup_path(sema, ast->named.path);
 
             if (symbol == NULL) {
                 //! TODO: unknown type diagnostic
@@ -107,9 +142,19 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 break;
             }
 
+            HirExpr *length = sema_expr(sema, ast->array.length);
+            length = comp_eval_expr(sema, length);
+
+            if (length->kind != HIR_EXPR_LITERAL) {
+                //! TODO: expected comptime integer
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
             hir->kind = HIR_TYPE_ARRAY;
             hir->array.element = element;
-            hir->array.length = 0;
+            //! TODO: turn literals into integer
+            // hir->array.length = length->literal.integer;
             break;
         }
 
@@ -203,7 +248,198 @@ HirType *sema_type(Sema *sema, AstType *ast) {
     return hir;
 }
 
-HirExpr *sema_expr(Sema *sema, AstExpr *ast);
+HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
+    switch (symbol->kind) {
+        case SYMBOL_GLOBAL:
+            return sema_type(sema, symbol->decl->var.type);
+
+        case SYMBOL_FN: {
+            AstFnDecl *fn = &symbol->decl->fn;
+            HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+
+            type->kind = HIR_TYPE_FUNCTION;
+            type->mutable = false;
+            type->function.ret = sema_type(sema, fn->ret);
+            type->function.params =
+                array_create(sema->arena, sizeof(HirType *));
+
+            for (size_t i = 0; i < fn->params.len; i++) {
+                AstParam *param =
+                    ((AstParam *)fn->params.data) + i;
+
+                HirType *param_type = sema_type(sema, param->type);
+                array_push(&type->function.params, &param_type);
+            }
+
+            return type;
+        }
+
+        case SYMBOL_TYPE:
+        case SYMBOL_LOCAL:
+        case SYMBOL_PARAMETER:
+        case SYMBOL_FIELD:
+        case SYMBOL_ENUM_ITEM:
+        case SYMBOL_CONSTRAINT:
+        case SYMBOL_ERROR:
+            return NULL;
+    }
+
+    return NULL;
+}
+
+HirExpr *sema_expr(Sema *sema, AstExpr *ast) {
+    HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
+
+    hir->span = ast->span;
+    hir->type = NULL;
+
+    switch (ast->kind) {
+        case AST_EXPR_LITERAL:
+            hir->kind = HIR_EXPR_LITERAL;
+            hir->literal = ast->lit.literal;
+            //! TODO: determine literal type
+            break;
+
+        case AST_EXPR_IDENT: {
+            Symbol *symbol = sema_lookup(sema, ast->ident.name);
+
+            if (symbol == NULL) {
+                //! TODO: unknown symbol diagnostic
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            hir->kind = HIR_EXPR_VALUE;
+            hir->value.symbol = symbol;
+            hir->type = symbol->type;
+            break;
+        }
+
+        case AST_EXPR_PATH: {
+            Symbol *symbol = sema_lookup_path(sema, ast->path.path);
+
+            if (symbol == NULL) {
+                //! TODO: unknown symbol diagnostic
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            hir->kind = HIR_EXPR_VALUE;
+            hir->value.symbol = symbol;
+            hir->type = symbol->type;
+            break;
+        }
+
+        case AST_EXPR_UNARY:
+            hir->kind = HIR_EXPR_UNARY;
+            hir->unary.op = ast->unary.op;
+            hir->unary.operand =
+                sema_expr(sema, ast->unary.operand);
+            //! TODO: validate operator and determine type
+            break;
+
+        case AST_EXPR_BINARY:
+            hir->kind = HIR_EXPR_BINARY;
+            hir->binary.op = ast->binary.op;
+            hir->binary.left =
+                sema_expr(sema, ast->binary.left);
+            hir->binary.right =
+                sema_expr(sema, ast->binary.right);
+            //! TODO: validate operator and determine type
+            break;
+
+        case AST_EXPR_CALL:
+            hir->kind = HIR_EXPR_CALL;
+            hir->call.function = NULL;
+            hir->call.args =
+                array_create(sema->arena, sizeof(HirExpr *));
+
+            for (size_t i = 0; i < ast->call.args.len; i++) {
+                AstExpr *arg =
+                    ((AstExpr **)ast->call.args.data)[i];
+
+                HirExpr *value = sema_expr(sema, arg);
+                array_push(&hir->call.args, &value);
+            }
+
+            //! TODO: resolve callee
+            break;
+
+        case AST_EXPR_INDEX:
+            hir->kind = HIR_EXPR_INDEX;
+            hir->index.object =
+                sema_expr(sema, ast->index.object);
+            hir->index.index =
+                sema_expr(sema, ast->index.index);
+            //! TODO: validate index operation and determine type
+            break;
+
+        case AST_EXPR_MEMBER:
+            hir->kind = HIR_EXPR_FIELD;
+            hir->field.object =
+                sema_expr(sema, ast->member.object);
+            hir->field.field = NULL;
+            //! TODO: resolve member and determine type
+            break;
+
+        case AST_EXPR_CAST:
+            hir->kind = HIR_EXPR_CAST;
+            hir->cast.type = sema_type(sema, ast->cast.type);
+            hir->cast.operand =
+                sema_expr(sema, ast->cast.operand);
+            hir->type = hir->cast.type;
+            //! TODO: validate cast
+            break;
+
+        case AST_EXPR_INTRINSIC:
+            //! TODO: resolve intrinsic
+            hir->kind = HIR_EXPR_ERROR;
+            break;
+
+        case AST_EXPR_BUBBLE:
+            hir->kind = HIR_EXPR_ERROR;
+            //! TODO: lower bubble expression
+            break;
+
+        case AST_EXPR_INIT:
+            hir->kind = HIR_EXPR_INIT;
+            hir->init.fields =
+                array_create(sema->arena, sizeof(HirInitField));
+
+            for (size_t i = 0; i < ast->init.fields.len; i++) {
+                AstInitField *field =
+                    ((AstInitField *)ast->init.fields.data) + i;
+
+                HirInitField hir_field = {
+                    .field = NULL,
+                    .value = sema_expr(sema, field->value),
+                };
+
+                //! TODO: resolve field
+
+                array_push(&hir->init.fields, &hir_field);
+            }
+            break;
+
+        case AST_EXPR_LAMBDA:
+            hir->kind = HIR_EXPR_LAMBDA;
+            //! TODO: analyse lambda
+            break;
+
+        case AST_EXPR_SPLICE:
+            //! TODO: comptime
+            hir->kind = HIR_EXPR_ERROR;
+            break;
+
+        default:
+            hir->kind = HIR_EXPR_ERROR;
+            //! TODO: internal compiler error
+            break;
+    }
+
+    return hir;
+}
+
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
 void sema_fn_decl(Sema *sema, AstFnDecl *ast);
 void sema_type_decl(Sema *sema, AstTypeDecl *ast);
