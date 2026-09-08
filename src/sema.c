@@ -249,9 +249,13 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 }
 
 HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
+    if (symbol->type != NULL)
+        return symbol->type;
+
     switch (symbol->kind) {
         case SYMBOL_GLOBAL:
-            return sema_type(sema, symbol->decl->var.type);
+            symbol->type = sema_type(sema, symbol->decl->var.type);
+            return symbol->type;
 
         case SYMBOL_FN: {
             AstFnDecl *fn = &symbol->decl->fn;
@@ -271,6 +275,7 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
                 array_push(&type->function.params, &param_type);
             }
 
+            symbol->type = type;
             return type;
         }
 
@@ -297,7 +302,6 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast) {
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
             hir->literal = ast->lit.literal;
-            //! TODO: determine literal type
             break;
 
         case AST_EXPR_IDENT: {
@@ -311,7 +315,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast) {
 
             hir->kind = HIR_EXPR_VALUE;
             hir->value.symbol = symbol;
-            hir->type = symbol->type;
+            hir->type = sema_symbol_type(sema, symbol);
             break;
         }
 
@@ -326,7 +330,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast) {
 
             hir->kind = HIR_EXPR_VALUE;
             hir->value.symbol = symbol;
-            hir->type = symbol->type;
+            hir->type = sema_symbol_type(sema, symbol);
             break;
         }
 
@@ -438,6 +442,54 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast) {
     }
 
     return hir;
+}
+
+static bool sema_literal_fits(Sema *sema, AstLiteral *literal, HirType *type) {
+    switch (literal->kind) {
+        case AST_LIT_INTEGER:
+        case AST_LIT_CHAR:
+            //! TODO: check integer range
+            return type->kind == HIR_TYPE_BUILTIN;
+
+        case AST_LIT_FLOAT:
+            //! TODO: check float range/precision
+            return type->kind == HIR_TYPE_BUILTIN;
+
+        case AST_LIT_BOOL:
+            return type->kind == HIR_TYPE_BUILTIN &&
+                   type->builtin == BUILTIN_BOOL;
+
+        case AST_LIT_STRING:
+            //! TODO: uint8[] / slice coercion
+            return false;
+
+        case AST_LIT_NULL:
+            return type->kind == HIR_TYPE_POINTER &&
+                   type->pointer.optional;
+
+        case AST_LIT_ERROR:
+            return false;
+    }
+
+    return false;
+}
+
+HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
+    if (expr->type != NULL) {
+        //! TODO: verify normal implicit conversion
+        return expr;
+    }
+
+    if (expr->kind != HIR_EXPR_LITERAL)
+        return NULL;
+
+    if (!sema_literal_fits(sema, &expr->literal, type)) {
+        //! TODO: cannot coerce literal to type
+        return NULL;
+    }
+
+    expr->type = type;
+    return expr;
 }
 
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
