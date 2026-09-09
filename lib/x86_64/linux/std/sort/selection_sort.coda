@@ -1,0 +1,21 @@
+module std::sort;
+
+@export
+fn none selection_sort<T: Swapable; Comparable>(mut Iterable<T> *arr) {
+    for (usize i = 0; i < arr.len(); i += 1) {
+        usize min_index = i;
+        for (usize j = i + 1; j < arr.len(); j += 1) {
+            if (arr.at(j).lt(arr.at(min_index))) {
+                min_index = j;
+            }
+        }
+        if (min_index != i) {
+            arr.at(i).swap(arr.at(min_index));
+        }
+    }
+}
+
+@export
+fn none mut Iterable<T>.selection_sort<T: Swapable; Comparable>(Iterable<T> *this) {
+    selection_sort(this);
+}

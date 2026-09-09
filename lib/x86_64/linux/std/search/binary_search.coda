@@ -1,0 +1,26 @@
+module std::search;
+
+@export
+fn T *? binary_search<T: Comparable>(Iterable<T> *iterable, T value) {
+    int low = 0;
+    int high = iterable.length() - 1;
+    
+    while (low <= high) {
+        int mid = low + (high - low) / 2;
+        T mid_value = iterable.at(mid);
+        if (mid_value.eq(value)) {
+            return iterable.at(mid);
+        } else if (mid_value.lt(value)) {
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    return null;
+}
+
+@export
+fn T*? Iterable<T>.binary_search(Iterable<T> *this, T value) {
+    return binary_search(this, value);
+}
