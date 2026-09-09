@@ -1,7 +1,7 @@
 module std::sort;
 
 @export
-fn none bubble_sort<T: Comparable>(mut Iterable<T> *arr) {
+fn none bubble_sort<T: Comparable>(mut Sequence<T> *arr) {
     int i; int j;
     bool swapped;
 
@@ -19,4 +19,9 @@ fn none bubble_sort<T: Comparable>(mut Iterable<T> *arr) {
             break;
         }
     }
+}
+
+@export
+fn none mut Sequence<T>.bubble_sort<T: Comparable>(mut Sequence<T> *this) {
+    bubble_sort(this);
 }

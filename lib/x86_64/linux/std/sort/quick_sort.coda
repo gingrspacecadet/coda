@@ -1,6 +1,6 @@
 module std::sort;
 
-fn int partition<T>(mut Iterable<T> *arr, int low, int high) {
+fn int partition<T>(mut Sequence<T> *arr, int low, int high) {
     T pivot = arr.at(high);
     int i = low - 1;
 
@@ -15,7 +15,7 @@ fn int partition<T>(mut Iterable<T> *arr, int low, int high) {
 }
 
 @export
-fn none quick_sort<T>(mut Iterable<T> *arr, int low, int high) {
+fn none quick_sort<T>(mut Sequence<T> *arr, int low, int high) {
     if (low < high) {
         int pivot_index = partition(arr, low, high);
 
@@ -24,6 +24,6 @@ fn none quick_sort<T>(mut Iterable<T> *arr, int low, int high) {
     }
 }
 
-fn none mut Iterable<T>.quick_sort(mut Iterable<T> *arr) {
+fn none mut Sequence<T>.quick_sort(mut Sequence<T> *arr) {
     quick_sort(arr, 0, arr.length() - 1);
 }

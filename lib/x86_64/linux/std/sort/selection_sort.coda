@@ -1,7 +1,7 @@
 module std::sort;
 
 @export
-fn none selection_sort<T: Swapable; Comparable>(mut Iterable<T> *arr) {
+fn none selection_sort<T: Swapable; Comparable>(mut Sequence<T> *arr) {
     for (usize i = 0; i < arr.len(); i += 1) {
         usize min_index = i;
         for (usize j = i + 1; j < arr.len(); j += 1) {
@@ -16,6 +16,6 @@ fn none selection_sort<T: Swapable; Comparable>(mut Iterable<T> *arr) {
 }
 
 @export
-fn none mut Iterable<T>.selection_sort<T: Swapable; Comparable>(Iterable<T> *this) {
+fn none mut Sequence<T>.selection_sort<T: Swapable; Comparable>(Sequence<T> *this) {
     selection_sort(this);
 }

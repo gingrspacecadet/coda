@@ -1,7 +1,7 @@
 module std::search;
 
 @export
-fn T *? binary_search<T: Comparable>(Iterable<T> *iterable, T value) {
+fn T *? binary_search<T: Comparable>(Sequence<T> *iterable, T value) {
     int low = 0;
     int high = iterable.length() - 1;
     
@@ -21,6 +21,6 @@ fn T *? binary_search<T: Comparable>(Iterable<T> *iterable, T value) {
 }
 
 @export
-fn T*? Iterable<T>.binary_search(Iterable<T> *this, T value) {
+fn T*? Sequence<T>.binary_search(Sequence<T> *this, T value) {
     return binary_search(this, value);
 }
