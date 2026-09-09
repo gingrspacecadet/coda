@@ -1,0 +1,66 @@
+module std::error;
+
+include std;
+
+@export
+type Error = enum: uint64 {
+    TYPE_IS_NOT_NAMED,
+    TYPE_IS_NOT_GENERIC,
+    ARRAY_LENGTH_MISMATCH,
+    ALLOCATION_FAILED,
+    NOT_INITIALIZED,
+    OUT_OF_BOUNDS,
+    IS_EMPTY,
+    INVALID_ENCODED_DATA,
+    INVALID_UNICODE_CHAR,
+    INVALID_NUMBER,
+    NOT_ENOUGH_FORMAT_ARGS,
+    INVALID_FORMAT_FIELD,
+    FORMAT_FIELD_NOT_CLOSED,
+    FORMAT_FIELD_NOT_OPENED,
+=};
+
+@export
+string[] ERROR_MEANINGS = {
+    .[Error::TYPE_IS_NOT_NAMED] = "Type is not named",
+    .[Error::TYPE_IS_NOT_NAMED] = "Type is not generic",
+    .[Error::ARRAY_LENGTH_MISMATCH] = "Array lengths are not the same",
+    .[Error::ALLOCATION_FAILED] = "Allocation failed",
+    .[Error::NOT_INITIALIZED] = "Not initialized",
+    .[Error::OUT_OF_BOUNDS] = "Out of bounds",
+    .[Error::IS_EMPTY] = "Is empty",
+    .[Error::INVALID_ENCODED_DATA] = "Invalid encoding",
+    .[Error::INVALID_UNICODE_CODEPOINT] = "Invalid Unicode codepoint",
+    .[Error::INVALID_NUMBER] = "Invalid number",
+    .[Error::NOT_ENOUGH_FORMAT_ARGS] = "Not enough format args",
+    .[Error::INVALID_FORMAT_FIELD] = "Invalid format field",
+    .[Error::FORMAT_FIELD_NOT_CLOSED] = "Format field not closed",
+    .[Error::FORMAT_FIELD_NOT_OPENED] = "Format field not opened",
+};
+
+@export
+@noreturn
+fn fatal_error(string message) {
+    std::debug::println(message);
+    std::process::exit(std::process::EXIT_FALIURE);
+}
+
+@export
+@noreturn
+fn Error.throw(Error this) {
+    String* msg;
+    msg.init(default_heap, 0);
+    msg.add("Error: ");
+    msg.add(ERROR_MEANINGS[this]);
+    fatal_error(msg.to_array());
+}
+
+@export
+@inline
+fn T (T | Error).try((T | Error) this) {
+    if (#tag_test(this, Error)) {
+        this.throw();
+    } else {
+        return (T)this;
+    }
+}

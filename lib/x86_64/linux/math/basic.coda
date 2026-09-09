@@ -1,0 +1,257 @@
+module math;
+
+include std::types = _;
+include std::error = _;
+include std::collections = _;
+
+@export
+fn T T.abs<T: Unsigned>(T this) {
+    return this;
+}
+
+@export
+fn uint8 int8.abs(int8 this) {
+    if (this < 0) {
+        return -this;
+    } else {
+        return this;
+    }
+}
+
+@export
+fn uint16 int16.abs(int16 this) {
+    if (this < 0) {
+        return -this;
+    } else {
+        return this;
+    }
+}
+
+@export
+fn uint32 int32.abs(int32 this) {
+    if (this < 0) {
+        return -this;
+    } else {
+        return this;
+    }
+}
+
+@export
+fn uint64 int64.abs(int64 this) {
+    if (this < 0) {
+        return -this;
+    } else {
+        return this;
+    }
+}
+
+@export
+fn T T.abs<T: Float>(T this) {
+    if (this < 0) {
+        return -this;
+    } else {
+        return this;
+    }
+}
+
+@export
+fn T T.real_mod<T: Unsigned>(T this, T other) {
+    return this % other;
+}
+
+@export
+fn uint8 int8.real_mod(int8 this, int8 other) {
+    int8 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint16 int16.real_mod(int16 this, int16 other) {
+    int16 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint32 int32.real_mod(int32 this, int32 other) {
+    int32 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn uint64 int64.real_mod(int64 this, int64 other) {
+    int64 out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn T T.real_mod<T: Float>(T this, T other) {
+    T out = this % other;
+    if (out < 0) {
+        out += other;
+    }
+    return out;
+}
+
+@export
+fn T ceil_div<T: Integer>(T this, T other) {
+    return (this + other - 1) / other;
+}
+
+@export
+fn (T | Error::IS_EMPTY) min<T: Number>(Contiguous<T>* data) {
+    if (data.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    T out = data.ptr[0];
+    for (mut usize i = 1; i < data.len; i += 1) {
+        if (data.ptr[i] < out) {
+            out = data.ptr[i];
+        }
+    }
+    return out;
+}
+
+@export
+fn (T | Error::IS_EMPTY) max<T: Number>(Contiguous<T>* data) {
+    if (data.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    T out = data.ptr[0];
+    for (mut usize i = 1; i < data.len; i += 1) {
+        if (data.ptr[i] > out) {
+            out = data.ptr[i];
+        }
+    }
+    return out;
+}
+
+@export
+fn T min2<T: Number>(T x, T y) {
+    if (x < y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+@export
+fn T max2<T: Number>(T x, T y) {
+    if (x > y) {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+@export
+fn T gcd<T: Unsigned>(mut T x, mut T y) {
+    while (y != 0) {
+        T temp = y;
+        y = x % y;
+        x = temp;
+    }
+    return y;
+}
+
+@export
+fn T lcm<T: Unsigned>(mut T x, mut T y) {
+    // the order is to ensure no overflow
+    return (x / gcd(x, y)) * y;
+}
+
+@export
+fn bool T.is_integer<T: Integer>(T this) {
+    return true;
+}
+
+@export
+fn T T.round<T: Integer>(T this) {
+    return this;
+}
+
+@export
+fn T T.ceil<T: Integer>(T this) {
+    return this;
+}
+
+@export
+fn T T.floor<T: Integer>(T this) {
+    return this;
+}
+
+@export
+fn T T.trunc<T: Integer>(T this) {
+    return this;
+}
+
+@export
+fn bool T.is_integer<T: Float>(T this) {
+    if (!this.is_finite()) {
+        return false;
+    } else if (this.abs() > INT64_MAX) {
+        return true;
+    } else {
+        return this == (int64)this;
+    }
+}
+
+@export
+fn T T.round<T: Float>(T this) {
+    if (!this.is_finite() || this.is_integer() || this == 0) {
+        return this;
+    }
+    T out;
+    if (this > 0) {
+        out = (T)((uint64)(this + 0.5));
+    } else {
+        out = (T)((uint64)(this - 0.5));
+    }
+    if (out == 0 && this < 0) {
+        return -0.0;
+    }
+    return this;
+}
+
+@export
+fn T T.floor<T: Float>(T this) {
+    if (!this.is_finite() || this.is_integer() || this == 0) {
+        return this;
+    }
+    T out = (T)(uint64)(this);
+    if (this < 0) {
+        out -= 1;
+    }
+    return out;
+}
+
+@export
+fn T T.ceil<T: Float>(T this) {
+    if (!this.is_finite() || this.is_integer() || this == 0) {
+        return this;
+    }
+    T out = (T)(uint64)(this);
+    if (this > 0) {
+        out += 1;
+    }
+    return out;
+}
+
+@export
+fn T T.trunc<T: Float>(T this) {
+    if (!this.is_finite() || this.is_integer() || this == 0) {
+        return this;
+    }
+    return (T)(uint64)(this);
+}

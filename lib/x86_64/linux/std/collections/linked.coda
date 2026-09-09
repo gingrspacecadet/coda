@@ -1,0 +1,158 @@
+module std::collections;
+
+include std::error = _;
+include std::mem = _;
+
+@export
+constraint Node<T> = {
+    Node<T>*? next;
+    T value;
+};
+
+@export
+type SingleNode<T> = struct: Node<T> {
+    SingleNode<T>*? next;
+    T value;
+};
+
+@export
+type DoubleNode<T> = struct: Node<T> {
+    DoubleNode<T>*? prev;
+    DoubleNode<T>*? next;
+    T value;
+};
+
+@export
+constraint GenericLinked<T>: AllocatorIndexed<T> = {
+    usize len;
+    Node<T>* start;
+    Node<T>* end;
+};
+
+@export
+fn T GenericLinked<T>.get<T>(GenericLinked<T>* this, mut ssize index) {
+    mut usize index2 = this.resolve_index(index);
+    Node<T>* node = this.first;
+    while (index2 > 0) {
+        node = node.next;
+        index2 -= 1;
+    }
+    return node.value;
+}
+
+@export
+fn T* GenericLinked<T>.get_ptr<T>(GenericLinked<T>* this, mut ssize index) {
+    mut usize index2 = this.resolve_index(index);
+    Node<T>* node = this.first;
+    while (index2 > 0) {
+        node = node.next;
+        index2 -= 1;
+    }
+    return &node.value;
+}
+
+@export
+fn T GenericLinked<T>.set<T>(GenericLinked<T>* this, mut ssize index, T value) {
+    mut usize index2 = this.resolve_index(index);
+    Node<T>* node = this.first;
+    while (index2 > 0) {
+        node = node.next;
+        index2 -= 1;
+    }
+    return node;
+}
+
+@export
+type Linked<T> = struct: GenericLinked<T> {
+    Allocator* allocator;
+    usize len;
+    Node<T>* start;
+    Node<T>* end;
+};
+
+@export
+fn none Linked<T>.init<T>(Linked<T>* this, Allocator* allocator) {
+    this.allocator = allocator;
+}
+
+@export
+fn Node<T>* Linked<T>.push<T>(Linked<T>* this, T value) {
+    Node<T>* node = this.allocator.alloc(#sizeof(Node<T>));
+    this.end.next = node;
+    this.end = node;
+    this.len++;
+    return node;
+}
+
+@export
+fn (none | Error::IS_EMPTY) Linked<T>.shift<T>(Linked<T>* this, T value) {
+    if (this.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    Node<T>* node = this.start;
+    this.start = node.next;
+    this.allocator.free(node);
+    this.len--;
+    return node;
+}
+
+@export
+type DoubleLinked<T>: struct: GenericLinked<T> {
+    Allocator* allocator;
+    usize len;
+    DoubleNode<T>* start;
+    DoubleNode<T>* end;
+};
+
+@export
+fn none DoubleLinked<T>.init<T>(DoubleLinked<T>* this, Allocator* allocator) {
+    this.allocator = allocator;
+}
+
+@export
+fn DoubleNode<T>* DoubleLinked<T>.push<T>(Linked<T>* this, T value) {
+    DoubleNode<T>* node = this.allocator.alloc(#sizeof(Node<T>));
+    node.prev = this.end;
+    node.next = null;
+    this.end.next = node;
+    this.end = node;
+    this.len++;
+    return node;
+}
+
+@export
+fn (none | Error::IS_EMPTY) Linked<T>.pop<T>(Linked<T>* this, T value) {
+    if (this.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    Node<T>* node = this.end;
+    this.end = node.prev;
+    this.end.next = null;
+    this.allocator.free(node);
+    this.len--;
+    return node;
+}
+
+@export
+fn (none | Error::IS_EMPTY) Linked<T>.shift<T>(Linked<T>* this, T value) {
+    if (this.len == 0) {
+        return Error::IS_EMPTY;
+    }
+    Node<T>* node = this.start;
+    this.start = node.next;
+    this.start.prev = null;
+    this.allocator.free(node);
+    this.len--;
+    return node;
+}
+
+@export
+fn DoubleNode<T>* DoubleLinked<T>.unshift<T>(Linked<T>* this, T value) {
+    DoubleNode<T>* node = this.allocator.alloc(#sizeof(Node<T>));
+    node.prev = null;
+    node.next = this.start;
+    this.start.prev = node;
+    this.start = node;
+    this.len++;
+    return node;
+}
