@@ -1,86 +1,41 @@
-// module build_script;
-
-// include core::build = build;
-// include std::fs = fs;
-// include std::io = io;
-// include std::string = str;
-
-// @export
-// fn int main(string[] args) {
-//     fs::mkdir("build");
-
-//     string[] sources = fs::glob("src/*.c");
-//     string[] objects = {};
-
-//     build::Cmd cmd = { .args = {} };
-
-//     for (mut uint i = 0u; i < sources.len; i = i + 1) {
-//         string src = sources[i];
-        
-//         string filename = fs::get_filename_no_ext(src);
-//         string obj = str::concat({"build/", filename, ".o"});
-//         objects.push(obj);
-
-//         if (build::needs_rebuild(obj, {src})) {
-//             cmd.clear();
-//             cmd.append_many({"gcc", "-Wall", "-Werror", "-O2", "-c", src, "-o", obj});
-            
-//             if (!cmd.run_sync()) {
-//                 io::println(str::concat({"Compilation failed for: ", src}));
-//                 return 1;
-//             }
-//         }
-//     }
-
-//     string target = "build/exe";
-//     if (build::needs_rebuild(target, objects)) {
-//         cmd.clear();
-//         cmd.append_many({"gcc", "-o", target});
-//         cmd.append_many(objects);
-
-//         if (!cmd.run_sync()) {
-//             io::println("Linking failed.");
-//             return 1;
-//         }
-//     }
-
-//     io::println("Build completed successfully.");
-//     return 0;
-// }
-
 module build;
 
-include core::build;
-include std::fs;
-include std::path;
-include std::string;
+include std::build;
 
-@entry
-fn int main() {
-    fs::mkdirs("build");
+fn none main() {
+    Build build = Build.create();
 
-    string[] sources = fs::glob("src/*.coda");
+    Config debug = build.config("debug")
+        .coda_backend("native")
+        .coda_flags("-g")
+        .coda_flags("-O0");
 
-    for (uint i = 0; i < sources.len; i = i + 1) {
-        string src = sources[i];
+    Config release = build.config("release")
+        .coda_backend("llvm")
+        .coda_flags("-O3");
 
-        string name = path::stem(src);
-        string out = path::join({"build", name + ".o"});
+    Target app = build.executable("app")
+        .sources("src/**/*.coda")
+        .exclude("src/experimental.coda")
+        .config("debug", debug)
+        .config("release", release);
 
-        if (build::needs_rebuild(out, {src})) {
-            let cmd = build::command("coda");
+    app.add_source("src/release_only.coda", release);
 
-            cmd.args({
-                src,
-                "-o",
-                out
-            });
+    Artifact external = build.command(
+        "cargo",
+        ["build", "--release"],
+        [],
+        ["target/release/something"]
+    );
 
-            if (!cmd.run()) {
-                return 1;
-            }
-        }
-    }
+    app.depends_on(external);
 
-    return 0;
+    Target tests = build.test("tests")
+        .sources("src/**/*.coda")
+        .exclude("src/main.coda")
+        .runner("test.coda")
+        .library();
+
+    build.run();
 }
