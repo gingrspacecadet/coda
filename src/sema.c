@@ -580,6 +580,69 @@ static HirField *sema_field_lookup(Array(HirField) fields, AstName name) {
     return NULL;
 }
 
+static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
+    if (expr->type == NULL || expr->type->kind != HIR_TYPE_POINTER)
+        return expr;
+
+    HirExpr *deref = arena_alloc(sema->arena, sizeof(HirExpr));
+
+    *deref = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_UNARY,
+        .type = expr->type->pointer.pointee,
+        .unary = {
+            .op = AST_UNARY_DEREF,
+            .operand = expr,
+        },
+    };
+
+    return deref;
+}
+
+static HirType *sema_unary_type(Sema *sema, HirUnaryOp op, HirExpr *operand) {
+    if (operand == NULL || operand->type == NULL)
+        return NULL;
+
+    switch (op) {
+        case HIR_UNARY_POS:
+        case HIR_UNARY_NEG:
+        case HIR_UNARY_BIT_NOT:
+            return operand->type;
+
+        case HIR_UNARY_NOT:
+            //! TODO: require bool
+            return operand->type;
+
+        case HIR_UNARY_DEREF:
+            if (operand->type->kind != HIR_TYPE_POINTER)
+                return NULL;
+
+            return operand->type->pointer.pointee;
+
+        case HIR_UNARY_ADDRESS:
+            //! TODO: construct pointer type
+            return NULL;
+    }
+
+    return NULL;
+}
+
+static HirField *sema_init_field_lookup(HirType *type, AstName name) {
+    if (type == NULL)
+        return NULL;
+
+    switch (type->kind) {
+        case HIR_TYPE_STRUCT:
+            return sema_field_lookup(type->structure.fields, name);
+
+        case HIR_TYPE_UNION:
+            return sema_field_lookup(type->union_.fields, name);
+
+        default:
+            return NULL;
+    }
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
 
@@ -640,17 +703,26 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             HirExpr *operand = sema_expr(sema, ast->unary.operand, NULL);
 
-            if (operand == NULL) {
+            if (operand == NULL || operand->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            //! TODO: infer unary operand type
-            //! TODO: propagate expected type
-            //! TODO: validate unary operator
+            HirType *type = sema_unary_type(sema, hir->unary.op, operand);
+
+            if (type == NULL) {
+                //! TODO: invalid unary operation
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
 
             hir->unary.operand = operand;
-            break;
+            hir->type = type;
+
+            if (expected != NULL)
+                return sema_expr_coerce(sema, hir, expected);
+
+            return hir;
         }
 
         case AST_EXPR_BINARY: {
@@ -759,7 +831,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            HirType *object_type = hir->index.object->type;
+            HirExpr *object = sema_implicit_deref(sema, hir->index.object);
+            hir->index.object = object;
+
+            HirType *object_type = object->type;
 
             if (object_type == NULL) {
                 //! TODO: expected indexable type
@@ -785,9 +860,9 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             //! TODO: require integer index
 
             if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
+                return sema_expr_coerce(sema, hir, expected);
 
-            break;
+            return hir;
         }
 
         case AST_EXPR_MEMBER: {
@@ -800,14 +875,37 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            HirType *object_type = hir->field.object->type;
+            HirExpr *object = hir->field.object;
 
-            if (object_type == NULL) {
+            if (object->type == NULL) {
                 //! TODO: expected member-bearing type
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
+            if (object->type->kind == HIR_TYPE_POINTER) {
+                if (object->type->pointer.pointee == NULL) {
+                    //! TODO: malformed pointer type
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                object = arena_alloc(sema->arena, sizeof(HirExpr));
+
+                *object = (HirExpr) {
+                    .span = hir->field.object->span,
+                    .kind = HIR_EXPR_UNARY,
+                    .type = hir->field.object->type->pointer.pointee,
+                    .unary = {
+                        .op = AST_UNARY_DEREF,
+                        .operand = hir->field.object,
+                    },
+                };
+
+                hir->field.object = object;
+            }
+
+            HirType *object_type = object->type;
             HirField *field = NULL;
 
             switch (object_type->kind) {
@@ -835,7 +933,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = field->type;
 
             if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
+                return sema_expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -859,24 +957,55 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             //! TODO: lower bubble expression
             break;
 
-        case AST_EXPR_INIT:
+        case AST_EXPR_INIT: {
             hir->kind = HIR_EXPR_INIT;
             hir->init.fields = array_create(sema->arena, sizeof(HirInitField));
 
+            if (expected == NULL) {
+                //! TODO: infer initializer type
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            switch (expected->kind) {
+                case HIR_TYPE_STRUCT:
+                case HIR_TYPE_UNION:
+                    break;
+
+                default:
+                    //! TODO: expected struct or union
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+            }
+
             for (size_t i = 0; i < ast->init.fields.len; i++) {
                 AstInitField *field = ((AstInitField *)ast->init.fields.data) + i;
+                HirField *hir_field = sema_init_field_lookup(expected, field->name);
 
-                HirInitField hir_field = {
-                    .field = NULL,
-                    .value = sema_expr(sema, field->value, NULL),
+                if (hir_field == NULL) {
+                    //! TODO: unknown field diagnostic
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                HirExpr *value = sema_expr(sema, field->value, hir_field->type);
+
+                if (value == NULL || value->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                HirInitField init_field = {
+                    .field = hir_field,
+                    .value = value,
                 };
 
-                //! TODO: resolve field
-                //! TODO: pass field type as expected type
-
-                array_push(&hir->init.fields, &hir_field);
+                array_push(&hir->init.fields, &init_field);
             }
+
+            hir->type = expected;
             break;
+        }
 
         case AST_EXPR_LAMBDA:
             hir->kind = HIR_EXPR_LAMBDA;
