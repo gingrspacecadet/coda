@@ -327,13 +327,24 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             for (size_t i = 0; i < ast->structure.fields.len; i++) {
                 AstField *field = ((AstField *)ast->structure.fields.data) + i;
+                Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+
+                *symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = field->name,
+                    .decl = NULL,
+                };
+
+                symbol->type = sema_type(sema, field->type);
 
                 HirField hir_field = {
-                    .type = sema_type(sema, field->type),
+                    .symbol = symbol,
+                    .type = symbol->type,
                 };
 
                 array_push(&hir->structure.fields, &hir_field);
             }
+
             break;
 
         case AST_TYPE_UNION:
@@ -342,13 +353,24 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             for (size_t i = 0; i < ast->union_.fields.len; i++) {
                 AstField *field = ((AstField *)ast->union_.fields.data) + i;
+                Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+
+                *symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = field->name,
+                    .decl = NULL,
+                };
+
+                symbol->type = sema_type(sema, field->type);
 
                 HirField hir_field = {
-                    .type = sema_type(sema, field->type),
+                    .symbol = symbol,
+                    .type = symbol->type,
                 };
 
                 array_push(&hir->union_.fields, &hir_field);
             }
+
             break;
 
         case AST_TYPE_ENUM:
@@ -542,6 +564,20 @@ static HirType *sema_call_type(Sema *sema, HirExpr *callee) {
         return NULL;
 
     return callee->type;
+}
+
+static HirField *sema_field_lookup(Array(HirField) fields, AstName name) {
+    for (size_t i = 0; i < fields.len; i++) {
+        HirField *field = ((HirField *)fields.data) + i;
+
+        if (field->symbol == NULL)
+            continue;
+
+        if (ast_name_equal(&field->symbol->name, &name))
+            return field;
+    }
+
+    return NULL;
 }
 
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
@@ -754,14 +790,55 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             break;
         }
 
-        case AST_EXPR_MEMBER:
+        case AST_EXPR_MEMBER: {
             hir->kind = HIR_EXPR_FIELD;
             hir->field.object = sema_expr(sema, ast->member.object, NULL);
             hir->field.field = NULL;
 
-            //! TODO: resolve member
-            //! TODO: determine result type
-            break;
+            if (hir->field.object == NULL || hir->field.object->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            HirType *object_type = hir->field.object->type;
+
+            if (object_type == NULL) {
+                //! TODO: expected member-bearing type
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            HirField *field = NULL;
+
+            switch (object_type->kind) {
+                case HIR_TYPE_STRUCT:
+                    field = sema_field_lookup(object_type->structure.fields, ast->member.member);
+                    break;
+
+                case HIR_TYPE_UNION:
+                    field = sema_field_lookup(object_type->union_.fields, ast->member.member);
+                    break;
+
+                default:
+                    //! TODO: expected struct or union
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+            }
+
+            if (field == NULL) {
+                //! TODO: unknown field diagnostic
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            hir->field.field = field;
+            hir->type = field->type;
+
+            if (expected != NULL)
+                hir = sema_expr_coerce(sema, hir, expected);
+
+            return hir;
+        }
 
         case AST_EXPR_CAST:
             hir->kind = HIR_EXPR_CAST;
