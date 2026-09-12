@@ -341,9 +341,9 @@ static void print_expr(
             indent(out, depth + 1);
             fputs("field", out);
 
-            if (field->name != NULL) {
+            if (field->name.kind != AST_NAME_ERROR) {
                 fputc(' ', out);
-                print_name(out, field->name);
+                print_name(out, &field->name);
             }
 
             fputc('\n', out);

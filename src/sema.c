@@ -1,5 +1,18 @@
 #include "sema.h"
 
+static Scope *sema_push_scope(Sema *sema) {
+    Scope scope = {
+        .syms = array_create(sema->arena, sizeof(Symbol)),
+    };
+
+    array_push(&sema->scopes, &scope);
+    return (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
+}
+
+static void sema_pop_scope(Sema *sema) {
+    sema->scopes.len--;
+}
+
 //! TODO: hash table / binary lookup
 //! TODO: report duplicated symbols
 void scope_insert(Scope *scope, Symbol *sym) {
@@ -599,27 +612,27 @@ static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
     return deref;
 }
 
-static HirType *sema_unary_type(Sema *sema, HirUnaryOp op, HirExpr *operand) {
+static HirType *sema_unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     if (operand == NULL || operand->type == NULL)
         return NULL;
 
     switch (op) {
-        case HIR_UNARY_POS:
-        case HIR_UNARY_NEG:
-        case HIR_UNARY_BIT_NOT:
+        case AST_UNARY_POS:
+        case AST_UNARY_NEG:
+        case AST_UNARY_BIT_NOT:
             return operand->type;
 
-        case HIR_UNARY_NOT:
+        case AST_UNARY_NOT:
             //! TODO: require bool
             return operand->type;
 
-        case HIR_UNARY_DEREF:
+        case AST_UNARY_DEREF:
             if (operand->type->kind != HIR_TYPE_POINTER)
                 return NULL;
 
             return operand->type->pointer.pointee;
 
-        case HIR_UNARY_ADDRESS:
+        case AST_UNARY_ADDRESS:
             //! TODO: construct pointer type
             return NULL;
     }
@@ -641,6 +654,19 @@ static HirField *sema_init_field_lookup(HirType *type, AstName name) {
         default:
             return NULL;
     }
+}
+
+static void sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
+    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+
+    *symbol = (Symbol) {
+        .kind = SYMBOL_PARAMETER,
+        .name = param->name,
+        .decl = NULL,
+        .type = type,
+    };
+
+    scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), symbol);
 }
 
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
@@ -1026,7 +1052,286 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     return hir;
 }
 
-HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
+static bool sema_local_decl(Sema *sema, AstVarDecl *ast) {
+    Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
+
+    if (scope_lookup(scope, ast->name) != NULL) {
+        //! TODO: duplicate local diagnostic
+        return false;
+    }
+
+    if (sema_lookup(sema, ast->name) != NULL) {
+        //! TODO: shadowing diagnostic
+        return false;
+    }
+
+    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+
+    *symbol = (Symbol) {
+        .kind = SYMBOL_LOCAL,
+        .name = ast->name,
+        .decl = NULL,
+        .type = sema_type(sema, ast->type),
+    };
+
+    if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
+        return false;
+
+    scope_insert(scope, symbol);
+
+    if (ast->init != NULL) {
+        HirExpr *init = sema_expr(sema, ast->init, symbol->type);
+
+        if (init == NULL || init->kind == HIR_EXPR_ERROR)
+            return false;
+    }
+
+    //! TODO: create HirLocal
+
+    return true;
+}
+
+static HirStmt *sema_hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
+    HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
+
+    stmt->span = span;
+    stmt->kind = kind;
+
+    return stmt;
+}
+
+static HirExpr *sema_hir_bool(Sema *sema, bool value) {
+    HirExpr *expr = arena_alloc(sema->arena, sizeof(HirExpr));
+
+    expr->span = (Span) { 0 };
+    expr->kind = HIR_EXPR_LITERAL;
+    expr->type = NULL;
+    expr->literal = (AstLiteral) {
+        .kind = AST_LIT_BOOL,
+        .raw = value ? STRING("true") : STRING("false"),
+    };
+
+    return expr;
+}
+
+HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
+    HirStmt *hir = arena_alloc(sema->arena, sizeof(HirStmt));
+
+    hir->span = ast->span;
+
+    switch (ast->kind) {
+        case AST_STMT_VAR:
+            if (sema_local_decl(sema, ast->var.var) == false) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            return NULL;
+
+        case AST_STMT_EXPR:
+            hir->kind = HIR_STMT_EXPR;
+            hir->expr.expr = sema_expr(sema, ast->expr.expr, NULL);
+
+            if (hir->expr.expr == NULL || hir->expr.expr->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            break;
+
+        case AST_STMT_BLOCK: {
+            hir->kind = HIR_STMT_BLOCK;
+            hir->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+
+            sema_push_scope(sema);
+
+            for (size_t i = 0; i < ast->block.stmts.len; i++) {
+                AstStmt *stmt = ((AstStmt **)ast->block.stmts.data)[i];
+
+                if (stmt->kind == AST_STMT_VAR) {
+                    if (!sema_local_decl(sema, stmt->var.var)) {
+                        sema_pop_scope(sema);
+                        hir->kind = HIR_STMT_ERROR;
+                        return hir;
+                    }
+
+                    continue;
+                }
+
+                HirStmt *value = sema_stmt(sema, stmt);
+
+                if (value == NULL)
+                    continue;
+
+                if (value->kind == HIR_STMT_ERROR) {
+                    sema_pop_scope(sema);
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+
+                array_push(&hir->block.stmts, &value);
+            }
+
+            sema_pop_scope(sema);
+
+            return hir;
+        }
+
+        case AST_STMT_RETURN:
+            hir->kind = HIR_STMT_RETURN;
+            hir->_return.value = NULL;
+
+            if (ast->_return.value != NULL)
+                hir->_return.value = sema_expr(sema, ast->_return.value, sema->current_fn->return_type);
+
+            //! TODO: validate return type
+
+            return hir;
+
+        case AST_STMT_IF: {
+            hir->kind = HIR_STMT_IF;
+            hir->_if.cond = sema_expr(sema, ast->_if.cond, NULL);
+
+            if (hir->_if.cond == NULL || hir->_if.cond->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            hir->_if.then = sema_stmt(sema, ast->_if.then);
+
+            if (hir->_if.then == NULL || hir->_if.then->kind == HIR_STMT_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            hir->_if._else = NULL;
+
+            if (ast->_if._else != NULL) {
+                hir->_if._else = sema_stmt(sema, ast->_if._else);
+
+                if (hir->_if._else == NULL || hir->_if._else->kind == HIR_STMT_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+            }
+
+            //! TODO: require bool condition
+
+            return hir;
+        }
+
+        case AST_STMT_WHILE: {
+            hir->kind = HIR_STMT_WHILE;
+            hir->_while.cond = sema_expr(sema, ast->_while.cond, NULL);
+            hir->_while.body = sema_stmt(sema, ast->_while.body);
+
+            if (hir->_while.cond == NULL || hir->_while.cond->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            if (hir->_while.body == NULL || hir->_while.body->kind == HIR_STMT_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            //! TODO: require bool condition
+
+            return hir;
+        }
+
+        case AST_STMT_BREAK:
+            hir->kind = HIR_STMT_BREAK;
+            break;
+
+        case AST_STMT_CONTINUE:
+            hir->kind = HIR_STMT_CONTINUE;
+            break;
+
+        case AST_STMT_FOR: {
+            HirStmt *block = sema_hir_stmt(sema, HIR_STMT_BLOCK, ast->span);
+            block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+
+            sema_push_scope(sema);
+
+            if (ast->_for.init != NULL) {
+                HirStmt *init = sema_stmt(sema, ast->_for.init);
+
+                if (init != NULL) {
+                    if (init->kind == HIR_STMT_ERROR) {
+                        sema_pop_scope(sema);
+                        return init;
+                    }
+
+                    array_push(&block->block.stmts, &init);
+                }
+            }
+
+            HirStmt *loop = sema_hir_stmt(sema, HIR_STMT_WHILE, ast->span);
+
+            if (ast->_for.cond != NULL)
+                loop->_while.cond = sema_expr(sema, ast->_for.cond, NULL);
+            else
+                loop->_while.cond = sema_hir_bool(sema, true);
+
+            HirStmt *body = sema_stmt(sema, ast->_for.body);
+
+            if (body == NULL || body->kind == HIR_STMT_ERROR) {
+                sema_pop_scope(sema);
+                loop->kind = HIR_STMT_ERROR;
+                return loop;
+            }
+
+            HirStmt *loop_body = sema_hir_stmt(sema, HIR_STMT_BLOCK, ast->_for.body->span);
+            loop_body->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+
+            array_push(&loop_body->block.stmts, &body);
+
+            if (ast->_for.post != NULL) {
+                HirStmt *post = sema_hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
+                post->expr.expr = sema_expr(sema, ast->_for.post, NULL);
+
+                if (post->expr.expr == NULL || post->expr.expr->kind == HIR_EXPR_ERROR) {
+                    sema_pop_scope(sema);
+                    loop->kind = HIR_STMT_ERROR;
+                    return loop;
+                }
+
+                array_push(&loop_body->block.stmts, &post);
+            }
+
+            loop->_while.body = loop_body;
+
+            if (loop->_while.cond == NULL) {
+                //! TODO: synthesise true
+            }
+
+            array_push(&block->block.stmts, &loop);
+
+            sema_pop_scope(sema);
+
+            return block;
+        }
+
+        case AST_STMT_MATCH:
+            //! TODO: lower match
+            hir->kind = HIR_STMT_ERROR;
+            break;
+
+        case AST_STMT_DEFER:
+            //! TODO: lower defer
+            hir->kind = HIR_STMT_ERROR;
+            break;
+
+        case AST_STMT_ERROR:
+        default:
+            hir->kind = HIR_STMT_ERROR;
+            //! TODO: internal compiler error
+            break;
+    }
+
+    return hir;
+}
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
@@ -1041,24 +1346,46 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         return;
     }
 
-    HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+    if (symbol->type == NULL) {
+        HirType *type = arena_alloc(sema->arena, sizeof(HirType));
 
-    type->kind = HIR_TYPE_FUNCTION;
-    type->mutable = false;
-    type->function.ret = sema_type(sema, ast->ret);
-    type->function.params = array_create(sema->arena, sizeof(HirType *));
+        type->kind = HIR_TYPE_FUNCTION;
+        type->mutable = false;
+        type->function.ret = sema_type(sema, ast->ret);
+        type->function.params = array_create(sema->arena, sizeof(HirType *));
+
+        for (size_t i = 0; i < ast->params.len; i++) {
+            AstParam *param = ((AstParam *)ast->params.data) + i;
+            HirType *param_type = sema_type(sema, param->type);
+
+            array_push(&type->function.params, &param_type);
+        }
+
+        symbol->type = type;
+    }
+
+    if (ast->body == NULL)
+        return;
+
+    sema_push_scope(sema);
+
+    HirType *type = symbol->type;
 
     for (size_t i = 0; i < ast->params.len; i++) {
         AstParam *param = ((AstParam *)ast->params.data) + i;
-        HirType *param_type = sema_type(sema, param->type);
-        array_push(&type->function.params, &param_type);
+        HirType *param_type = ((HirType **)type->function.params.data)[i];
+
+        sema_insert_parameter(sema, param, param_type);
     }
 
-    symbol->type = type;
+    //! TODO: create/cache HirFunction
+    //! TODO: analyse attributes
 
-    //! TODO: create parameter symbols and scope
-    //! TODO: analyse body
-    //! TODO: create HirFunction
+    HirStmt *body = sema_stmt(sema, ast->body);
+
+    (void)body;
+
+    sema_pop_scope(sema);
 }
 
 void sema_type_decl(Sema *sema, AstTypeDecl *ast) {

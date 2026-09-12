@@ -12,6 +12,8 @@ typedef struct {
     Array(Scope) scopes;
     Scope global_scope;
 
+    HirFunction *current_fn;
+
     Diags *diags;
     Arena *arena;
 } Sema;

@@ -304,7 +304,7 @@ Token lexer_next(Lexer *ctx) {
             return token_make(ctx, TK_CARET, start, 1);
     }
 
-    DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, 6767, (Span){.source = ctx->source, .offset = ctx->index}, string_make("Unexpected character"));
+    DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, 6767, (Span){.source = ctx->source, .offset = ctx->index}, STRING("Unexpected character"));
     diag_finish(&b);
 
     consume(ctx);

@@ -392,18 +392,11 @@ AstExpr *parse_init_expression(Parser *p) {
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
         AstInitField field = {
             .span = p->current.span,
-            .name = NULL,
+            .name = (AstName){0},
         };
 
         if (match(p, TK_DOT)) {
-            AstName name = parse_name(p);
-
-            field.name = arena_calloc(
-                p->arena,
-                sizeof(*field.name)
-            );
-
-            *field.name = name;
+            field.name = parse_name(p);
 
             expect(p, TK_EQ);
         }

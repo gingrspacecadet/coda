@@ -3,28 +3,28 @@
 
 String token_name(TokenType type) {
     switch (type) {
-    case TK_LPAREN:      return string_make("'('");
-    case TK_RPAREN:      return string_make("')'");
-    case TK_LBRACK:      return string_make("'['");
-    case TK_RBRACK:      return string_make("']'");
-    case TK_LBRACE:      return string_make("'{'");
-    case TK_RBRACE:      return string_make("'}'");
-    case TK_SEMICOLON:   return string_make("';'");
-    case TK_COMMA:       return string_make("','");
-    case TK_GT:          return string_make("'>'");
-    case TK_EQ:          return string_make("'='");
-    case TK_DOT:         return string_make("'.'");
-    case TK_COLON:       return string_make("':'");
-    case TK_COLON_COLON: return string_make("'::'");
+    case TK_LPAREN:      return STRING("'('");
+    case TK_RPAREN:      return STRING("')'");
+    case TK_LBRACK:      return STRING("'['");
+    case TK_RBRACK:      return STRING("']'");
+    case TK_LBRACE:      return STRING("'{'");
+    case TK_RBRACE:      return STRING("'}'");
+    case TK_SEMICOLON:   return STRING("';'");
+    case TK_COMMA:       return STRING("','");
+    case TK_GT:          return STRING("'>'");
+    case TK_EQ:          return STRING("'='");
+    case TK_DOT:         return STRING("'.'");
+    case TK_COLON:       return STRING("':'");
+    case TK_COLON_COLON: return STRING("'::'");
 
-    case TK_KW_FN:       return string_make("'fn'");
-    case TK_KW_TYPE:     return string_make("'type'");
-    case TK_KW_INCLUDE:  return string_make("'include'");
+    case TK_KW_FN:       return STRING("'fn'");
+    case TK_KW_TYPE:     return STRING("'type'");
+    case TK_KW_INCLUDE:  return STRING("'include'");
     case TK_KW_CONSTRAINT:
-        return string_make("'constraint'");
+        return STRING("'constraint'");
 
     default:
-        return string_make("expected token");
+        return STRING("expected token");
     }
 }
 
@@ -50,7 +50,7 @@ void error_expected_token(Diags *diags, TokenType expected, Span span) {
         DIAG_ERROR,
         E_EXPECTED_TOKEN,
         span,
-        string_make(format(diags->arena, "Expected token %.*s.", string_fmt(name)))
+        STRING(format(diags->arena, "Expected token %.*s.", string_fmt(name)))
     );
 
     diag_finish(&b); 
@@ -62,7 +62,7 @@ void error_expected_identifier(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_IDENTIFIER,
         span,
-        string_make("Expected an identifier.")
+        STRING("Expected an identifier.")
     );
 
     diag_finish(&b);
@@ -74,7 +74,7 @@ void error_expected_type(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_TYPE,
         span,
-        string_make("Expected a type.")
+        STRING("Expected a type.")
     );
 
     diag_finish(&b);
@@ -86,7 +86,7 @@ void error_expected_module(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_DECLARATION,
         span,
-        string_make("Expected a module.")
+        STRING("Expected a module.")
     );
 
     diag_finish(&b);
@@ -98,7 +98,7 @@ void error_expected_expression(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_EXPRESSION,
         span,
-        string_make("Expected an expression.")
+        STRING("Expected an expression.")
     );
 
     diag_finish(&b);
@@ -110,7 +110,7 @@ void error_expected_declaration(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_DECLARATION,
         span,
-        string_make("Expected a declaration.")
+        STRING("Expected a declaration.")
     );
 
     diag_finish(&b);
@@ -122,7 +122,7 @@ void error_expected_pattern(Diags *diags, Span span) {
         DIAG_ERROR,
         E_EXPECTED_PATTERN,
         span,
-        string_make("Expected a pattern.")
+        STRING("Expected a pattern.")
     );
 
     diag_finish(&b);
@@ -134,7 +134,7 @@ void error_unexpected_token(Diags *diags, TokenType token, Span span) {
         DIAG_ERROR,
         E_UNEXPECTED_TOKEN,
         span,
-        string_make(format(diags->arena, "Unexpected token %s", token_name(token)))
+        STRING(format(diags->arena, "Unexpected token %s", token_name(token)))
     );
 
     diag_finish(&b);

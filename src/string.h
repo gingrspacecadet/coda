@@ -23,7 +23,7 @@ static char string_at(String string, size_t index) {
     return string.data[index];
 }
 
-#define string_make(cstr) (String){ \
+#define STRING(cstr) (String){ \
         .data = (cstr), \
         .length = (__builtin_constant_p(__builtin_strlen(cstr)) \
                    ? (sizeof(cstr) - 1) \

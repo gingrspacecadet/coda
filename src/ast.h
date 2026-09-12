@@ -213,7 +213,7 @@ typedef enum {
 
 typedef struct {
     Span span;
-    AstName *name; /* NULL = positional */
+    AstName name; /* NULL = positional */
     AstExpr *value;
 } AstInitField;
 
@@ -320,6 +320,40 @@ struct AstExpr {
 };
 
 typedef enum {
+    AST_PATTERN_ERROR,
+    AST_PATTERN_WILDCARD,
+    AST_PATTERN_LITERAL,
+    AST_PATTERN_BINDING,
+    AST_PATTERN_VARIANT,
+    AST_PATTERN_EXPR,
+} AstPatternKind;
+
+struct AstPattern {
+    Span span;
+    AstPatternKind kind;
+    
+    union {
+        AstLiteral literal;
+        
+        AstName binding;
+        
+        struct {
+            AstName name;
+            AstName binding;
+        } variant;
+        
+        AstExpr *expr;
+    };
+};
+
+typedef struct {
+    Span span;
+    
+    AstPattern *pattern;
+    AstStmt *body;
+} AstMatchCase;
+
+typedef enum {
     AST_STMT_ERROR,
 
     AST_STMT_VAR,
@@ -339,47 +373,13 @@ typedef enum {
     AST_STMT_DEFER,
 } AstStmtKind;
 
-typedef enum {
-    AST_PATTERN_ERROR,
-    AST_PATTERN_WILDCARD,
-    AST_PATTERN_LITERAL,
-    AST_PATTERN_BINDING,
-    AST_PATTERN_VARIANT,
-    AST_PATTERN_EXPR,
-} AstPatternKind;
-
-struct AstPattern {
-    Span span;
-    AstPatternKind kind;
-
-    union {
-        AstLiteral literal;
-
-        AstName binding;
-
-        struct {
-            AstName name;
-            AstName binding;
-        } variant;
-
-        AstExpr *expr;
-    };
-};
-
-typedef struct {
-    Span span;
-
-    AstPattern *pattern;
-    AstStmt *body;
-} AstMatchCase;
-
 struct AstStmt {
     Span span;
-
+    
     bool comptime;
-
+    
     AstStmtKind kind;
-
+    
     union {
         struct {
             AstVarDecl *var;

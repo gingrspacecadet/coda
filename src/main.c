@@ -55,7 +55,7 @@ void print_span_location(Span span) {
         string_fmt(
             span.source
                 ? span.source->path
-                : string_make("<no file>")
+                : STRING("<no file>")
         ),
         source_line(span.source, span.offset),
         source_column(span.source, span.offset)
@@ -94,7 +94,7 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     Source s = {
-        .contents = string_make(
+        .contents = STRING(
             "module lambda;\n"
             "\n"
             "fen int test(fn int(int) func) {\n"
@@ -108,7 +108,7 @@ int main() {
             "    });\n"
             "}\n"
         ),
-        .path = string_make("<no file>")
+        .path = STRING("<no file>")
     };
 
     Arena *arena = arena_create();
