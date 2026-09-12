@@ -676,7 +676,7 @@ The included module is then referred to through the alias:
 io::println("hello");
 ```
 
-The exact rules governing symbol lookup, re-export, cycles, and module initialization are defined later in this specification.
+The exact rules governing symbol lookup, re-export, cycles, and module initialisation are defined later in this specification.
 
 ### 4.3 Name Resolution
 
@@ -1691,20 +1691,20 @@ An incomplete match is rejected unless an explicit catch-all pattern is present.
 
 ## 8.8 Break Statements
 
-`break` terminates the nearest enclosing loop.
+`break` terminates the `N`th enclosing loop. If `N` is not provided, it defaults to `1`.
 
 ```coda
-break;
+break N;
 ```
 
 A `break` may not appear outside a loop.
 
 ## 8.9 Continue Statements
 
-`continue` skips the remainder of the current iteration of the nearest enclosing loop.
+`continue` skips the remainder of the current iteration of the `N`th enclosing loop. If `N` is not provided, it defaults to `1`.
 
 ```coda
-continue;
+continue N;
 ```
 
 A `continue` may not appear outside a loop.

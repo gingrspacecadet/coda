@@ -447,16 +447,16 @@ static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth) {
 
     switch (stmt->kind) {
     case AST_STMT_VAR:
-        print_name(out, &stmt->var.var->name);
+        print_name(out, &stmt->var->name);
         fputc('\n', out);
-        print_type(out, stmt->var.var->type, depth + 1);
+        print_type(out, stmt->var->type, depth + 1);
 
-        if (stmt->var.var->init != NULL)
-            print_expr(out, stmt->var.var->init, depth + 1);
+        if (stmt->var->init != NULL)
+            print_expr(out, stmt->var->init, depth + 1);
         break;
 
     case AST_STMT_EXPR:
-        print_expr(out, stmt->expr.expr, depth + 1);
+        print_expr(out, stmt->expr, depth + 1);
         break;
 
     case AST_STMT_BLOCK:

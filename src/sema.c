@@ -3,6 +3,8 @@
 static Scope *sema_push_scope(Sema *sema) {
     Scope scope = {
         .syms = array_create(sema->arena, sizeof(Symbol)),
+        .defers = array_create(sema->arena, sizeof(HirStmt *)),
+        .loop = false,
     };
 
     array_push(&sema->scopes, &scope);
@@ -11,6 +13,20 @@ static Scope *sema_push_scope(Sema *sema) {
 
 static void sema_pop_scope(Sema *sema) {
     sema->scopes.len--;
+}
+
+static size_t sema_loop_scope(Sema *sema, size_t level) {
+    for (size_t i = sema->scopes.len; i > 0; i--) {
+        Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
+
+        if (!scope->loop)
+            continue;
+
+        if (--level == 0)
+            return i - 1;
+    }
+
+    return SIZE_MAX;
 }
 
 //! TODO: hash table / binary lookup
@@ -49,7 +65,28 @@ Symbol *sema_lookup(Sema *sema, AstName name) {
     return scope_lookup(&sema->global_scope, name);
 }
 
-Symbol *sema_lookup_path(Sema *sema, Path path);
+Symbol *sema_lookup_path(Sema *sema, Path path) {
+    if (path.parts.len == 0)
+        return NULL;
+
+    AstName *part = (AstName *)path.parts.data;
+    Symbol *symbol = sema_lookup(sema, part[0]);
+
+    if (symbol == NULL)
+        return NULL;
+
+    for (size_t i = 1; i < path.parts.len; i++) {
+        part++;
+
+        //! TODO: resolve member of symbol
+        symbol = NULL;
+
+        if (symbol == NULL)
+            return NULL;
+    }
+
+    return symbol;
+}
 
 //! TODO: comptime stuff!
 HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
@@ -1114,6 +1151,129 @@ static HirExpr *sema_hir_bool(Sema *sema, bool value) {
     return expr;
 }
 
+static HirStmt *sema_lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
+    size_t count = 0;
+
+    for (size_t i = sema->scopes.len; i > scope; i--) {
+        Scope *current = (Scope *)array_at(&sema->scopes, i - 1);
+        count += current->defers.len;
+    }
+
+    if (count == 0)
+        return exit;
+
+    HirStmt *block = sema_hir_stmt(sema, HIR_STMT_BLOCK, exit->span);
+    block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+
+    for (size_t i = sema->scopes.len; i > scope; i--) {
+        Scope *current = (Scope *)array_at(&sema->scopes, i - 1);
+
+        for (size_t j = current->defers.len; j > 0; j--) {
+            HirStmt *deferred =
+                ((HirStmt **)current->defers.data)[j - 1];
+
+            array_push(&block->block.stmts, &deferred);
+        }
+    }
+
+    array_push(&block->block.stmts, &exit);
+    return block;
+}
+
+static bool hir_stmt_terminates(HirStmt *stmt) {
+    if (stmt == NULL)
+        return false;
+
+    switch (stmt->kind) {
+        case HIR_STMT_RETURN:
+        case HIR_STMT_BREAK:
+        case HIR_STMT_CONTINUE:
+            return true;
+
+        case HIR_STMT_BLOCK:
+            if (stmt->block.stmts.len == 0)
+                return false;
+
+            return hir_stmt_terminates(((HirStmt **)stmt->block.stmts.data)[stmt->block.stmts.len - 1]);
+
+        case HIR_STMT_IF:
+            return stmt->_if._else != NULL && hir_stmt_terminates(stmt->_if.then) && hir_stmt_terminates(stmt->_if._else);
+
+        default:
+            return false;
+    }
+}
+
+HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
+static bool sema_block(Sema *sema, AstStmt *ast, HirStmt *hir) {
+    hir->kind = HIR_STMT_BLOCK;
+    hir->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+
+    Scope *scope = sema_push_scope(sema);
+
+    for (size_t i = 0; i < ast->block.stmts.len; i++) {
+        AstStmt *stmt = ((AstStmt **)ast->block.stmts.data)[i];
+
+        if (stmt->kind == AST_STMT_VAR) {
+            if (!sema_local_decl(sema, stmt->var)) {
+                sema_pop_scope(sema);
+                return false;
+            }
+
+            continue;
+        }
+
+        if (stmt->kind == AST_STMT_DEFER) {
+            HirStmt *deferred = sema_stmt(sema, stmt->defer.deferred);
+
+            if (deferred == NULL || deferred->kind == HIR_STMT_ERROR) {
+                sema_pop_scope(sema);
+                return false;
+            }
+
+            array_push(&scope->defers, &deferred);
+            continue;
+        }
+
+        HirStmt *value = sema_stmt(sema, stmt);
+
+        if (value == NULL)
+            continue;
+
+        if (value->kind == HIR_STMT_ERROR) {
+            sema_pop_scope(sema);
+            return false;
+        }
+
+        array_push(&hir->block.stmts, &value);
+
+        if (hir_stmt_terminates(value))
+            break;
+    }
+
+    if (hir->block.stmts.len == 0 || !hir_stmt_terminates(((HirStmt **)hir->block.stmts.data)[hir->block.stmts.len - 1])) {
+        for (size_t i = scope->defers.len; i > 0; i--) {
+            HirStmt *deferred = ((HirStmt **)scope->defers.data)[i - 1];
+
+            array_push(&hir->block.stmts, &deferred);
+        }
+    }
+
+    sema_pop_scope(sema);
+    return true;
+}
+
+static bool sema_expr_uint(HirExpr *expr, size_t *value) {
+    if (expr == NULL || expr->kind != HIR_EXPR_LITERAL)
+        return false;
+
+    if (expr->literal.kind != AST_LIT_INTEGER)
+        return false;
+
+    //! TODO: parse integer literal
+    return false;
+}
+
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
     HirStmt *hir = arena_alloc(sema->arena, sizeof(HirStmt));
 
@@ -1121,7 +1281,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
 
     switch (ast->kind) {
         case AST_STMT_VAR:
-            if (sema_local_decl(sema, ast->var.var) == false) {
+            if (sema_local_decl(sema, ast->var) == false) {
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1130,53 +1290,23 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
 
         case AST_STMT_EXPR:
             hir->kind = HIR_STMT_EXPR;
-            hir->expr.expr = sema_expr(sema, ast->expr.expr, NULL);
+            hir->expr = sema_expr(sema, ast->expr, NULL);
 
-            if (hir->expr.expr == NULL || hir->expr.expr->kind == HIR_EXPR_ERROR) {
+            if (hir->expr == NULL || hir->expr->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
 
             break;
 
-        case AST_STMT_BLOCK: {
-            hir->kind = HIR_STMT_BLOCK;
-            hir->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
-
-            sema_push_scope(sema);
-
-            for (size_t i = 0; i < ast->block.stmts.len; i++) {
-                AstStmt *stmt = ((AstStmt **)ast->block.stmts.data)[i];
-
-                if (stmt->kind == AST_STMT_VAR) {
-                    if (!sema_local_decl(sema, stmt->var.var)) {
-                        sema_pop_scope(sema);
-                        hir->kind = HIR_STMT_ERROR;
-                        return hir;
-                    }
-
-                    continue;
-                }
-
-                HirStmt *value = sema_stmt(sema, stmt);
-
-                if (value == NULL)
-                    continue;
-
-                if (value->kind == HIR_STMT_ERROR) {
-                    sema_pop_scope(sema);
-                    hir->kind = HIR_STMT_ERROR;
-                    return hir;
-                }
-
-                array_push(&hir->block.stmts, &value);
+        case AST_STMT_BLOCK:
+            if (!sema_block(sema, ast, hir)) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
             }
 
-            sema_pop_scope(sema);
-
             return hir;
-        }
-
+            
         case AST_STMT_RETURN:
             hir->kind = HIR_STMT_RETURN;
             hir->_return.value = NULL;
@@ -1223,12 +1353,17 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         case AST_STMT_WHILE: {
             hir->kind = HIR_STMT_WHILE;
             hir->_while.cond = sema_expr(sema, ast->_while.cond, NULL);
-            hir->_while.body = sema_stmt(sema, ast->_while.body);
 
             if (hir->_while.cond == NULL || hir->_while.cond->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
+
+            sema_push_scope(sema)->loop = true;
+
+            hir->_while.body = sema_stmt(sema, ast->_while.body);
+
+            sema_pop_scope(sema);
 
             if (hir->_while.body == NULL || hir->_while.body->kind == HIR_STMT_ERROR) {
                 hir->kind = HIR_STMT_ERROR;
@@ -1236,23 +1371,86 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             }
 
             //! TODO: require bool condition
-
             return hir;
         }
 
-        case AST_STMT_BREAK:
-            hir->kind = HIR_STMT_BREAK;
-            break;
+        case AST_STMT_BREAK: {
+            size_t level = 1;
 
-        case AST_STMT_CONTINUE:
+            if (ast->_break.value != NULL) {
+                HirExpr *expr = sema_expr(sema, ast->_break.value, NULL);
+
+                if (expr == NULL || expr->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+
+                expr = comp_eval_expr(sema, expr);
+
+                //! TODO: require comptime integer
+                //! TODO: extract integer
+
+                if (expr->kind != HIR_EXPR_LITERAL) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+            }
+
+            size_t loop_scope = sema_loop_scope(sema, level);
+
+            if (loop_scope == SIZE_MAX) {
+                //! TODO: invalid break level diagnostic
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            hir->kind = HIR_STMT_BREAK;
+            hir->_break.level = level;
+
+            return sema_lower_defer_exit(sema, hir, loop_scope);
+        }
+
+        case AST_STMT_CONTINUE: {
+            size_t level = 1;
+
+            if (ast->_continue.value != NULL) {
+                HirExpr *expr = sema_expr(sema, ast->_continue.value, NULL);
+
+                if (expr == NULL || expr->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+
+                expr = comp_eval_expr(sema, expr);
+
+                //! TODO: require comptime integer
+                //! TODO: extract integer
+
+                if (expr->kind != HIR_EXPR_LITERAL) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+            }
+
+            size_t loop_scope = sema_loop_scope(sema, level);
+
+            if (loop_scope == SIZE_MAX) {
+                //! TODO: invalid break level diagnostic
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
             hir->kind = HIR_STMT_CONTINUE;
-            break;
+            hir->_continue.level = level;
+
+            return sema_lower_defer_exit(sema, hir, loop_scope);
+        }
 
         case AST_STMT_FOR: {
             HirStmt *block = sema_hir_stmt(sema, HIR_STMT_BLOCK, ast->span);
             block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
 
-            sema_push_scope(sema);
+            sema_push_scope(sema)->loop = true;
 
             if (ast->_for.init != NULL) {
                 HirStmt *init = sema_stmt(sema, ast->_for.init);
@@ -1289,9 +1487,9 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
 
             if (ast->_for.post != NULL) {
                 HirStmt *post = sema_hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
-                post->expr.expr = sema_expr(sema, ast->_for.post, NULL);
+                post->expr = sema_expr(sema, ast->_for.post, NULL);
 
-                if (post->expr.expr == NULL || post->expr.expr->kind == HIR_EXPR_ERROR) {
+                if (post->expr == NULL || post->expr->kind == HIR_EXPR_ERROR) {
                     sema_pop_scope(sema);
                     loop->kind = HIR_STMT_ERROR;
                     return loop;
@@ -1427,8 +1625,8 @@ void sema_var_decl(Sema *sema, AstVarDecl *ast) {
     //! TODO: create HirGlobal
 }
 
-void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
-void sema_include_decl(Sema *sema, AstIncludeDecl *ast);
+void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast) {}
+void sema_include_decl(Sema *sema, AstIncludeDecl *ast) {}
 
 void sema_decl(Sema *sema, AstDecl *ast) {
     switch (ast->kind) {

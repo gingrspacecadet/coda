@@ -204,9 +204,7 @@ struct HirStmt {
     HirStmtKind kind;
 
     union {
-        struct {
-            HirExpr *expr;
-        } expr;
+        HirExpr *expr;
 
         struct {
             Array(HirStmt *) stmts;
@@ -231,6 +229,14 @@ struct HirStmt {
             HirExpr *cond;
             HirStmt *body;
         } _while;
+
+        struct {
+            size_t level;
+        } _break;
+
+        struct {
+            size_t level;
+        } _continue;
     };
 };
 
@@ -287,8 +293,8 @@ struct Symbol {
 
 typedef struct {
     Array(Symbol) syms;
+    Array(HirStmt *) defers;
+    bool loop; // used for break/continue semantics
 } Scope;
-
-
 
 #endif

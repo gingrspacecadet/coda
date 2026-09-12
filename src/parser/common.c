@@ -2,20 +2,20 @@
 
 Path parse_path(Parser *p) {
     Path path = {
-        .parts = array_create(p->arena, sizeof(String))
+        .parts = array_create(p->arena, sizeof(AstName))
     };
 
-    if (!expect(p, TK_IDENT))
+    if (!at(p, TK_IDENT) && !at(p, TK_POUND))
         return path;
 
-    String part = span_to_string(p->previous.span);
+    AstName part = parse_name(p);
     array_push(&path.parts, &part);
 
     while (match(p, TK_COLON_COLON)) {
-        if (!expect(p, TK_IDENT))
+        if (!at(p, TK_IDENT) && !at(p, TK_POUND))
             break;
 
-        part = span_to_string(p->previous.span);
+        part = parse_name(p);
         array_push(&path.parts, &part);
     }
 

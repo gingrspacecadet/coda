@@ -55,7 +55,7 @@ AstStmt *parse_expr_stmt(Parser *p) {
     AstExpr *expr = parse_expression(p);
 
     AstStmt *stmt = stmt_new(p, AST_STMT_EXPR, expr->span);
-    stmt->expr.expr = expr;
+    stmt->expr = expr;
 
     expect(p, TK_SEMICOLON);
     return stmt;
@@ -72,7 +72,7 @@ AstStmt *parse_var_stmt(Parser *p) {
         var->init = parse_expression(p);
 
     AstStmt *stmt = stmt_new(p, AST_STMT_VAR, var->span);
-    stmt->var.var = var;
+    stmt->var = var;
 
     expect(p, TK_SEMICOLON);
     return stmt;
@@ -107,7 +107,7 @@ bool try_parse_var_stmt(Parser *p, AstStmt **out) {
     }
 
     AstStmt *stmt = stmt_new(p, AST_STMT_VAR, var->span);
-    stmt->var.var = var;
+    stmt->var = var;
 
     *out = stmt;
     return true;

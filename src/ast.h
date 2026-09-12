@@ -32,7 +32,7 @@ typedef struct {
 } AstName;
 
 typedef struct {
-    Array(String) parts;
+    Array(AstName) parts;
 } Path;
 
 typedef struct {
@@ -381,13 +381,9 @@ struct AstStmt {
     AstStmtKind kind;
     
     union {
-        struct {
-            AstVarDecl *var;
-        } var;
+        AstVarDecl *var;
 
-        struct {
-            AstExpr *expr;
-        } expr;
+        AstExpr *expr;
 
         struct {
             Array(AstStmt *) stmts;
