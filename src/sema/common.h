@@ -66,7 +66,7 @@ void error_unknown_path(Diags *diags, Path path, Span span);
 void error_duplicate_symbol(Diags *diags, String name, Span span);
 void error_shadowing(Diags *diags, String name, Span span);
 void error_unknown_type(Diags *diags, Span span);
-void error_type_mismatch(Diags *diags, Span span);
+void error_type_mismatch(Diags *diags, Span span, HirType *expected, HirType *found);
 void error_expected_function(Diags *diags, Span span);
 void error_expected_type_symbol(Diags *diags, Span span);
 void error_wrong_argument_count(Diags *diags, size_t expected, size_t actual, Span span);

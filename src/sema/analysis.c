@@ -795,7 +795,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *operand_type = sema_binary_operand_type(sema, ast->binary.op, left, right, expected);
 
             if (operand_type == NULL) {
-                error_type_mismatch(sema->diags, ast->span);
+                error_type_mismatch(sema->diags, ast->span, expected, operand_type);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -1100,9 +1100,8 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (expected != NULL) {
-                if (expected->kind != HIR_TYPE_FUNCTION ||
-                    !sema_type_equal(type, expected)) {
-                    error_type_mismatch(sema->diags, ast->span);
+                if (expected->kind != HIR_TYPE_FUNCTION || !sema_type_equal(type, expected)) {
+                    error_type_mismatch(sema->diags, ast->span, expected, type);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }

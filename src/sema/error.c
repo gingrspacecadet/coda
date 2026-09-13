@@ -1,5 +1,76 @@
 #include "common.h"
 
+static String sema_type_string(Arena *arena, HirType *type) {
+    if (type == NULL)
+        return STRING("<unknown>");
+
+    switch (type->kind) {
+        case HIR_TYPE_ERROR:
+            return STRING("<error>");
+
+        case HIR_TYPE_BUILTIN:
+            switch (type->builtin) {
+                case BUILTIN_UINT8:  return STRING("uint8");
+                case BUILTIN_UINT16: return STRING("uint16");
+                case BUILTIN_UINT32: return STRING("uint32");
+                case BUILTIN_UINT64: return STRING("uint64");
+                case BUILTIN_INT8:   return STRING("int8");
+                case BUILTIN_INT16:  return STRING("int16");
+                case BUILTIN_INT32:  return STRING("int32");
+                case BUILTIN_INT64:  return STRING("int64");
+                case BUILTIN_BOOL:   return STRING("bool");
+                case BUILTIN_NONE:   return STRING("none");
+            }
+            break;
+
+        case HIR_TYPE_NAMED:
+            return type->named.symbol->name.ident;
+
+        case HIR_TYPE_POINTER: {
+            String pointee = sema_type_string(arena, type->pointer.pointee);
+            return format(
+                arena,
+                "%.*s*%s",
+                string_fmt(pointee),
+                type->pointer.optional ? "?" : ""
+            );
+        }
+
+        case HIR_TYPE_SLICE: {
+            String element = sema_type_string(arena, type->slice.element);
+            return format(arena, "%.*s[]", string_fmt(element));
+        }
+
+        case HIR_TYPE_ARRAY: {
+            String element = sema_type_string(arena, type->array.element);
+            return format(
+                arena,
+                "%.*s[%zu]",
+                string_fmt(element),
+                type->array.length
+            );
+        }
+
+        case HIR_TYPE_FUNCTION:
+            // TODO: print function parameters
+            return STRING("function");
+
+        case HIR_TYPE_SUM:
+            return STRING("sum");
+
+        case HIR_TYPE_STRUCT:
+            return STRING("struct");
+
+        case HIR_TYPE_UNION:
+            return STRING("union");
+
+        case HIR_TYPE_ENUM:
+            return STRING("enum");
+    }
+
+    return STRING("<unknown>");
+}
+
 static String path_string(Arena *arena, Path path) {
     size_t length = 0;
 
@@ -83,13 +154,29 @@ void error_unknown_type(Diags *diags, Span span) {
     diag_finish(&b);
 }
 
-void error_type_mismatch(Diags *diags, Span span) {
+void error_type_mismatch(Diags *diags, Span span, HirType *expected, HirType *found) {
+    String expected_name = sema_type_string(diags->arena, expected);
+    String found_name = sema_type_string(diags->arena, found);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_TYPE_MISMATCH,
         span,
-        STRING("Type mismatch.")
+        format(
+            diags->arena,
+            "Type mismatch."
+        )
+    );
+
+    diag_note(
+        &b,
+        format(
+            diags->arena,
+            "Expected %.*s, found %.*s.",
+            string_fmt(expected_name),
+            string_fmt(found_name)
+        )
     );
 
     diag_finish(&b);
