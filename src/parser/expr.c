@@ -204,7 +204,7 @@ AstExpr *parse_identifier_or_path(Parser *p) {
 
     if (path.parts.len == 1) {
         expr->kind = AST_EXPR_IDENT;
-        expr->ident = (AstName){.kind = AST_NAME_IDENT, .ident = *(String *)array_at(&path.parts, 0)};
+        expr->ident = *(AstName *)array_at(&path.parts, 0);
     } else {
         expr->kind = AST_EXPR_PATH;
         expr->path = path;

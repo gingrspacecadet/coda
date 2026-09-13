@@ -28,20 +28,6 @@ String token_name(TokenType type) {
     }
 }
 
-static char *format(Arena *arena, char *msg, ...) {
-    char *buf;
-    va_list args;
-    va_start(args, msg);
-    int n = vasprintf(&buf, msg, args);
-    if (n == -1) return msg;
-    
-    char *nb = arena_alloc(arena, n);
-    memcpy(nb, buf, n);
-    free(buf);
-
-    return nb;
-}
-
 void error_expected_token(Diags *diags, TokenType expected, Span span) {
     String name = token_name(expected);
 
@@ -50,7 +36,7 @@ void error_expected_token(Diags *diags, TokenType expected, Span span) {
         DIAG_ERROR,
         E_EXPECTED_TOKEN,
         span,
-        STRING(format(diags->arena, "Expected token %.*s.", string_fmt(name)))
+        format(diags->arena, "Expected token %.*s.", string_fmt(name))
     );
 
     diag_finish(&b); 
@@ -134,7 +120,7 @@ void error_unexpected_token(Diags *diags, TokenType token, Span span) {
         DIAG_ERROR,
         E_UNEXPECTED_TOKEN,
         span,
-        STRING(format(diags->arena, "Unexpected token %s", token_name(token)))
+        format(diags->arena, "Unexpected token %s", token_name(token))
     );
 
     diag_finish(&b);

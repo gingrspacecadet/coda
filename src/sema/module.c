@@ -306,7 +306,7 @@ static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     ModuleEntry *entry = module_index_lookup(&sema->modules, include->path);
 
     if (entry == NULL) {
-        // TODO: diagnostic
+        error_module_not_found(sema->diags, include->path, include->span);
         return false;
     }
 

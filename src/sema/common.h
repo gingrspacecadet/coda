@@ -60,4 +60,22 @@ void sema_decl(Sema *sema, AstDecl *ast);
 bool sema_resolve_includes(Sema *sema, AstModule *module);
 void module_index_scan(ModuleIndex *index, Arena *arena, Array(String) paths);
 
+void error_unknown_name(Diags *diags, String name, Span span);
+void error_unknown_path(Diags *diags, Path path, Span span);
+void error_duplicate_symbol(Diags *diags, String name, Span span);
+void error_shadowing(Diags *diags, String name, Span span);
+void error_unknown_type(Diags *diags, Span span);
+void error_type_mismatch(Diags *diags, Span span);
+void error_expected_function(Diags *diags, Span span);
+void error_expected_type_symbol(Diags *diags, Span span);
+void error_wrong_argument_count(Diags *diags, size_t expected, size_t actual, Span span);
+void error_unknown_field(Diags *diags, String name, Span span);
+void error_invalid_unary_operation(Diags *diags, Span span);
+void error_invalid_binary_operation(Diags *diags, Span span);
+void error_invalid_return(Diags *diags, Span span);
+void error_invalid_break(Diags *diags, Span span);
+void error_invalid_continue(Diags *diags, Span span);
+void error_namespace_value(Diags *diags, Span span);
+void error_module_not_found(Diags *diags, Path path, Span span);
+
 #endif

@@ -161,5 +161,5 @@ int main() {
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    printf("Compilation took %ld seconds (%ld nanoseconds)\n", end.tv_sec - start.tv_sec, end.tv_nsec - start.tv_nsec);
+    printf("Compilation took %ld seconds (%lf milliseconds)\n", end.tv_sec - start.tv_sec, (end.tv_nsec - start.tv_nsec) / 1000000.f);
 }

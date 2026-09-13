@@ -282,7 +282,7 @@ AstType *parse_type_single(Parser *p) {
             expect(p, TK_GT);
         }
     } else {
-        error_expected_type(p->diags, p->current.span);
+        error_expected_type_symbol(p->diags, p->current.span);
 
         base = arena_calloc(p->arena, sizeof(*base));
         base->kind = AST_TYPE_ERROR;

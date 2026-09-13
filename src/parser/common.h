@@ -140,7 +140,7 @@ AstType *parse_type(Parser *p);
 
 void error_expected_token(Diags *diags, TokenType expected, Span span);
 void error_expected_identifier(Diags *diags, Span span);
-void error_expected_type(Diags *diags, Span span);
+void error_expected_type_symbol(Diags *diags, Span span);
 void error_expected_expression(Diags *diags, Span span);
 void error_expected_declaration(Diags *diags, Span span);
 void error_expected_pattern(Diags *diags, Span span);

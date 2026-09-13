@@ -123,8 +123,14 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                 break;
         }
 
-        if (sym != NULL)
+        if (sym != NULL) {
+            if (scope_lookup(&sema->global_scope, sym->name) != NULL) {
+                error_duplicate_symbol(sema->diags, sym->name.ident, d->span);
+                continue;
+            }
+
             scope_insert(&sema->global_scope, sym);
+        }
     }
 }
 
@@ -278,13 +284,13 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             Symbol *symbol = sema_lookup_path(sema, ast->named.path);
 
             if (symbol == NULL) {
-                //! TODO: unknown type diagnostic
+                error_unknown_type(sema->diags, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
 
             if (symbol->kind != SYMBOL_TYPE) {
-                //! TODO: expected type diagnostic
+                error_expected_type_symbol(sema->diags, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
@@ -705,18 +711,20 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             Symbol *symbol = sema_lookup(sema, ast->ident);
 
             if (symbol == NULL) {
-                // TODO: diagnostic
+                error_unknown_name(sema->diags, ast->ident.ident, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
             if (symbol->kind == SYMBOL_NAMESPACE) {
-                // TODO: namespace used as a value
+                error_namespace_value(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
             hir->type = sema_symbol_type(sema, symbol);
+            hir->kind = HIR_EXPR_VALUE;
+            hir->value.symbol = symbol;
             return hir;
         }
 
@@ -724,13 +732,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             Symbol *symbol = sema_lookup_path(sema, ast->path);
 
             if (symbol == NULL) {
-                // TODO: diagnostic
+                error_unknown_path(sema->diags, ast->path, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
             if (symbol->kind == SYMBOL_NAMESPACE) {
-                // TODO: namespace used as a value
+                error_namespace_value(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -753,7 +761,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *type = sema_unary_type(sema, hir->unary.op, operand);
 
             if (type == NULL) {
-                //! TODO: invalid unary operation
+                error_invalid_unary_operation(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -778,7 +786,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *operand_type = sema_binary_operand_type(sema, ast->binary.op, left, right, expected);
 
             if (operand_type == NULL) {
-                //! TODO: incompatible operand types
+                error_type_mismatch(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -790,7 +798,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 right = sema_coerce(sema, right, operand_type);
 
             if (left == NULL || right == NULL) {
-                //! TODO: operands cannot be coerced
+                error_invalid_binary_operation(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -823,13 +831,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *function_type = sema_call_type(sema, callee);
 
             if (function_type == NULL) {
-                //! TODO: expected function
+                error_expected_function(sema->diags, ast->call.callee->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
             if (function_type->function.params.len != ast->call.args.len) {
-                //! TODO: wrong argument count
+                error_wrong_argument_count(sema->diags, function_type->function.params.len, ast->call.args.len, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -966,7 +974,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (field == NULL) {
-                //! TODO: unknown field diagnostic
+                error_unknown_field(sema->diags, ast->member.member.ident, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -1072,12 +1080,12 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast) {
     Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
 
     if (scope_lookup(scope, ast->name) != NULL) {
-        //! TODO: duplicate local diagnostic
+        error_duplicate_symbol(sema->diags, ast->name.ident, ast->span);
         return false;
     }
 
     if (sema_lookup(sema, ast->name) != NULL) {
-        //! TODO: shadowing diagnostic
+        error_shadowing(sema->diags, ast->name.ident, ast->span);
         return false;
     }
 
@@ -1290,10 +1298,20 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             hir->kind = HIR_STMT_RETURN;
             hir->_return.value = NULL;
 
-            if (ast->_return.value != NULL)
+            if (sema->current_fn == NULL) {
+                error_invalid_return(sema->diags, ast->span);
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            if (ast->_return.value != NULL) {
                 hir->_return.value = sema_expr(sema, ast->_return.value, sema->current_fn->return_type);
 
-            //! TODO: validate return type
+                if (hir->_return.value == NULL || hir->_return.value->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+            }
 
             return hir;
 
@@ -1378,7 +1396,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             size_t loop_scope = sema_loop_scope(sema, level);
 
             if (loop_scope == SIZE_MAX) {
-                //! TODO: invalid break level diagnostic
+                error_invalid_break(sema->diags, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1414,7 +1432,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             size_t loop_scope = sema_loop_scope(sema, level);
 
             if (loop_scope == SIZE_MAX) {
-                //! TODO: invalid break level diagnostic
+                error_invalid_continue(sema->diags, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }

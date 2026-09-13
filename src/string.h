@@ -1,12 +1,12 @@
 #ifndef STRING_H
 #define STRING_H
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
-
 #include "arena.h"
 
 #define string_fmt(S) (int)(S).length, (S).data
@@ -58,6 +58,20 @@ static char *string_unmake(Arena *a, String s) {
     strncpy(p, s.data, s.length);
     p[s.length] = 0;
     return p;
+}
+
+static String format(Arena *arena, char *msg, ...) {
+    char *buf;
+    va_list args;
+    va_start(args, msg);
+    int n = vasprintf(&buf, msg, args);
+    if (n == -1) return STRING(msg);
+    
+    char *nb = arena_alloc(arena, n);
+    memcpy(nb, buf, n);
+    free(buf);
+
+    return STRING(nb);
 }
 
 #endif
