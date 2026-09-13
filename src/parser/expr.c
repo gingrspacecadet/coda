@@ -426,8 +426,6 @@ AstExpr *parse_lambda_expression(Parser *p) {
     expr->span = start.span;
     expr->kind = AST_EXPR_LAMBDA;
 
-    expr->lambda.generics = array_create(p->arena, sizeof(AstGenericParam));
-
     expr->lambda.params = array_create(p->arena, sizeof(AstParam));
 
     expr->lambda.ret = parse_type(p);

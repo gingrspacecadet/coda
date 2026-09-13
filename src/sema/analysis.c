@@ -295,6 +295,15 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 return hir;
             }
 
+            if (symbol->type == NULL) {
+                //! TODO: malformed type symbol
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            if (symbol->type->kind == HIR_TYPE_BUILTIN)
+                return symbol->type;
+
             hir->kind = HIR_TYPE_NAMED;
             hir->named.symbol = symbol;
             break;
@@ -1057,10 +1066,80 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             break;
         }
 
-        case AST_EXPR_LAMBDA:
+        case AST_EXPR_LAMBDA: {
             hir->kind = HIR_EXPR_LAMBDA;
-            //! TODO: analyse lambda
-            break;
+
+            HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+
+            *type = (HirType) {
+                .kind = HIR_TYPE_FUNCTION,
+                .mutable = false,
+                .function = {
+                    .ret = sema_type(sema, ast->lambda.ret),
+                    .params = array_create(sema->arena, sizeof(HirType *)),
+                },
+            };
+
+            if (type->function.ret->kind == HIR_TYPE_ERROR) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            for (size_t i = 0; i < ast->lambda.params.len; i++) {
+                AstParam *param =
+                    (AstParam *)array_at(&ast->lambda.params, i);
+
+                HirType *param_type = sema_type(sema, param->type);
+
+                if (param_type->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                array_push(&type->function.params, &param_type);
+            }
+
+            if (expected != NULL) {
+                if (expected->kind != HIR_TYPE_FUNCTION ||
+                    !sema_type_equal(type, expected)) {
+                    error_type_mismatch(sema->diags, ast->span);
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+            }
+
+            HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
+
+            *fn = (HirFunction) {
+                .symbol = NULL,
+                .return_type = type->function.ret,
+            };
+
+            HirFunction *previous_fn = sema->current_fn;
+            sema->current_fn = fn;
+
+            sema_push_scope(sema);
+
+            for (size_t i = 0; i < ast->lambda.params.len; i++) {
+                AstParam *param =
+                    (AstParam *)array_at(&ast->lambda.params, i);
+
+                HirType *param_type =
+                    *(HirType **)array_at(&type->function.params, i);
+
+                sema_insert_parameter(sema, param, param_type);
+            }
+
+            fn->body = sema_stmt(sema, ast->lambda.body);
+
+            sema_pop_scope(sema);
+            sema->current_fn = previous_fn;
+
+            hir->type = type;
+
+            //! TODO: store fn in lambda HIR
+            return hir;
+        }
 
         case AST_EXPR_SPLICE:
             //! TODO: comptime
@@ -1659,4 +1738,41 @@ void sema_decl(Sema *sema, AstDecl *ast) {
         default:
             break;
     }
+}
+
+static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
+    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+    HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+
+    *type = (HirType) {
+        .kind = HIR_TYPE_BUILTIN,
+        .mutable = false,
+        .builtin = builtin,
+    };
+
+    *symbol = (Symbol) {
+        .kind = SYMBOL_TYPE,
+        .name = (AstName) {
+            .kind = AST_NAME_IDENT,
+            .ident = name,
+        },
+        .decl = NULL,
+        .type = type,
+    };
+
+    scope_insert(&sema->global_scope, symbol);
+}
+
+void sema_insert_builtin_types(Sema *sema) {
+    sema_insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
+    sema_insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
+    sema_insert_builtin_type(sema, STRING("int32"), BUILTIN_INT32);
+    sema_insert_builtin_type(sema, STRING("int64"), BUILTIN_INT64);
+
+    sema_insert_builtin_type(sema, STRING("uint8"), BUILTIN_UINT8);
+    sema_insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
+    sema_insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
+    sema_insert_builtin_type(sema, STRING("uint64"), BUILTIN_UINT64);
+
+    sema_insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
 }

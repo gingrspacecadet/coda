@@ -57,6 +57,7 @@ void sema_var_decl(Sema *sema, AstVarDecl *ast);
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
 void sema_include_decl(Sema *sema, AstIncludeDecl *ast);
 void sema_decl(Sema *sema, AstDecl *ast);
+void sema_insert_builtin_types(Sema *sema);
 bool sema_resolve_includes(Sema *sema, AstModule *module);
 void module_index_scan(ModuleIndex *index, Arena *arena, Array(String) paths);
 

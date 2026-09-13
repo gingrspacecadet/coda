@@ -299,7 +299,6 @@ struct AstExpr {
         } init;
 
         struct {
-            Array(AstGenericParam) generics;
             Array(AstParam) params;
             AstType *ret;
             AstStmt *body;
