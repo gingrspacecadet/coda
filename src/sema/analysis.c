@@ -1,19 +1,4 @@
-#include "sema.h"
-
-static Scope *sema_push_scope(Sema *sema) {
-    Scope scope = {
-        .syms = array_create(sema->arena, sizeof(Symbol)),
-        .defers = array_create(sema->arena, sizeof(HirStmt *)),
-        .loop = false,
-    };
-
-    array_push(&sema->scopes, &scope);
-    return (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
-}
-
-static void sema_pop_scope(Sema *sema) {
-    sema->scopes.len--;
-}
+#include "common.h"
 
 static size_t sema_loop_scope(Sema *sema, size_t level) {
     for (size_t i = sema->scopes.len; i > 0; i--) {
@@ -33,13 +18,6 @@ static size_t sema_loop_scope(Sema *sema, size_t level) {
 //! TODO: report duplicated symbols
 void scope_insert(Scope *scope, Symbol *sym) {
     array_push(&scope->syms, sym);
-}
-
-static inline bool ast_name_equal(AstName *a, AstName *b) {
-    if (a->kind != AST_NAME_IDENT || b->kind != AST_NAME_IDENT)
-        return false;
-
-    return string_eq(a->ident, b->ident);
 }
 
 Symbol *scope_lookup(Scope *scope, AstName name) {
@@ -69,17 +47,18 @@ Symbol *sema_lookup_path(Sema *sema, Path path) {
     if (path.parts.len == 0)
         return NULL;
 
-    AstName *part = (AstName *)path.parts.data;
-    Symbol *symbol = sema_lookup(sema, part[0]);
+    AstName *part = (AstName *)array_at(&path.parts, 0);
+    Symbol *symbol = sema_lookup(sema, *part);
 
     if (symbol == NULL)
         return NULL;
 
     for (size_t i = 1; i < path.parts.len; i++) {
-        part++;
+        if (symbol->kind != SYMBOL_NAMESPACE)
+            return NULL;
 
-        //! TODO: resolve member of symbol
-        symbol = NULL;
+        part = (AstName *)array_at(&path.parts, i);
+        symbol = scope_lookup(symbol->namespace_scope, *part);
 
         if (symbol == NULL)
             return NULL;
@@ -715,7 +694,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     switch (ast->kind) {
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
-            hir->literal = ast->lit.literal;
+            hir->literal = ast->literal;
 
             if (expected != NULL)
                 hir = sema_expr_coerce(sema, hir, expected);
@@ -723,41 +702,41 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             break;
 
         case AST_EXPR_IDENT: {
-            Symbol *symbol = sema_lookup(sema, ast->ident.name);
+            Symbol *symbol = sema_lookup(sema, ast->ident);
 
             if (symbol == NULL) {
-                //! TODO: unknown symbol diagnostic
+                // TODO: diagnostic
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            hir->kind = HIR_EXPR_VALUE;
-            hir->value.symbol = symbol;
+            if (symbol->kind == SYMBOL_NAMESPACE) {
+                // TODO: namespace used as a value
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->type = sema_symbol_type(sema, symbol);
-
-            if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
-
-            break;
+            return hir;
         }
 
         case AST_EXPR_PATH: {
-            Symbol *symbol = sema_lookup_path(sema, ast->path.path);
+            Symbol *symbol = sema_lookup_path(sema, ast->path);
 
             if (symbol == NULL) {
-                //! TODO: unknown symbol diagnostic
+                // TODO: diagnostic
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            hir->kind = HIR_EXPR_VALUE;
-            hir->value.symbol = symbol;
+            if (symbol->kind == SYMBOL_NAMESPACE) {
+                // TODO: namespace used as a value
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->type = sema_symbol_type(sema, symbol);
-
-            if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
-
-            break;
+            return hir;
         }
 
         case AST_EXPR_UNARY: {
@@ -1531,17 +1510,17 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
     return hir;
 }
 
-void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
+HirFunction *sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
-        return;
+        return NULL;
     }
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error
-        return;
+        return NULL;
     }
 
     if (symbol->type == NULL) {
@@ -1553,7 +1532,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         type->function.params = array_create(sema->arena, sizeof(HirType *));
 
         for (size_t i = 0; i < ast->params.len; i++) {
-            AstParam *param = ((AstParam *)ast->params.data) + i;
+            AstParam *param = (AstParam *)array_at(&ast->params, i);
             HirType *param_type = sema_type(sema, param->type);
 
             array_push(&type->function.params, &param_type);
@@ -1563,27 +1542,33 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     }
 
     if (ast->body == NULL)
-        return;
+        return NULL;
+
+    HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
+    fn->symbol = symbol;
 
     sema_push_scope(sema);
 
     HirType *type = symbol->type;
 
     for (size_t i = 0; i < ast->params.len; i++) {
-        AstParam *param = ((AstParam *)ast->params.data) + i;
-        HirType *param_type = ((HirType **)type->function.params.data)[i];
+        AstParam *param = (AstParam *)array_at(&ast->params, i);
+        HirType *param_type = *(HirType **)array_at(&type->function.params, i);
 
         sema_insert_parameter(sema, param, param_type);
     }
 
-    //! TODO: create/cache HirFunction
+    HirFunction *previous_fn = sema->current_fn;
+    sema->current_fn = fn;
+
     //! TODO: analyse attributes
 
-    HirStmt *body = sema_stmt(sema, ast->body);
+    fn->body = sema_stmt(sema, ast->body);
 
-    (void)body;
-
+    sema->current_fn = previous_fn;
     sema_pop_scope(sema);
+
+    return fn;
 }
 
 void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
@@ -1656,21 +1641,4 @@ void sema_decl(Sema *sema, AstDecl *ast) {
         default:
             break;
     }
-}
-
-HirModule *sema_analyse(Sema *sema, AstModule *module) {
-    sema->module = module;
-    HirModule *hmod = arena_alloc(sema->arena, sizeof(HirModule));
-
-    collect_decls(sema, module->decls);
-
-    for (size_t i = 0; i < module->decls.len; i++) {
-        AstDecl *d = ((AstDecl **)module->decls.data)[i];
-        sema_decl(sema, d);
-    }
-
-    if (diags_has_errors(sema->diags))
-        return NULL;
-
-    return hmod;
 }

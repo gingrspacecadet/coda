@@ -277,7 +277,7 @@ AstPattern *parse_pattern(Parser *p) {
         at(p, TK_KW_FALSE) ||
         at(p, TK_KW_NULL)) {
         pattern->kind = AST_PATTERN_LITERAL;
-        pattern->literal = parse_literal(p)->lit.literal;
+        pattern->literal = parse_literal(p)->literal;
         return pattern;
     }
 

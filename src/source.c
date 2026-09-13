@@ -1,8 +1,7 @@
 #include "source.h"
 
 void source_build_lines(Source *source, Arena *arena) {
-    source->line_offsets =
-        array_create(arena, sizeof(size_t));
+    source->line_offsets = array_create(arena, sizeof(size_t));
 
     size_t zero = 0;
     array_push(&source->line_offsets, &zero);
@@ -22,8 +21,7 @@ size_t source_line(const Source *source, size_t offset) {
     while (lo + 1 < hi) {
         size_t mid = lo + (hi - lo) / 2;
 
-        const size_t *line =
-            array_at((Array *)&source->line_offsets, mid);
+        const size_t *line = array_at((Array(size_t) *)&source->line_offsets, mid);
 
         if (*line <= offset)
             lo = mid;
@@ -37,11 +35,7 @@ size_t source_line(const Source *source, size_t offset) {
 size_t source_column(const Source *source, size_t offset) {
     size_t line = source_line(source, offset);
 
-    const size_t *line_start =
-        array_at(
-            (Array *)&source->line_offsets,
-            line - 1
-        );
+    const size_t *line_start = array_at((Array(size_t) *)&source->line_offsets, line - 1);
 
     return offset - *line_start + 1;
 }

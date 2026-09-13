@@ -162,26 +162,26 @@ AstExpr *parse_literal(Parser *p) {
 
     switch (p->current.type) {
     case TK_NUMBER:
-        expr->lit.literal.kind = number_is_float(span_to_string(p->current.span))
+        expr->literal.kind = number_is_float(span_to_string(p->current.span))
             ? AST_LIT_FLOAT
             : AST_LIT_INTEGER;
         break;
 
     case TK_STRING:
-        expr->lit.literal.kind = AST_LIT_STRING;
+        expr->literal.kind = AST_LIT_STRING;
         break;
 
     case TK_CHAR:
-        expr->lit.literal.kind = AST_LIT_CHAR;
+        expr->literal.kind = AST_LIT_CHAR;
         break;
 
     case TK_KW_TRUE:
     case TK_KW_FALSE:
-        expr->lit.literal.kind = AST_LIT_BOOL;
+        expr->literal.kind = AST_LIT_BOOL;
         break;
 
     case TK_KW_NULL:
-        expr->lit.literal.kind = AST_LIT_NULL;
+        expr->literal.kind = AST_LIT_NULL;
         break;
 
     default:
@@ -189,7 +189,7 @@ AstExpr *parse_literal(Parser *p) {
         return expr;
     }
 
-    expr->lit.literal.raw = span_to_string(p->current.span);
+    expr->literal.raw = span_to_string(p->current.span);
     advance(p);
 
     return expr;
@@ -204,10 +204,10 @@ AstExpr *parse_identifier_or_path(Parser *p) {
 
     if (path.parts.len == 1) {
         expr->kind = AST_EXPR_IDENT;
-        expr->ident.name = (AstName){.kind = AST_NAME_IDENT, .ident = *(String *)array_at(&path.parts, 0)};
+        expr->ident = (AstName){.kind = AST_NAME_IDENT, .ident = *(String *)array_at(&path.parts, 0)};
     } else {
         expr->kind = AST_EXPR_PATH;
-        expr->path.path = path;
+        expr->path = path;
     }
 
     return expr;

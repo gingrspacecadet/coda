@@ -272,6 +272,12 @@ struct HirModule {
     Array(HirGlobal) globals;
 };
 
+typedef struct {
+    Array(Symbol) syms;
+    Array(HirStmt *) defers;
+    bool loop; // used for break/continue semantics
+} Scope;
+
 typedef enum {
     SYMBOL_ERROR,
     SYMBOL_TYPE,
@@ -282,6 +288,7 @@ typedef enum {
     SYMBOL_FIELD,
     SYMBOL_ENUM_ITEM,
     SYMBOL_CONSTRAINT,
+    SYMBOL_NAMESPACE,
 } SymbolKind;
 
 struct Symbol {
@@ -289,12 +296,20 @@ struct Symbol {
     AstDecl *decl;
     AstName name;
     HirType *type;
+
+    Scope *namespace_scope;
 };
 
 typedef struct {
-    Array(Symbol) syms;
-    Array(HirStmt *) defers;
-    bool loop; // used for break/continue semantics
-} Scope;
+    Path path;
+    String filename;
+    AstModule *ast;
+    Scope scope;
+    bool parsed;
+} ModuleEntry;
+
+typedef struct {
+    Array(ModuleEntry) entries;
+} ModuleIndex;
 
 #endif

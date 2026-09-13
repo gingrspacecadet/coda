@@ -1,6 +1,7 @@
 #include <time.h>
 #include "lexer.h"
 #include "parser.h"
+#include "sema.h"
 #include "print.h"
 
 #define BOLD_WHITE "\x1b[1;37m"
@@ -97,7 +98,7 @@ int main() {
         .contents = STRING(
             "module lambda;\n"
             "\n"
-            "fen int test(fn int(int) func) {\n"
+            "fn int test(fn int(int) func) {\n"
             "    return func(2);\n"
             "}\n"
             "\n"
@@ -149,6 +150,13 @@ int main() {
     print_diags(p.diags);
 
     // print_ast_module(stdout, m);
+
+    Sema sema = sema_create(arena, &d);
+    Array(String) includes = array_create(arena, sizeof(String));
+    array_push(&includes, &STRING("."));
+    sema_analyse(&sema, m, includes);
+
+    print_diags(sema.diags);
 
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC, &end);

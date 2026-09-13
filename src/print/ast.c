@@ -231,19 +231,19 @@ static void print_expr(
     switch (expr->kind) {
     case AST_EXPR_LITERAL:
         indent(out, depth + 1);
-        print_literal(out, &expr->lit.literal);
+        print_literal(out, &expr->literal);
         fputc('\n', out);
         break;
 
     case AST_EXPR_IDENT:
         indent(out, depth + 1);
-        print_name(out, &expr->ident.name);
+        print_name(out, &expr->ident);
         fputc('\n', out);
         break;
 
     case AST_EXPR_PATH:
         indent(out, depth + 1);
-        print_path(out, &expr->path.path);
+        print_path(out, &expr->path);
         fputc('\n', out);
         break;
 

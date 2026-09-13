@@ -248,17 +248,9 @@ struct AstExpr {
     AstExprKind kind;
 
     union {
-        struct {
-            AstLiteral literal;
-        } lit;
-
-        struct {
-            AstName name;
-        } ident;
-
-        struct {
-            Path path;
-        } path;
+        AstLiteral literal;
+        AstName ident;
+        Path path;
 
         struct {
             AstUnaryOp op;
