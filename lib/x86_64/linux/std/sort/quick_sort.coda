@@ -7,7 +7,7 @@ fn int partition<T>(mut Sequence<T> *seq, int low, int high) {
     int i = low - 1;
 
     for (int j = low; j < high; j += 1) {
-        if (seq.at(j).le(pivot)) {
+        if (seq.at(j).le(&pivot)) {
             i += 1;
             seq.at(i).swap(seq.at(j));
         }

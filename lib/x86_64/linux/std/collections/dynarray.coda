@@ -58,10 +58,10 @@ fn (none | AllocatorError) DynArray<T>.try_reserve(mut DynArray<T> *arr, usize c
     if (new_ptr == null) {
         return AllocatorError::OutOfMemory;
     }
-    for (usize i = 0; i < arr.len; i++) {
+    for (usize i = 0; i < arr.len; i += 1) {
         new_ptr[i] = arr.ptr[i];
     }
-    arr.allocator.free(arr.ptr);
+    arr.allocator.free(arr.ptr); // TODO: free() takes a pointer, but arr.ptr is an optional.
     arr.ptr = new_ptr;
     arr.cap = cap;
 }

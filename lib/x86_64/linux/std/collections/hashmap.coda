@@ -26,28 +26,10 @@ type Bucket<K: Hashable; Equatable, V> = struct {
 };
 
 @export
-fn HashMap<K, V> HashMap<K, V>.create(HashMap<K, V> *map, Allocator allocator) {
-    return DynArray<Bucket<K, V>>.create(allocator);
-}
-
-@export
-fn none HashMap<K, V>.init(mut HashMap<K, V> *map, Allocator allocator) {
-    match (map.try_init(allocator)) {
-        null {}
-        AllocatorError::OutOfMemory panic("Failed to initialize HashMap: Out of memory");
-    };
-}
-
-@export
-fn (none | AllocatorError) HashMap<K, V>.try_init(mut HashMap<K, V> *map, Allocator allocator) {
-    return DynArray<Bucket<K, V>>.try_init(map, allocator);
-}
-
-@export
 fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
-    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    uint64 hash = key.hash(map.cap());
     
-    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    Bucket<K, V> *? bucket = map.at(hash);
     
     while (bucket != null) {
         if (bucket.key.eq(&key)) {
@@ -60,8 +42,8 @@ fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
     Bucket<K, V> *new_bucket = allocator.alloc<Bucket<K, V>>();
     new_bucket.key = key;
     new_bucket.value = value;
-    new_bucket.next = DynArray<Bucket<K, V>>.at(map, hash);
-    DynArray<Bucket<K, V>>.set(map, hash, new_bucket);
+    new_bucket.next = map.at(hash);
+    map.set(hash, new_bucket);
 }
 
 @export
@@ -75,9 +57,9 @@ fn V *HashMap<K, V>.get(HashMap<K, V> *map, K key) {
 
 @export
 fn V *? HashMap<K, V>.try_get(HashMap<K, V> *map, K key) {
-    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    uint64 hash = key.hash(map.cap());
     
-    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    Bucket<K, V> *? bucket = map.at(hash);
     
     while (bucket != null) {
         if (bucket.key.eq(&key)) {
@@ -103,9 +85,9 @@ fn none HashMap<K, V>.remove(mut HashMap<K, V> *map, K key) {
 
 @export
 fn bool HashMap<K, V>.try_remove(mut HashMap<K, V> *map, K key) {
-    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    uint64 hash = key.hash(map.cap());
     
-    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    Bucket<K, V> *? bucket = map.at(hash);
     if (bucket == null) {
         return false;
     }
@@ -115,7 +97,7 @@ fn bool HashMap<K, V>.try_remove(mut HashMap<K, V> *map, K key) {
     while (bucket != null) {
         if (bucket.key.eq(&key)) {
             if (prev == null) {
-                DynArray<Bucket<K, V>>.set(map, hash, bucket.next);
+                map.set(hash, bucket.next);
             } else {
                 prev.next = bucket.next;
             }

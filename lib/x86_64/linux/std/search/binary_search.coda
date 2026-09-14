@@ -10,9 +10,9 @@ fn T *? binary_search<T: Comparable>(Sequence<T> *seq, T value) {
     while (low <= high) {
         int mid = low + (high - low) / 2;
         T mid_value = seq.at(mid);
-        if (mid_value.eq(value)) {
+        if (mid_value.eq(&value)) {
             return seq.at(mid);
-        } else if (mid_value.lt(value)) {
+        } else if (mid_value.lt(&value)) {
             low = mid + 1;
         } else {
             high = mid - 1;
