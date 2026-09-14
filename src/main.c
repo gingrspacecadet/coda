@@ -33,17 +33,11 @@ void print_source_line(Span span) {
 
     for (size_t i = 0; i < line_num_len; i++)
         putchar(' ');
-
     printf(" |\n");
-    printf("%lu | %.*s\n",
-        line,
-        (int)(end - start),
-        source->contents.data + start
-    );
+    printf("%lu | %.*s\n", line, (int)(end - start), source->contents.data + start);
     
     for (size_t i = 0; i < line_num_len; i++)
         putchar(' ');
-
     printf(" | ");
 
     for (size_t i = 0; i < column + line_num_len - 1; i++)
