@@ -1,0 +1,10 @@
+module std::constraints;
+
+@export
+constraint Swappable {
+    fn none swap(Swappable *a, Swappable *b) {
+        Swappable tmp = *a;
+        *a = *b;
+        *b = tmp;
+    }
+}

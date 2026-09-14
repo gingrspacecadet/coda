@@ -1,0 +1,24 @@
+module std::constraints;
+
+@export
+constraint Comparable {
+    fn bool lt(Comparable *a, Comparable *b) {
+        return a < b;
+    }
+
+    fn bool gt(Comparable *a, Comparable *b) {
+        return a > b;
+    }
+
+    fn bool le(Comparable *a, Comparable *b) {
+        return a <= b;
+    }
+
+    fn bool ge(Comparable *a, Comparable *b) {
+        return a >= b;
+    }
+
+    fn bool eq(Comparable *a, Comparable *b) {
+        return a == b;
+    }
+}

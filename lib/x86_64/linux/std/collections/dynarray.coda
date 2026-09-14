@@ -36,7 +36,7 @@ fn none DynArray<T>.init(mut DynArray<T> *arr, Allocator allocator) {
 }
 
 @export
-fn none ArrayList<T>.destroy(mut DynArray<T> *arr) {
+fn none DynArray<T>.destroy(mut DynArray<T> *arr) {
     arr.allocator.free(arr.ptr);
     arr.ptr = null;
     arr.len = 0;

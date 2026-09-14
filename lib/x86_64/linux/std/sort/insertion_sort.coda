@@ -1,6 +1,7 @@
 module std::sort;
 
 include std::collections : _;
+include std::constraints : _;
 
 @export
 fn none insertion_sort<T: Comparable>(mut Sequence<T> *seq) {
@@ -18,6 +19,6 @@ fn none insertion_sort<T: Comparable>(mut Sequence<T> *seq) {
 }
 
 @export
-fn none Sequence<T>.insertion_sort(mut Sequence<T> *this) {
+fn none Sequence<T>.insertion_sort<T: Comparable>(mut Sequence<T> *this) {
     insertion_sort(self);
 }

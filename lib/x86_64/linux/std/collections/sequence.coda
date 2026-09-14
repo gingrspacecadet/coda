@@ -5,7 +5,7 @@ constraint Sequence<T> {
     fn T *? try_at(Sequence<T> *this, usize index);
     fn bool try_set(Sequence<T> *this, usize index, T value);
 
-    fn T *at(Sequenece<T> *this, usize index) {
+    fn T *at(Sequence<T> *this, usize index) {
         T *? result = this.try_at(index);
         if (result == null) {
             panic("Index out of bounds"); // TODO: implement panic function

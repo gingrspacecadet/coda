@@ -1,8 +1,9 @@
 module std::sort;
 
 include std::collections : _;
+include std::constraints : _;
 
-fn int partition<T>(mut Sequence<T> *seq, int low, int high) {
+fn int partition<T: Comparable>(mut Sequence<T> *seq, int low, int high) {
     T pivot = seq.at(high);
     int i = low - 1;
 
@@ -17,7 +18,7 @@ fn int partition<T>(mut Sequence<T> *seq, int low, int high) {
 }
 
 @export
-fn none quick_sort<T>(mut Sequence<T> *seq, int low, int high) {
+fn none quick_sort<T: Comparable>(mut Sequence<T> *seq, int low, int high) {
     if (low < high) {
         int pivot_index = partition(seq, low, high);
 
@@ -27,6 +28,6 @@ fn none quick_sort<T>(mut Sequence<T> *seq, int low, int high) {
 }
 
 @export
-fn none mut Sequence<T>.quick_sort(mut Sequence<T> *seq) {
+fn none mut Sequence<T>.quick_sort<T: Comparable>(mut Sequence<T> *seq) {
     quick_sort(seq, 0, seq.length() - 1);
 }
