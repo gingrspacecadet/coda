@@ -20,10 +20,10 @@ fn DynArray<T> DynArray<T>.create(Allocator allocator) {
 
 @export
 fn (none | AllocatorError) DynArray<T>.try_init(mut DynArray<T> *arr, Allocator allocator) {
-    arr.ptr = allocator.try_alloc<T>(2);
+    arr.ptr = allocator.try_alloc<T>(16);
     if (arr.ptr == null) return AllocatorError::OutOfMemory;
     arr.len = 0;
-    arr.cap = 2;
+    arr.cap = 16;
     arr.allocator = allocator;
 }
 
@@ -69,7 +69,7 @@ fn (none | AllocatorError) DynArray<T>.try_reserve(mut DynArray<T> *arr, usize c
 @export
 fn none DynArray<T>.push(mut DynArray<T> *arr, T value) {
     if (arr.len == arr.cap) {
-        arr.reserve((arr.cap * 3) / 2);
+        arr.reserve(arr.cap * 2);
     }
     arr.ptr[arr.len] = value;
     arr.len += 1;
@@ -78,7 +78,7 @@ fn none DynArray<T>.push(mut DynArray<T> *arr, T value) {
 @export
 fn (none | AllocatorError) DynArray<T>.try_push(mut DynArray<T> *arr, T value) {
     if (arr.len == arr.cap) {
-        match (arr.try_reserve((arr.cap * 3) / 2)) {
+        match (arr.try_reserve(arr.cap * 2) {
             null {}
             AllocatorError::OutOfMemory return AllocatorError::OutOfMemory;
         };
@@ -88,20 +88,21 @@ fn (none | AllocatorError) DynArray<T>.try_push(mut DynArray<T> *arr, T value) {
 }
 
 @export
-fn none DynArray<T>.pop(mut DynArray<T> *arr) {
+fn T DynArray<T>.pop(mut DynArray<T> *arr) {
     if (arr.len == 0) {
         panic("Cannot pop from empty DynArray");
     }
     arr.len -= 1;
+    return arr.ptr[arr.len];
 }
 
 @export
-fn bool DynArray<T>.try_pop(mut DynArray<T> *arr) {
+fn (T | none) DynArray<T>.try_pop(mut DynArray<T> *arr) {
     if (arr.len == 0) {
-        return false;
+        return;
     }
     arr.len -= 1;
-    return true;
+    return arr.ptr[arr.len];
 }
 
 @export

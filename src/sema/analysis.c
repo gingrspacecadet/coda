@@ -1382,8 +1382,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             if (ast->_return.value != NULL) {
                 hir->_return.value = sema_expr(sema, ast->_return.value, sema->current_fn->return_type);
 
-                if (hir->_return.value == NULL ||
-                    hir->_return.value->kind == HIR_EXPR_ERROR) {
+                if (hir->_return.value == NULL || hir->_return.value->kind == HIR_EXPR_ERROR) {
                     hir->kind = HIR_STMT_ERROR;
                     return hir;
                 }

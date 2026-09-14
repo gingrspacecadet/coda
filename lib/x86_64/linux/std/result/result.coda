@@ -1,0 +1,89 @@
+module std::result;
+
+@export
+fn (U | E) (T | E).map((T | E) *this, fn U (T) f) {
+    match (*this) {
+        T value return f(value);
+        E error return error;
+    }
+}
+
+@export
+fn (T | F) (T | E).map_error((T | E) *this, fn F (E) f) {
+    match (*this) {
+        T value return value;
+        E error return f(error);
+    }
+}
+
+@export
+fn (U | E) (T | E).and_then((T | E) *this, fn (U | E) (T) f) {
+    match (*this) {
+        T value return f(value);
+        E error return error;
+    }
+}
+
+@export
+fn (T | F) (T | E).or_else((T | E) *this, fn (T | F) (E) f) {
+    match (*this) {
+        T value return value;
+        E error return f(error);
+    }
+}
+
+@export
+fn T (T | E).unwrap((T | E) *this) {
+    match (*this) {
+        T value return value;
+        E error panic(error);
+    }
+}
+
+@export
+fn T (T | E).expect((T | E) *this, string message) {
+    match (*this) {
+        T value return value;
+        E error panic(message);
+    }
+}
+
+@export
+fn T (T | E).unwrap_or((T | E) *this, T fallback) {
+    match (*this) {
+        T value return value;
+        E error return fallback;
+    }
+}
+
+@export
+fn T (T | E).unwrap_or_else((T | E) *this, fn T (E) fallback) {
+    match (*this) {
+        T value return value;
+        E error return fallback(error);
+    }
+}
+
+@export
+fn (T | E) (T | E).inspect((T | E) *this, fn none (T) f) {
+    match (*this) {
+        T value {
+            f(value);
+            return value;
+        }
+
+        E error return error;
+    }
+}
+
+@export
+fn (T | E) (T | E).inspect_error((T | E) *this, fn none (E) f) {
+    match (*this) {
+        T value return value;
+
+        E error {
+            f(error);
+            return error;
+        }
+    }
+}
