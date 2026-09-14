@@ -1,29 +1,32 @@
 module std::sort;
 
-fn int partition<T>(mut Sequence<T> *arr, int low, int high) {
-    T pivot = arr.at(high);
+include std::collections : _;
+
+fn int partition<T>(mut Sequence<T> *seq, int low, int high) {
+    T pivot = seq.at(high);
     int i = low - 1;
 
     for (int j = low; j < high; j += 1) {
-        if (arr.at(j).le(pivot)) {
+        if (seq.at(j).le(pivot)) {
             i += 1;
-            arr.at(i).swap(arr.at(j));
+            seq.at(i).swap(seq.at(j));
         }
     }
-    arr.at(i + 1).swap(arr.at(high));
+    seq.at(i + 1).swap(seq.at(high));
     return i + 1;
 }
 
 @export
-fn none quick_sort<T>(mut Sequence<T> *arr, int low, int high) {
+fn none quick_sort<T>(mut Sequence<T> *seq, int low, int high) {
     if (low < high) {
-        int pivot_index = partition(arr, low, high);
+        int pivot_index = partition(seq, low, high);
 
-        quick_sort(arr, low, pivot_index - 1);
-        quick_sort(arr, pivot_index + 1, high);
+        quick_sort(seq, low, pivot_index - 1);
+        quick_sort(seq, pivot_index + 1, high);
     }
 }
 
-fn none mut Sequence<T>.quick_sort(mut Sequence<T> *arr) {
-    quick_sort(arr, 0, arr.length() - 1);
+@export
+fn none mut Sequence<T>.quick_sort(mut Sequence<T> *seq) {
+    quick_sort(seq, 0, seq.length() - 1);
 }

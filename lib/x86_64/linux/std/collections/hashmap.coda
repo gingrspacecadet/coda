@@ -1,0 +1,130 @@
+module std::collections;
+
+include std::allocator;
+
+@export
+constraint Hashable {
+    // Basic hash function as a default implementation.
+    // It is advised to override this function for non-trivial types.
+    fn uint64 hash(Hashable *self, usize size) {
+        uint64 total = 0;
+        for (usize i = 0; i < #sizeof(Hashable); i++) {
+            total += ((uint8 *)self)[i];
+        }
+        return total % size;
+    }
+}
+
+@export
+type HashMap<K: Hashable, V> = DynArray<Bucket<K, V>>;
+
+@export
+type Bucket<K: Hashable; Equatable, V> = struct {
+    K key;
+    V value;
+    Bucket<K, V> *? next;
+};
+
+@export
+fn HashMap<K, V> HashMap<K, V>.create(HashMap<K, V> *map, Allocator allocator) {
+    return DynArray<Bucket<K, V>>.create(allocator);
+}
+
+@export
+fn none HashMap<K, V>.init(mut HashMap<K, V> *map, Allocator allocator) {
+    match (map.try_init(allocator)) {
+        null {}
+        AllocatorError::OutOfMemory panic("Failed to initialize HashMap: Out of memory");
+    };
+}
+
+@export
+fn (none | AllocatorError) HashMap<K, V>.try_init(mut HashMap<K, V> *map, Allocator allocator) {
+    return DynArray<Bucket<K, V>>.try_init(map, allocator);
+}
+
+@export
+fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
+    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    
+    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            bucket.value = value;
+            return;
+        }
+        bucket = bucket.next;
+    }
+
+    Bucket<K, V> *new_bucket = allocator.alloc<Bucket<K, V>>();
+    new_bucket.key = key;
+    new_bucket.value = value;
+    new_bucket.next = DynArray<Bucket<K, V>>.at(map, hash);
+    DynArray<Bucket<K, V>>.set(map, hash, new_bucket);
+}
+
+@export
+fn V *HashMap<K, V>.get(HashMap<K, V> *map, K key) {
+    V *? value = map.try_get(key);
+    if (value == null) {
+        panic("Key not found in HashMap");
+    }
+    return value;
+}
+
+@export
+fn V *? HashMap<K, V>.try_get(HashMap<K, V> *map, K key) {
+    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    
+    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            return &bucket.value;
+        }
+        bucket = bucket.next;
+    }
+    
+    return null;
+}
+
+@export
+fn bool HashMap<K, V>.contains(HashMap<K, V> *map, K key) {
+    return map.try_get(key) != null;
+}
+
+@export
+fn none HashMap<K, V>.remove(mut HashMap<K, V> *map, K key) {
+    if (!map.try_remove(key)) {
+        panic("Key not found in HashMap");
+    }
+}
+
+@export
+fn bool HashMap<K, V>.try_remove(mut HashMap<K, V> *map, K key) {
+    uint64 hash = key.hash(DynArray<Bucket<K, V>>.cap(map));
+    
+    Bucket<K, V> *? bucket = DynArray<Bucket<K, V>>.at(map, hash);
+    if (bucket == null) {
+        return false;
+    }
+
+    Bucket<K, V> *? prev = null;
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            if (prev == null) {
+                DynArray<Bucket<K, V>>.set(map, hash, bucket.next);
+            } else {
+                prev.next = bucket.next;
+            }
+            allocator.free(bucket);
+            return true;
+        }
+        prev = bucket;
+        bucket = bucket.next;
+    }
+    
+    return false;
+}

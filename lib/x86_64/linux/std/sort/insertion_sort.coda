@@ -1,0 +1,23 @@
+module std::sort;
+
+include std::collections : _;
+
+@export
+fn none insertion_sort<T: Comparable>(mut Sequence<T> *seq) {
+    for (usize i = 1; i < seq.len(); i += 1) {
+        T key = seq.at(i);
+        usize j = i - 1;
+
+        while (j >= 0 && seq.at(j).gt(&key)) {
+            seq.set(j + 1, seq.at(j));
+            j -= 1;
+        }
+
+        seq.set(j + 1, key);
+    }
+}
+
+@export
+fn none Sequence<T>.insertion_sort(mut Sequence<T> *this) {
+    insertion_sort(self);
+}

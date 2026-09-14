@@ -1,0 +1,43 @@
+module std::collections;
+
+constraint Sequence<T> {
+    fn usize len(Sequence<T> *this);
+    fn T *? try_at(Sequence<T> *this, usize index);
+    fn bool try_set(Sequence<T> *this, usize index, T value);
+
+    fn T *at(Sequenece<T> *this, usize index) {
+        T *? result = this.try_at(index);
+        if (result == null) {
+            panic("Index out of bounds"); // TODO: implement panic function
+        }
+        return result;
+    }
+
+    fn none set(Sequence<T> *this, usize index, T value) {
+        if (!this.try_set(index, value)) {
+            panic("Index out of bounds");
+        }
+    }
+}
+
+@export @inline
+fn usize T[].len<T>(T[] *this) {
+    return this.len;
+}
+
+@export @inline
+fn T *? T[].try_at<T>(T[] *this, usize index) {
+    if (index >= this.len) {
+        return null;
+    }
+    return &this[index];
+}
+
+@export @inline
+fn bool T[].try_set<T>(T[] *this, usize index, T value) {
+    if (index >= this.len) {
+        return false;
+    }
+    this[index] = value;
+    return true;
+}

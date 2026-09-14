@@ -1,0 +1,161 @@
+module std::collections;
+
+include std::allocator;
+
+@export
+type DynArray<T> = struct {
+    T *? ptr;
+    usize len;
+    usize cap;
+
+    Allocator allocator;
+};
+
+@export
+fn DynArray<T> DynArray<T>.create(Allocator allocator) {
+    DynArray<T> arr;
+    DynArray<T>.init(&arr, allocator);
+    return arr;
+}
+
+@export
+fn (none | AllocatorError) DynArray<T>.try_init(mut DynArray<T> *arr, Allocator allocator) {
+    arr.ptr = allocator.try_alloc<T>(2);
+    if (arr.ptr == null) return AllocatorError::OutOfMemory;
+    arr.len = 0;
+    arr.cap = 2;
+    arr.allocator = allocator;
+}
+
+@export
+fn none DynArray<T>.init(mut DynArray<T> *arr, Allocator allocator) {
+    match (arr.try_init(allocator)) {
+        null {}
+        AllocatorError::OutOfMemory panic("Failed to initialise DynArray");
+    };
+}
+
+@export
+fn none ArrayList<T>.destroy(mut DynArray<T> *arr) {
+    arr.allocator.free(arr.ptr);
+    arr.ptr = null;
+    arr.len = 0;
+    arr.cap = 0;
+}
+
+@export
+fn none DynArray<T>.reserve(mut DynArray<T> *arr, usize cap) {
+    match (arr.try_reserve(cap)) {
+        null {}
+        AllocatorError::OutOfMemory panic("Failed to reserve memory for DynArray");
+    };
+}
+
+@export
+fn (none | AllocatorError) DynArray<T>.try_reserve(mut DynArray<T> *arr, usize cap) {
+    if (cap <= arr.cap) return null;
+    T *? new_ptr = arr.allocator.try_alloc<T>(cap);
+    if (new_ptr == null) {
+        return AllocatorError::OutOfMemory;
+    }
+    for (usize i = 0; i < arr.len; i++) {
+        new_ptr[i] = arr.ptr[i];
+    }
+    arr.allocator.free(arr.ptr);
+    arr.ptr = new_ptr;
+    arr.cap = cap;
+}
+
+@export
+fn none DynArray<T>.push(mut DynArray<T> *arr, T value) {
+    if (arr.len == arr.cap) {
+        arr.reserve((arr.cap * 3) / 2);
+    }
+    arr.ptr[arr.len] = value;
+    arr.len += 1;
+}
+
+@export
+fn (none | AllocatorError) DynArray<T>.try_push(mut DynArray<T> *arr, T value) {
+    if (arr.len == arr.cap) {
+        match (arr.try_reserve((arr.cap * 3) / 2)) {
+            null {}
+            AllocatorError::OutOfMemory return AllocatorError::OutOfMemory;
+        };
+    }
+    arr.ptr[arr.len] = value;
+    arr.len += 1;
+}
+
+@export
+fn none DynArray<T>.pop(mut DynArray<T> *arr) {
+    if (arr.len == 0) {
+        panic("Cannot pop from empty DynArray");
+    }
+    arr.len -= 1;
+}
+
+@export
+fn bool DynArray<T>.try_pop(mut DynArray<T> *arr) {
+    if (arr.len == 0) {
+        return false;
+    }
+    arr.len -= 1;
+    return true;
+}
+
+@export
+fn T[] DynArray<T>.as_slice(DynArray<T> *arr) {
+    return {
+        .ptr = arr.ptr,
+        .len = arr.len,
+    };
+}
+
+@export
+fn none DynArray<T>.clear(mut DynArray<T> *arr) {
+    arr.len = 0;
+}
+
+@export
+fn usize DynArray<T>.len(DynArray<T> *arr) {
+    return arr.len;
+}
+
+@export
+fn usize DynArray<T>.cap(DynArray<T> *arr) {
+    return arr.cap;
+}
+
+@export
+fn T *DynArray<T>.at(DynArray<T> *arr, usize index) {
+    if (index >= arr.len) {
+        panic("Index out of bounds");
+    }
+    return &arr.ptr[index];
+}
+
+@export
+fn T *? DynArray<T>.try_at(DynArray<T> *arr, usize index) {
+    if (index >= arr.len) {
+        return null;
+    }
+    return &arr.ptr[index];
+}
+
+@export
+fn none DynArray<T>.set(DynArray<T> *arr, usize index, T value) {
+    if (index >= arr.len) {
+        panic("Index out of bounds");
+    }
+    arr.ptr[index] = value;
+}
+
+@export
+fn bool DynArray<T>.try_set(DynArray<T> *arr, usize index, T value) {
+    if (index >= arr.len) {
+        return false;
+    }
+    arr.ptr[index] = value;
+    return true;
+}

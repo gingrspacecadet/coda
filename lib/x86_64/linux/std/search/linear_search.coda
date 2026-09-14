@@ -1,0 +1,13 @@
+module std::search;
+
+include std::collections : _;
+
+@export
+fn T *? linear_search<T>(Sequence<T> *seq, T value) {
+    for (size_t i = 0; i < seq.len(); i++) {
+        if (seq.at(i).eq(value)) {
+            return seq.at(i);
+        }
+    }
+    return null;
+}

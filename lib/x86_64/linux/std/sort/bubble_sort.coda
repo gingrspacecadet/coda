@@ -1,16 +1,18 @@
 module std::sort;
 
+include std::collections : _;
+
 @export
-fn none bubble_sort<T: Comparable>(mut Sequence<T> *arr) {
+fn none bubble_sort<T: Comparable>(mut Sequence<T> *seq) {
     int i; int j;
     bool swapped;
 
-    for (i = 0; i < arr.len() - 1; i += 1) {
+    for (i = 0; i < seq.len() - 1; i += 1) {
         swapped = false;
 
-        for (j = 0; j < arr.len() - i - 1; j += 1) {
-            if (arr.at(j).gt(arr.at(j + 1))) {
-                arr.at(j).swap(arr.at(j + 1));
+        for (j = 0; j < seq.len() - i - 1; j += 1) {
+            if (seq.at(j).gt(seq.at(j + 1))) {
+                seq.at(j).swap(seq.at(j + 1));
                 swapped = true;
             }
         }
