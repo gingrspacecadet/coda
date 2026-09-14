@@ -1,4 +1,4 @@
-module std::sort;
+module std::algorithm;
 
 include std::collections : _;
 include std::constraints : _;

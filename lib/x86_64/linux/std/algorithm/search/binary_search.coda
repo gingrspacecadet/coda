@@ -1,4 +1,4 @@
-module std::search;
+module std::algorithm;
 
 include std::collections : _;
 
