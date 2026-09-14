@@ -284,13 +284,14 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             Symbol *symbol = sema_lookup_path(sema, ast->named.path);
 
             if (symbol == NULL) {
-                error_unknown_type(sema->diags, ast->span);
+                error_unknown_type(sema->diags, ast->named.path, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
 
             if (symbol->kind != SYMBOL_TYPE) {
-                error_expected_type_symbol(sema->diags, ast->span);
+                AstName *name = (AstName *)array_at(&ast->named.path.parts, ast->named.path.parts.len - 1);
+                error_expected_type_symbol(sema->diags, name->ident, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
@@ -770,7 +771,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *type = sema_unary_type(sema, hir->unary.op, operand);
 
             if (type == NULL) {
-                error_invalid_unary_operation(sema->diags, ast->span);
+                error_invalid_unary_operation(sema->diags, unary_op_name(hir->unary.op), operand->type, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -795,7 +796,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *operand_type = sema_binary_operand_type(sema, ast->binary.op, left, right, expected);
 
             if (operand_type == NULL) {
-                error_type_mismatch(sema->diags, ast->span, expected, operand_type);
+                error_type_mismatch(sema->diags, expected, left->type != NULL ? left->type : right->type, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -807,7 +808,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 right = sema_coerce(sema, right, operand_type);
 
             if (left == NULL || right == NULL) {
-                error_invalid_binary_operation(sema->diags, ast->span);
+                error_invalid_binary_operation(sema->diags, binary_op_name(ast->binary.op), left ? left->type : NULL, right ? right->type : NULL, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -817,7 +818,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = sema_binary_result_type(sema, ast->binary.op, operand_type);
 
             if (hir->type == NULL) {
-                //! TODO: invalid binary operation
+                error_invalid_binary_operation(sema->diags, binary_op_name(ast->binary.op), left->type, right->type, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -840,7 +841,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirType *function_type = sema_call_type(sema, callee);
 
             if (function_type == NULL) {
-                error_expected_function(sema->diags, ast->call.callee->span);
+                error_expected_function(sema->diags, callee->type, ast->call.callee->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -1086,8 +1087,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             for (size_t i = 0; i < ast->lambda.params.len; i++) {
-                AstParam *param =
-                    (AstParam *)array_at(&ast->lambda.params, i);
+                AstParam *param = (AstParam *)array_at(&ast->lambda.params, i);
 
                 HirType *param_type = sema_type(sema, param->type);
 
@@ -1101,7 +1101,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             if (expected != NULL) {
                 if (expected->kind != HIR_TYPE_FUNCTION || !sema_type_equal(type, expected)) {
-                    error_type_mismatch(sema->diags, ast->span, expected, type);
+                    error_type_mismatch(sema->diags, expected, type, ast->span);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }
@@ -1120,11 +1120,8 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             sema_push_scope(sema);
 
             for (size_t i = 0; i < ast->lambda.params.len; i++) {
-                AstParam *param =
-                    (AstParam *)array_at(&ast->lambda.params, i);
-
-                HirType *param_type =
-                    *(HirType **)array_at(&type->function.params, i);
+                AstParam *param = (AstParam *)array_at(&ast->lambda.params, i);
+                HirType *param_type = *(HirType **)array_at(&type->function.params, i);
 
                 sema_insert_parameter(sema, param, param_type);
             }
@@ -1377,7 +1374,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             hir->_return.value = NULL;
 
             if (sema->current_fn == NULL) {
-                error_invalid_return(sema->diags, ast->span);
+                error_invalid_return(sema->diags, NULL, NULL, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1385,7 +1382,14 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             if (ast->_return.value != NULL) {
                 hir->_return.value = sema_expr(sema, ast->_return.value, sema->current_fn->return_type);
 
-                if (hir->_return.value == NULL || hir->_return.value->kind == HIR_EXPR_ERROR) {
+                if (hir->_return.value == NULL ||
+                    hir->_return.value->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+
+                if (!sema_type_equal(hir->_return.value->type, sema->current_fn->return_type)) {
+                    error_invalid_return(sema->diags, sema->current_fn->return_type, hir->_return.value->type, hir->_return.value->span);
                     hir->kind = HIR_STMT_ERROR;
                     return hir;
                 }
@@ -1474,7 +1478,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             size_t loop_scope = sema_loop_scope(sema, level);
 
             if (loop_scope == SIZE_MAX) {
-                error_invalid_break(sema->diags, ast->span);
+                error_invalid_break(sema->diags, level, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1510,7 +1514,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             size_t loop_scope = sema_loop_scope(sema, level);
 
             if (loop_scope == SIZE_MAX) {
-                error_invalid_continue(sema->diags, ast->span);
+                error_invalid_continue(sema->diags, level, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1642,6 +1646,7 @@ HirFunction *sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 
     HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
     fn->symbol = symbol;
+    fn->return_type = symbol->type->function.ret;
 
     sema_push_scope(sema);
 

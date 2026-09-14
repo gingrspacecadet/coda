@@ -109,7 +109,7 @@ int main() {
             "    });\n"
             "}\n"
         ),
-        .path = STRING("<no file>")
+        .path = STRING(__FILE__)
     };
 
     Arena *arena = arena_create();

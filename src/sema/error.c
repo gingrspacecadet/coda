@@ -105,14 +105,35 @@ static String path_string(Arena *arena, Path path) {
         .length = length,
     };
 }
-
 void error_unknown_name(Diags *diags, String name, Span span) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_UNKNOWN_NAME,
         span,
-        format(diags->arena, "Unknown name '%.*s'.", string_fmt(name))
+        format(
+            diags->arena,
+            "Unknown name '%.*s'.",
+            string_fmt(name)
+        )
+    );
+
+    diag_finish(&b);
+}
+
+void error_unknown_path(Diags *diags, Path path, Span span) {
+    String name = path_string(diags->arena, path);
+
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_UNKNOWN_NAME,
+        span,
+        format(
+            diags->arena,
+            "Unknown name '%.*s'.",
+            string_fmt(name)
+        )
     );
 
     diag_finish(&b);
@@ -124,7 +145,11 @@ void error_duplicate_symbol(Diags *diags, String name, Span span) {
         DIAG_ERROR,
         E_DUPLICATE_SYMBOL,
         span,
-        format(diags->arena, "Duplicate declaration '%.*s'.", string_fmt(name))
+        format(
+            diags->arena,
+            "Duplicate declaration of '%.*s'.",
+            string_fmt(name)
+        )
     );
 
     diag_finish(&b);
@@ -136,25 +161,51 @@ void error_shadowing(Diags *diags, String name, Span span) {
         DIAG_ERROR,
         E_SHADOWING,
         span,
-        format(diags->arena, "Declaration '%.*s' shadows another declaration.", string_fmt(name))
+        format(
+            diags->arena,
+            "Declaration of '%.*s' shadows another declaration.",
+            string_fmt(name)
+        )
     );
 
     diag_finish(&b);
 }
 
-void error_unknown_type(Diags *diags, Span span) {
+void error_unknown_type(Diags *diags, Path path, Span span) {
+    String name = path_string(diags->arena, path);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_UNKNOWN_TYPE,
         span,
-        STRING("Unknown type.")
+        format(
+            diags->arena,
+            "Unknown type '%.*s'.",
+            string_fmt(name)
+        )
     );
 
     diag_finish(&b);
 }
 
-void error_type_mismatch(Diags *diags, Span span, HirType *expected, HirType *found) {
+void error_expected_type_symbol(Diags *diags, String name, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_TYPE,
+        span,
+        format(
+            diags->arena,
+            "'%.*s' does not name a type.",
+            string_fmt(name)
+        )
+    );
+
+    diag_finish(&b);
+}
+
+void error_type_mismatch(Diags *diags, HirType *expected, HirType *found, Span span) {
     String expected_name = sema_type_string(diags->arena, expected);
     String found_name = sema_type_string(diags->arena, found);
 
@@ -165,15 +216,7 @@ void error_type_mismatch(Diags *diags, Span span, HirType *expected, HirType *fo
         span,
         format(
             diags->arena,
-            "Type mismatch."
-        )
-    );
-
-    diag_note(
-        &b,
-        format(
-            diags->arena,
-            "Expected %.*s, found %.*s.",
+            "Type mismatch: expected '%.*s', found '%.*s'.",
             string_fmt(expected_name),
             string_fmt(found_name)
         )
@@ -182,13 +225,19 @@ void error_type_mismatch(Diags *diags, Span span, HirType *expected, HirType *fo
     diag_finish(&b);
 }
 
-void error_expected_function(Diags *diags, Span span) {
+void error_expected_function(Diags *diags, HirType *found, Span span) {
+    String found_name = sema_type_string(diags->arena, found);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_EXPECTED_FUNCTION,
         span,
-        STRING("Expected a function.")
+        format(
+            diags->arena,
+            "Expected a function, found '%.*s'.",
+            string_fmt(found_name)
+        )
     );
 
     diag_finish(&b);
@@ -202,7 +251,7 @@ void error_wrong_argument_count(Diags *diags, size_t expected, size_t actual, Sp
         span,
         format(
             diags->arena,
-            "Expected %zu arguments, got %zu.",
+            "Wrong number of arguments: expected %zu, found %zu.",
             expected,
             actual
         )
@@ -227,61 +276,115 @@ void error_unknown_field(Diags *diags, String name, Span span) {
     diag_finish(&b);
 }
 
-void error_invalid_unary_operation(Diags *diags, Span span) {
+void error_invalid_unary_operation(Diags *diags, String operation, HirType *operand, Span span) {
+    String operand_name = sema_type_string(diags->arena, operand);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_INVALID_UNARY_OPERATION,
         span,
-        STRING("Invalid unary operation.")
+        format(
+            diags->arena,
+            "Invalid unary operation '%.*s' for type '%.*s'.",
+            string_fmt(operation),
+            string_fmt(operand_name)
+        )
     );
 
     diag_finish(&b);
 }
 
-void error_invalid_binary_operation(Diags *diags, Span span) {
+void error_invalid_binary_operation(Diags *diags, String operation, HirType *left, HirType *right, Span span) {
+    String left_name = sema_type_string(diags->arena, left);
+    String right_name = sema_type_string(diags->arena, right);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_INVALID_BINARY_OPERATION,
         span,
-        STRING("Invalid binary operation.")
+        format(
+            diags->arena,
+            "Invalid binary operation '%.*s' for types '%.*s' and '%.*s'.",
+            string_fmt(operation),
+            string_fmt(left_name),
+            string_fmt(right_name)
+        )
     );
 
     diag_finish(&b);
 }
 
-void error_invalid_return(Diags *diags, Span span) {
+void error_missing_return_value(Diags *diags, HirType *expected, Span span) {
+    String expected_name = sema_type_string(diags->arena, expected);
+
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_INVALID_RETURN,
         span,
-        STRING("Invalid return statement.")
+        format(
+            diags->arena,
+            "Return value required; function returns '%.*s'.",
+            string_fmt(expected_name)
+        )
     );
 
     diag_finish(&b);
 }
 
-void error_invalid_break(Diags *diags, Span span) {
+void error_invalid_return(Diags *diags, HirType *expected, HirType *found, Span span) {
+    String expected_name = sema_type_string(diags->arena, expected);
+    String found_name = sema_type_string(diags->arena, found);
+
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_INVALID_RETURN,
+        span,
+        format(
+            diags->arena,
+            "Invalid return value: expected '%.*s', found '%.*s'.",
+            string_fmt(expected_name),
+            string_fmt(found_name)
+        )
+    );
+
+    diag_finish(&b);
+}
+
+void error_invalid_break(Diags *diags, size_t level, Span span) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_INVALID_BREAK,
         span,
-        STRING("Break statement is not inside a loop.")
+        level == 1
+            ? STRING("Break statement is not inside a loop.")
+            : format(
+                diags->arena,
+                "Cannot break %zu levels; there are not enough enclosing loops.",
+                level
+            )
     );
 
     diag_finish(&b);
 }
 
-void error_invalid_continue(Diags *diags, Span span) {
+void error_invalid_continue(Diags *diags, size_t level, Span span) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
         E_INVALID_CONTINUE,
         span,
-        STRING("Continue statement is not inside a loop.")
+        level == 1
+            ? STRING("Continue statement is not inside a loop.")
+            : format(
+                diags->arena,
+                "Cannot continue %zu levels; there are not enough enclosing loops.",
+                level
+            )
     );
 
     diag_finish(&b);
@@ -293,7 +396,7 @@ void error_namespace_value(Diags *diags, Span span) {
         DIAG_ERROR,
         E_NAMESPACE_VALUE,
         span,
-        STRING("Namespace cannot be used as a value.")
+        STRING("A namespace cannot be used as a value.")
     );
 
     diag_finish(&b);
@@ -312,30 +415,6 @@ void error_module_not_found(Diags *diags, Path path, Span span) {
             "Module '%.*s' not found in include paths.",
             string_fmt(name)
         )
-    );
-
-    diag_finish(&b);
-}
-
-void error_expected_type_symbol(Diags *diags, Span span) {
-    DiagBuilder b = diag_begin(
-        diags,
-        DIAG_ERROR,
-        E_EXPECTED_TYPE,
-        span,
-        STRING("Expected a type.")
-    );
-
-    diag_finish(&b);
-}
-
-void error_unknown_path(Diags *diags, Path path, Span span) {
-    DiagBuilder b = diag_begin(
-        diags,
-        DIAG_ERROR,
-        E_UNKNOWN_NAME,
-        span,
-        STRING("Unknown path")
     );
 
     diag_finish(&b);
