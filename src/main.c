@@ -29,16 +29,24 @@ void print_source_line(Span span) {
     size_t line = source_line(source, span.offset);
     size_t column = span.offset - start;
 
-    printf("  |\n");
+    size_t line_num_len = snprintf(NULL, 0, "%lu", line);
+
+    for (size_t i = 0; i < line_num_len; i++)
+        putchar(' ');
+
+    printf(" |\n");
     printf("%lu | %.*s\n",
         line,
         (int)(end - start),
         source->contents.data + start
     );
+    
+    for (size_t i = 0; i < line_num_len; i++)
+        putchar(' ');
 
-    printf("  | ");
+    printf(" | ");
 
-    for (size_t i = 0; i < column; i++)
+    for (size_t i = 0; i < column + line_num_len - 1; i++)
         putchar(' ');
 
     size_t width = span.length ? span.length : 1;
