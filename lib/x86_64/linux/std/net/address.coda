@@ -1,0 +1,10 @@
+module std::net;
+
+@export
+type Address = (IPv4Address | IPv6Address);
+
+@export
+type Endpoint = struct {
+    Address address;
+    uint16 port;
+};

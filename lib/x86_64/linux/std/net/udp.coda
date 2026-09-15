@@ -1,0 +1,89 @@
+module std::net;
+
+include std::io : _;
+include std::net : _;
+
+@export
+type UdpSocket = struct {
+    Socket socket;
+};
+
+@export
+fn (UdpSocket | SocketError) UdpSocket.create() {
+    Socket socket = Socket.create(SocketKind::UDP)?;
+
+    return {
+        .socket = socket,
+    };
+}
+
+@export
+fn (UdpSocket | SocketError) UdpSocket.bind(Endpoint endpoint) {
+    UdpSocket socket = UdpSocket.create()?;
+    socket.bind(endpoint)?;
+
+    return socket;
+}
+
+@export
+fn (none | SocketError) UdpSocket.bind(mut UdpSocket *this, Endpoint endpoint) {
+    return this.socket.bind(endpoint);
+}
+
+@export
+fn (none | SocketError) UdpSocket.connect(mut UdpSocket *this, Endpoint endpoint) {
+    return this.socket.connect(endpoint);
+}
+
+@export
+fn (uint64 | SocketError) UdpSocket.send(mut UdpSocket *this, uint8[] src) {
+    int n = syscall(44, this.socket.fd, &src[0], src.len, 0);
+
+    if (n < 0) return socket_error(-n);
+
+    return n;
+}
+
+@export
+fn (uint64 | SocketError) UdpSocket.send_to(UdpSocket *this, Endpoint endpoint, uint8[] src) {
+    SockAddrStorage storage;
+    uint64 len = sockaddr_from_endpoint(endpoint, &storage);
+
+    int n = syscall(44, this.socket.fd, src.ptr, src.len, 0, &storage, len);
+
+    if (n < 0) {
+        return socket_error(-n);
+    }
+
+    return n;
+}
+
+@export
+fn (uint64 | SocketError) UdpSocket.recv(mut UdpSocket *this, mut uint8[] dst) {
+    int n = syscall(45, this.socket.fd, &dst[0], dst.len, 0);
+
+    if (n < 0) return socket_error(-n);
+
+    return n;
+}
+
+@export
+fn (uint64 | SocketError) UdpSocket.recv_from(mut UdpSocket *this, mut uint8[] dst, mut Endpoint *endpoint) {
+    SockAddrStorage storage;
+    uint32 len = #sizeof(SockAddrStorage);
+
+    int n = syscall(45, this.socket.fd, dst.ptr, dst.len, 0, &storage, &len);
+
+    if (n < 0) {
+        return socket_error(-n);
+    }
+
+    *endpoint = endpoint_from_sockaddr(&storage)?;
+
+    return n;
+}
+
+@export
+fn none UdpSocket.close(mut UdpSocket *this) {
+    this.socket.close();
+}

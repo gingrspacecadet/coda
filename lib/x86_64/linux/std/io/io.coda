@@ -2,7 +2,11 @@ module std::io;
 
 @export
 type IOError = enum {
-    EOS, // End Of Stream
+    EOS,
+    CONNECTION_RESET,
+    TIMED_OUT,
+    WOULD_BLOCK,
+    UNKNOWN,
 };
 
 @export

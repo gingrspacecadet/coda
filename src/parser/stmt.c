@@ -318,8 +318,7 @@ AstStmt *parse_match_stmt(Parser *p) {
 
     AstStmt *stmt = stmt_new(p, AST_STMT_MATCH, start.span);
 
-    stmt->match.cases =
-        array_create(p->arena, sizeof(AstMatchCase));
+    stmt->match.cases = array_create(p->arena, sizeof(AstMatchCase));
 
     expect(p, TK_LPAREN);
 

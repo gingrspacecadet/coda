@@ -1,0 +1,91 @@
+module std::net;
+
+include std::io : _;
+include std::system : _;
+
+@export
+type TcpStream = struct {
+    Socket socket;
+};
+
+@export
+type TcpListener = struct {
+    Socket socket;
+};
+
+@export
+fn (TcpStream | SocketError) TcpStream.connect(Endpoint endpoint) {
+    Socket socket = Socket.create(SocketKind::TCP)?;
+    socket.connect(endpoint)?;
+    return {
+        .socket = socket,
+    };
+}
+
+@export
+fn (TcpListener | SocketError) TcpListener.create(Endpoint endpoint, uint32 backlog) {
+    Socket socket = Socket.create(SocketKind::TCP)?;
+    socket.bind(endpoint)?;
+    socket.listen(backlog)?;
+
+    return {
+        .socket = socket,
+    };
+}
+
+@export
+fn (TcpStream | SocketError) TcpListener.accept(mut TcpListener *this) {
+    Socket socket = this.socket.accept()?;
+
+    return {
+        .socket = socket,
+    };
+}
+
+@export
+fn (uint64 | IOError) TcpStream.read(mut TcpStream *this, mut uint8[] dst) {
+    uint64 total = 0;
+
+    while (total < dst.len) {
+        int n = syscall(0, this.socket.fd, &dst[total], dst.len - total);
+
+        if (n == 0) {
+            return IOError::EOS;
+        }
+
+        if (n < 0) {
+            return IOError::UNKNOWN;
+        }
+
+        total += n;
+    }
+
+    return total;
+}
+
+@export
+fn (uint64 | IOError) TcpStream.write(mut TcpStream *this, uint8[] src) {
+    uint64 total = 0;
+
+    while (total < src.len) {
+        int n = syscall(1, this.socket.fd, &src[total], src.len - total);
+
+        if (n < 0) {
+            return IOError::UNKNOWN;
+        }
+
+        total += n;
+    }
+
+    return total;
+}
+
+@export
+fn none TcpStream.close(mut TcpStream *this) {
+    this.socket.close();
+}
+
+@export
+fn none TcpListener.close(mut TcpListener *this) {
+    this.socket.close();
+}

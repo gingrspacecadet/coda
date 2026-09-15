@@ -1,0 +1,241 @@
+module std::net;
+
+include std::io _;
+include std::system : _;
+
+type SocketError = enum {
+    INVALID_ADDRESS,
+    PERMISSION_DENIED,
+    ADDRESS_IN_USE,
+    CONNECTION_ABORTED,
+    CONNECTION_REFUSED,
+    CONNECTION_RESET,
+    NOT_CONNECTED,
+    TIMED_OUT,
+    WOULD_BLOCK,
+    CLOSED,
+    UNKNOWN,
+};
+
+type SocketKind = enum {
+    TCP,
+    UDP,
+};
+
+type Socket = struct {
+    SocketKind kind;
+    int fd;
+};
+
+fn SocketError socket_error(int errno) {
+    match (errno) {
+        9   return SocketError::CLOSED;
+        11  return SocketError::WOULD_BLOCK;
+        13  return SocketError::PERMISSION_DENIED;
+        22  return SocketError::INVALID_ADDRESS;
+        98  return SocketError::ADDRESS_IN_USE;
+        103 return SocketError::CONNECTION_ABORTED;
+        104 return SocketError::CONNECTION_RESET;
+        107 return SocketError::NOT_CONNECTED;
+        110 return SocketError::TIMED_OUT;
+        111 return SocketError::CONNECTION_REFUSED;
+        _   return SocketError::UNKNOWN;
+    }
+}
+
+fn (Socket | SocketError) Socket.create(SocketKind skind) {
+    int domain = 0x02;
+    int kind = 0;
+
+    match (skind) {
+        SocketType::TCP kind = 1;
+        SocketType::UDP kind = 2;
+    };
+
+    int fd = syscall(41, domain, kind, 0);
+
+    if (fd < 0) {
+        return socket_error(-fd);
+    }
+
+    return {
+        .fd = fd,
+        .kind = skind,
+    };
+}
+
+fn (none | SocketError) Socket.bind(mut Socket *this, Endpoint endpoint) {
+    match (endpoint.address) {
+        IPv4Address address: {
+            SockAddrIn addr = {
+                .family = 2,
+                .port = address.port.to_be(),
+                .addr = address.octets,
+                .zero = { 0, 0, 0, 0, 0, 0, 0, 0 },
+            };
+
+            int result = syscall(49, this.fd, &addr, #sizeof(SockAddrIn));
+            if (result < 0) return socket_error(-result);
+        }
+
+        IPv6Address address: {
+            SockAddrIn6 addr = {
+                .family = 10,
+                .port = address.port.to_be(),
+                .flowinfo = 0,
+                .addr = address.octets,
+                .scope_id = 0,
+            };
+
+            int result = syscall(49, this.fd, &addr, #sizeof(SockAddrIn6));
+            if (result < 0) return socket_error(-result);
+        }
+    }
+}
+
+fn (none | SocketError) Socket.close(mut Socket *this) {
+    if (this.fd < 0) {
+        return;
+    }
+
+    int result = syscall(3, this.fd);
+
+    if (result < 0) {
+        return socket_error(-result);
+    }
+
+    this.fd = -1;
+}
+
+fn (none | SocketError) Socket.listen(mut Socket *this, uint32 backlog) {
+    int result = syscall(50, this.fd, backlog);
+
+    if (result < 0) {
+        return socket_error(-result);
+    }
+}
+
+fn (Socket | SocketError) Socket.accept(mut Socket *this) {
+    int fd = syscall(43, this.fd, 0, 0);
+
+    if (fd < 0) {
+        return socket_error(-fd);
+    }
+
+    return {
+        .fd = fd,
+        .kind = this.kind,
+    };
+}
+
+fn (none | SocketError) Socket.connect(mut Socket *this, Endpoint endpoint) {
+    match (endpoint.address) {
+        IPv4Address address: {
+            SockAddrIn addr = {
+                .family = 2,
+                .port = address.port.to_be(), //TODO: big-endian-ness
+                .addr = address.octets,
+                .zero = { 0, 0, 0, 0, 0, 0, 0, 0 },
+            };
+
+            int result = syscall(42, this.fd, &addr, #sizeof(SockAddrIn));
+            if (result < 0) return socket_error(-result);
+        }
+
+        IPv6Address address: {
+            SockAddrIn6 addr = {
+                .family = 10,
+                .port = address.port.to_be(),
+                .flowinfo = 0,
+                .addr = address.octets,
+                .scope_id = 0,
+            };
+
+            int result = syscall(42, this.fd, &addr, #sizeof(SockAddrIn6));
+            if (result < 0) return socket_error(-result);
+        }
+    }
+}
+
+@packed
+type SockAddrIn = struct {
+    uint16 family;
+    uint16 port;
+    uint8[4] addr;
+    uint8[8] zero;
+};
+
+@packed
+type SockAddrIn6 = struct {
+    uint16 family;
+    uint16 port;
+    uint32 flowinfo;
+    uint8[16] addr;
+    uint32 scope_id;
+};
+
+@packed
+type SockAddrStorage = struct {
+    uint8[128] data;
+};
+
+fn uint64 sockaddr_from_endpoint(Endpoint endpoint, mut SockAddrStorage *storage) {
+    match (endpoint.address) {
+        IPv4Address address {
+            SockAddrIn addr = {
+                .family = 2,
+                .port = address.port.to_be(),
+                .addr = address.octets,
+                .zero = { 0, 0, 0, 0, 0, 0, 0, 0 },
+            };
+
+            *storage = {};
+            *(SockAddrIn *)storage = addr;
+            return #sizeof(SockAddrIn);
+        }
+
+        IPv6Address address {
+            SockAddrIn6 addr = {
+                .family = 10,
+                .port = address.port.to_be(),
+                .flowinfo = 0,
+                .addr = address.octets,
+                .scope_id = 0,
+            };
+
+            *storage = {};
+            *(SockAddrIn6 *)storage = addr;
+            return #sizeof(SockAddrIn6);
+        }
+    }
+}
+
+fn (Endpoint | SocketError) endpoint_from_sockaddr(SockAddrStorage *storage) {
+    uint16 family = *(uint16 *)storage;
+
+    match (family) {
+        2 {
+            SockAddrIn *addr = (SockAddrIn *)storage;
+
+            return {
+                .address = {
+                    .octets = addr.addr,
+                },
+                .port = addr.port.from_be(),
+            };
+        }
+
+        10 {
+            SockAddrIn6 *addr = (SockAddrIn6 *)storage;
+
+            return {
+                .address = {
+                    .octets = addr.addr,
+                },
+                .port = addr.port.from_be(),
+            };
+        }
+
+        _ { return SocketError::INVALID_ADDRESS; }
+    }
+}
