@@ -84,6 +84,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                     .kind = SYMBOL_TYPE,
                     .name = d->type.name,
                     .decl = d,
+                    .span = d->span,
                 };
                 break;
 
@@ -93,6 +94,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                     .kind = SYMBOL_FN,
                     .name = d->fn.name,
                     .decl = d,
+                    .span = d->span,
                 };
                 break;
 
@@ -102,6 +104,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                     .kind = SYMBOL_GLOBAL,
                     .name = d->var.name,
                     .decl = d,
+                    .span = d->span,
                 };
                 break;
 
@@ -111,6 +114,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                     .kind = SYMBOL_CONSTRAINT,
                     .name = d->constraint.name,
                     .decl = d,
+                    .span = d->span,
                 };
                 break;
 
@@ -124,8 +128,9 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
         }
 
         if (sym != NULL) {
-            if (scope_lookup(&sema->global_scope, sym->name) != NULL) {
-                error_duplicate_symbol(sema->diags, sym->name.ident, d->span);
+            Symbol *s = scope_lookup(&sema->global_scope, sym->name);
+            if (s != NULL) {
+                error_duplicate_symbol(sema->diags, sym->name.ident, d->span, s->span);
                 continue;
             }
 
@@ -179,10 +184,8 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 return false;
 
             for (size_t i = 0; i < a->function.params.len; i++) {
-                HirType *ap =
-                    ((HirType **)a->function.params.data)[i];
-                HirType *bp =
-                    ((HirType **)b->function.params.data)[i];
+                HirType *ap = ((HirType **)a->function.params.data)[i];
+                HirType *bp = ((HirType **)b->function.params.data)[i];
 
                 if (!sema_type_equal(ap, bp))
                     return false;
@@ -195,10 +198,8 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 return false;
 
             for (size_t i = 0; i < a->sum.members.len; i++) {
-                HirType *am =
-                    ((HirType **)a->sum.members.data)[i];
-                HirType *bm =
-                    ((HirType **)b->sum.members.data)[i];
+                HirType *am = ((HirType **)a->sum.members.data)[i];
+                HirType *bm = ((HirType **)b->sum.members.data)[i];
 
                 if (!sema_type_equal(am, bm))
                     return false;
@@ -211,10 +212,8 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 return false;
 
             for (size_t i = 0; i < a->structure.fields.len; i++) {
-                HirField *af =
-                    ((HirField *)a->structure.fields.data) + i;
-                HirField *bf =
-                    ((HirField *)b->structure.fields.data) + i;
+                HirField *af = ((HirField *)a->structure.fields.data) + i;
+                HirField *bf = ((HirField *)b->structure.fields.data) + i;
 
                 if (af->symbol != bf->symbol)
                     return false;
@@ -230,10 +229,8 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 return false;
 
             for (size_t i = 0; i < a->union_.fields.len; i++) {
-                HirField *af =
-                    ((HirField *)a->union_.fields.data) + i;
-                HirField *bf =
-                    ((HirField *)b->union_.fields.data) + i;
+                HirField *af = ((HirField *)a->union_.fields.data) + i;
+                HirField *bf = ((HirField *)b->union_.fields.data) + i;
 
                 if (af->symbol != bf->symbol)
                     return false;
@@ -245,19 +242,15 @@ static bool sema_type_equal(HirType *a, HirType *b) {
             return true;
 
         case HIR_TYPE_ENUM:
-            if (!sema_type_equal(a->enumeration.underlying,
-                                  b->enumeration.underlying))
+            if (!sema_type_equal(a->enumeration.underlying, b->enumeration.underlying))
                 return false;
 
-            if (a->enumeration.items.len !=
-                b->enumeration.items.len)
+            if (a->enumeration.items.len != b->enumeration.items.len)
                 return false;
 
             for (size_t i = 0; i < a->enumeration.items.len; i++) {
-                HirEnumItem *ai =
-                    ((HirEnumItem *)a->enumeration.items.data) + i;
-                HirEnumItem *bi =
-                    ((HirEnumItem *)b->enumeration.items.data) + i;
+                HirEnumItem *ai = ((HirEnumItem *)a->enumeration.items.data) + i;
+                HirEnumItem *bi = ((HirEnumItem *)b->enumeration.items.data) + i;
 
                 if (ai->symbol != bi->symbol)
                     return false;
@@ -378,6 +371,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
                     .decl = NULL,
+                    .span = ast->span,
                 };
 
                 symbol->type = sema_type(sema, field->type);
@@ -404,6 +398,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
                     .decl = NULL,
+                    .span = ast->span
                 };
 
                 symbol->type = sema_type(sema, field->type);
@@ -543,7 +538,8 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
         if (sema_type_equal(expr->type, type))
             return expr;
 
-        //! TODO: implicit conversion
+        error_type_mismatch(sema->diags, type, expr->type, expr->span);
+
         return NULL;
     }
 
@@ -696,6 +692,7 @@ static void sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
         .name = param->name,
         .decl = NULL,
         .type = type,
+        .span = param->span,
     };
 
     scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), symbol);
@@ -732,9 +729,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            hir->type = sema_symbol_type(sema, symbol);
             hir->kind = HIR_EXPR_VALUE;
             hir->value.symbol = symbol;
+            hir->type = sema_symbol_type(sema, symbol);
+
+            if (expected != NULL)
+                return sema_expr_coerce(sema, hir, expected);
+
             return hir;
         }
 
@@ -753,7 +754,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            hir->kind = HIR_EXPR_VALUE;
+            hir->value.symbol = symbol;
             hir->type = sema_symbol_type(sema, symbol);
+
+            if (expected != NULL)
+                return sema_expr_coerce(sema, hir, expected);
+
             return hir;
         }
 
@@ -1154,13 +1161,15 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 static bool sema_local_decl(Sema *sema, AstVarDecl *ast) {
     Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
 
-    if (scope_lookup(scope, ast->name) != NULL) {
-        error_duplicate_symbol(sema->diags, ast->name.ident, ast->span);
+    Symbol *s = scope_lookup(scope, ast->name);
+    if (s != NULL) {
+        error_duplicate_symbol(sema->diags, ast->name.ident, ast->span, s->span);
         return false;
     }
 
-    if (sema_lookup(sema, ast->name) != NULL) {
-        error_shadowing(sema->diags, ast->name.ident, ast->span);
+    s = sema_lookup(sema, ast->name);
+    if (s != NULL) {
+        error_shadowing(sema->diags, ast->name.ident, ast->span, s->span);
         return false;
     }
 
@@ -1171,6 +1180,7 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast) {
         .name = ast->name,
         .decl = NULL,
         .type = sema_type(sema, ast->type),
+        .span = ast->span,
     };
 
     if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
@@ -1380,15 +1390,14 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             }
 
             if (ast->_return.value != NULL) {
-                hir->_return.value = sema_expr(sema, ast->_return.value, sema->current_fn->return_type);
+                hir->_return.value = sema_expr(
+                    sema,
+                    ast->_return.value,
+                    sema->current_fn->return_type
+                );
 
-                if (hir->_return.value == NULL || hir->_return.value->kind == HIR_EXPR_ERROR) {
-                    hir->kind = HIR_STMT_ERROR;
-                    return hir;
-                }
-
-                if (!sema_type_equal(hir->_return.value->type, sema->current_fn->return_type)) {
-                    error_invalid_return(sema->diags, sema->current_fn->return_type, hir->_return.value->type, hir->_return.value->span);
+                if (hir->_return.value == NULL ||
+                    hir->_return.value->kind == HIR_EXPR_ERROR) {
                     hir->kind = HIR_STMT_ERROR;
                     return hir;
                 }
@@ -1609,26 +1618,31 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
     return hir;
 }
 
-HirFunction *sema_fn_decl(Sema *sema, AstFnDecl *ast) {
+void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
+    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
-        return NULL;
+        return;
     }
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error
-        return NULL;
+        return;
     }
 
     if (symbol->type == NULL) {
         HirType *type = arena_alloc(sema->arena, sizeof(HirType));
 
-        type->kind = HIR_TYPE_FUNCTION;
-        type->mutable = false;
-        type->function.ret = sema_type(sema, ast->ret);
-        type->function.params = array_create(sema->arena, sizeof(HirType *));
+        *type = (HirType) {
+            .kind = HIR_TYPE_FUNCTION,
+            .mutable = false,
+            .function = {
+                .ret = sema_type(sema, ast->ret),
+                .params = array_create(sema->arena, sizeof(HirType *)),
+            },
+        };
 
         for (size_t i = 0; i < ast->params.len; i++) {
             AstParam *param = (AstParam *)array_at(&ast->params, i);
@@ -1641,11 +1655,14 @@ HirFunction *sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     }
 
     if (ast->body == NULL)
-        return NULL;
+        return;
 
     HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
-    fn->symbol = symbol;
-    fn->return_type = symbol->type->function.ret;
+
+    *fn = (HirFunction) {
+        .symbol = symbol,
+        .return_type = symbol->type->function.ret,
+    };
 
     sema_push_scope(sema);
 
@@ -1668,11 +1685,15 @@ HirFunction *sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     sema->current_fn = previous_fn;
     sema_pop_scope(sema);
 
-    return fn;
+    if (fn->body == NULL)
+        return;
+
+    array_push(&sema->hir_module->functions, fn);
 }
 
 void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
+    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
@@ -1689,6 +1710,7 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
 
 void sema_var_decl(Sema *sema, AstVarDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
+    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error

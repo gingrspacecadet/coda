@@ -26,7 +26,7 @@ Array array_create_impl(Arena *arena, size_t T, const char *file, int line) {
 }
 
 void array_push_impl(Array *v, void *item, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_push: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }

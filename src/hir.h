@@ -296,6 +296,7 @@ struct Symbol {
     AstDecl *decl;
     AstName name;
     HirType *type;
+    Span span;
 
     Scope *namespace_scope;
 };

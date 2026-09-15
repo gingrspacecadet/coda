@@ -139,7 +139,7 @@ void error_unknown_path(Diags *diags, Path path, Span span) {
     diag_finish(&b);
 }
 
-void error_duplicate_symbol(Diags *diags, String name, Span span) {
+void error_duplicate_symbol(Diags *diags, String name, Span span, Span previous) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
@@ -147,15 +147,21 @@ void error_duplicate_symbol(Diags *diags, String name, Span span) {
         span,
         format(
             diags->arena,
-            "Duplicate declaration of '%.*s'.",
+            "Duplicate declaration '%.*s'.",
             string_fmt(name)
         )
+    );
+
+    diag_label(
+        &b,
+        previous,
+        STRING("previous declaration is here")
     );
 
     diag_finish(&b);
 }
 
-void error_shadowing(Diags *diags, String name, Span span) {
+void error_shadowing(Diags *diags, String name, Span span, Span previous) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
@@ -163,9 +169,20 @@ void error_shadowing(Diags *diags, String name, Span span) {
         span,
         format(
             diags->arena,
-            "Declaration of '%.*s' shadows another declaration.",
+            "Declaration '%.*s' shadows another declaration.",
             string_fmt(name)
         )
+    );
+
+    diag_label(
+        &b,
+        previous,
+        STRING("shadowed declaration is here")
+    );
+
+    diag_help(
+        &b,
+        STRING("rename this declaration or use the existing name")
     );
 
     diag_finish(&b);

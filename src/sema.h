@@ -12,6 +12,7 @@ typedef struct {
     Array(Scope) scopes;
     Scope global_scope;
 
+    HirModule *hir_module;
     HirFunction *current_fn;
 
     ModuleIndex modules;
