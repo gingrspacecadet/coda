@@ -1,0 +1,5 @@
+module std::path;
+
+// platform-dependent
+@export
+include std::path::posix = _;

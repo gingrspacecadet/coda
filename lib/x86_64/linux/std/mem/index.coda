@@ -1,0 +1,133 @@
+module std::mem;
+
+include math;
+
+@export
+fn bool overlaps(uint8[] x, uint8[] y) {
+    return (x.ptr < y.ptr + y.len) && (y.ptr < x.ptr + x.len);
+}
+
+@export
+fn bool overlaps_ptr(none* x, none* y, usize len) {
+    return (x < ((uint8*)y + len)) && (y < ((uint8*)x + len));
+}
+
+// source and destination cannot overlap
+@export
+fn (none | Error::ARRAY_LENGTH_MISMATCH) copy(mut uint8[] dest, uint8[] src) {
+    if (dest.len != src.len) {
+        return Error::ARRAY_LENGTH_MISMATCH;
+    }
+    for (mut usize i = 0; i < dest.len; i++) {
+        dest[i] = src[i];
+    }
+}
+
+// source and destination cannot overlap
+@export
+fn none copy_ptr(mut none* dest, none* src, usize len) {
+    for (mut usize i = 0; i < len; i++) {
+        ((mut uint8*)dest)[i] = ((uint8*)src)[i];
+    }
+}
+
+// source and destination can overlap
+@export
+fn (none | Error::ARRAY_LENGTH_MISMATCH) move(mut uint8[] dest, uint8[] src) {
+    if (dest.len != src.len) {
+        return Error::ARRAY_LENGTH_MISMATCH;
+    }
+    if (overlaps(dest, src)) {
+        if (dest.ptr < src.ptr) {
+            for (mut usize i = 0; i < dest.len; i++) {
+                dest[i] = src[i];
+            }
+        } else {
+            for (mut ssize i = dest.len - 1; i >= 0; i--) {
+                dest[i] = src[i];
+            }
+        }
+    } else {
+        for (mut usize i = 0; i < dest.len; i++) {
+            dest[i] = src[i];
+        }
+    }
+}
+
+// source and destination can overlap
+@export
+fn none move_ptr(mut none* dest, none* src, usize len) {
+    if (overlaps_ptr(dest, src. len)) {
+        if (dest.ptr < src.ptr) {
+            for (mut usize i = 0; i < len; i++) {
+                ((mut uint8*)dest)[i] = ((uint8*)src)[i];
+            }
+        } else {
+            for (mut ssize i = dest.len - 1; i >= 0; i--) {
+                ((mut uint8*)dest)[i] = ((uint8*)src)[i];
+            }
+        }
+    } else {
+        for (mut usize i = 0; i < len; i++) {
+            ((mut uint8*)dest)[i] = ((uint8*)src)[i];
+        }
+    }
+}
+
+@export
+fn none fill(mut uint8[] dest, uint8 value) {
+    for (mut usize i = 0; i < dest.len; i++) {
+        dest[i] = value;
+    }
+}
+
+@export
+fn none fill_ptr(mut none* dest, usize len, uint8 value) {
+    for (mut usize i = 0; i < len; i++) {
+        ((mut uint8*)dest)[i] = value;
+    }
+}
+
+@export
+fn none zero(mut uint8[] dest) {
+    for (mut usize i = 0; i < dest.len; i++) {
+        dest[i] = 0;
+    }
+}
+
+@export
+fn none zero_ptr(mut none* dest, usize len) {
+    for (mut usize i = 0; i < len; i++) {
+        ((mut uint8*)dest)[i] = 0;
+    }
+}
+
+@export
+fn (bool | Error::ARRAY_LENGTH_MISMATCH) compare(uint8[] x, uint8[] y) {
+    if (x.len != y.len) {
+        return Error::ARRAY_LENGTH_MISMATCH;
+    }
+    for (mut usize i = 0; i < x.len; i++) {
+        if (x[i] != y[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+@export
+fn (bool | Error::ARRAY_LENGTH_MISMATCH) compare_ptr(none* x, none* y) {
+    for (mut usize i = 0; i < x.len; i++) {
+        if (((uint8*)x)[i] != ((uint8*)y)[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+@export
+fn none swap<T>(mut T* x, mut T* y) {
+    T temp = *x;
+    *x = *y;
+    *y = temp;
+}

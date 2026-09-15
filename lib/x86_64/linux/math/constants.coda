@@ -1,0 +1,46 @@
+module math;
+
+include std::types = _;
+
+$fn #code::decl[] create_constant(#code::ident name, #code::num_literal value16, #code::num_literal value32, #code::num_literal value64) {
+    #code::ident name16 = name;
+    name16.name.add("_16");
+    #code::ident name32 = name;
+    name32.name.add("_32");
+    #code::ident name64 = name;
+    name64.name.add("_64");
+    #code::ident func_name = name;
+    func_name.name.map(char.to_lower);
+    func_name.name.add_start("get_");
+    return #{
+        @export
+        float16 #(name16) = #bit_cast<float16>(#(value16));
+        @export
+        float32 #(name32) = #bit_cast<float32>(#(value32));
+        @export
+        float64 #(name64) = #bit_cast<float64>(#(value64));
+        @export
+        $fn T #(func_name)<T: Float>(T value) {
+            $if (T == float16) {
+                return #(name16);
+            } $else $if (T == float32) {
+                return #(name32);
+            } $else {
+                return #(name64);
+            }
+        }
+    };
+}
+
+create_constant(INFINITY, 0x7c00, 0x7f800000, 0x7ff0000000000000);
+create_constant(NAN, 0x7e00, 0x7fc00000, 0x7ff8000000000000);
+create_constant(SNAN, 0x7d00, 0x7fa00000, 0x7ff4000000000000);
+create_constant(EPSILON, 0x0001, 0x00000001, 0x0000000000000001);
+create_constant(MAX_SAFE_INTEGER, 0x67ff, 0x4b7fffff, 0x433fffffffffffff);
+create_constant(E, 0x4170, 0x402df854, 0x4005bf0a8b145769);
+create_constant(LOG2E, 0x3dc5, 0x3fb8aa3b, 0x3ff71547652b82fe);
+create_constant(LOG10E, 0x36f3, 0x3ede5bd9, 0x3fdbcb7b1526e50e);
+create_constant(LN2, 0x398c, 0x3f317218, 0x3fe62e42fefa39ef);
+create_constant(LN10, 0x409b, 0x40135d8e, 0x40026bb1bbb55516);
+create_constant(PI, 0x4248, 0x40490fdb, 0x400921fb54442d18);
+create_constant(SQRT2, 0x3da8, 0x3fb504f3, 0x3ff6a09e667f3bcd);

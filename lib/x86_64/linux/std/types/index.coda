@@ -1,0 +1,74 @@
+module std::types;
+
+@__global
+type char = uint8;
+@__global
+type string = char[];
+
+@__global
+type wchar = uint32;
+@__global
+type wstring = wchar[];
+
+@export
+constraint Signed = {
+    Signed == int8 || Signed == int16 || Signed == int32 || Signed == int64 || Signed == ssize;
+
+}
+@export
+constraint Unsigned = {
+    Unsigned == uint8 || Unsigned == uint16 || Unsigned == uint32 || Unsigned == uint64 || Unsigned == usize;
+}
+
+@export
+constraint Integer = {
+    Integer == Signed || Integer == Unsigned;
+}
+
+@export
+constraint Float = {
+    Float == float16 || Float == float32 || Float == float64;
+}
+
+@export
+constraint Number = {
+    Number == Integer || Number == Float;
+}
+
+@export
+uint8 UINT8_MAX = 0xff;
+@export
+uint16 UINT16_MAX = 0xffff;
+@export
+uint32 UINT32_MAX = 0xffff_ffff;
+@export
+uint64 UINT64_MAX = 0xffff_ffff_ffff_ffff;
+
+@export
+int8 INT8_MIN = -0x80;
+@export
+int8 INT8_MAX = 0x7f;
+
+@export
+int16 INT16_MIN = -0x8000;
+@export
+int16 INT16_MAX = 0x7fff;
+
+@export
+int32 INT32_MIN = -0x8000_0000;
+@export
+int32 INT32_MAX = 0x7fff_ffff;
+
+@export
+int64 INT64_MIN = -0x8000_0000_0000_0000;
+@export
+int64 INT64_MAX = 0x7fff_ffff_ffff_ffff;
+
+@export
+fn bool.to_string(bool this) {
+    if (this) {
+        return "true";
+    } else {
+        return "false";
+    }
+}

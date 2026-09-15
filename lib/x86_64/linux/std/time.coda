@@ -1,0 +1,297 @@
+module std::time;
+
+include std::text : _;
+
+@export
+type Time = struct {
+    int64 s;
+    uint32 ns;
+};
+
+@export
+type Duration = struct {
+    int64 s;
+    uint32 ns;
+};
+
+@export
+type ParsedTime = struct {
+    int64 year;
+    uint8 month;
+    uint8 day;
+    uint8 hour;
+    uint8 minute;
+    uint8 second;
+    uint32 nanosecond;
+};
+
+@export
+type LeapSecond = struct {
+    Time time;
+    int8 amount;
+};
+
+@export
+LeapSecond[] LEAP_SECONDS = {
+    {{-315619200, 0}, 1},
+    {{-283996800, 0}, 1},
+    {{-265680000, 0}, 1},
+    {{-252460800, 0}, 1},
+    {{-194659200, 0}, 1},
+    {{-189388800, 0}, 1},
+    {{-181526400, 0}, 1},
+    {{-168307200, 0}, 1},
+    {{-157766400, 0}, 1},
+    {{-152668800, 0}, 1},
+    {{-142128000, 0}, 1},
+    {{-136771200, 0}, 1},
+    {{-126230400, 0}, 1},
+    {{-60480000, 0}, 1},
+    {{63072000, 0}, 1},
+    {{78796800, 0}, 1},
+    {{94694400, 0}, 1},
+    {{126230400, 0}, 1},
+    {{157766400, 0}, 1},
+    {{189302400, 0}, 1},
+    {{220924800, 0}, 1},
+    {{252460800, 0}, 1},
+    {{283996800, 0}, 1},
+    {{315532800, 0}, 1},
+    {{362793600, 0}, 1},
+    {{394329600, 0}, 1},
+    {{425865600, 0}, 1},
+    {{489024000, 0}, 1},
+    {{567993600, 0}, 1},
+    {{631152000, 0}, 1},
+    {{662688000, 0}, 1},
+    {{709948800, 0}, 1},
+    {{741484800, 0}, 1},
+    {{773020800, 0}, 1},
+    {{820454400, 0}, 1},
+    {{867715200, 0}, 1},
+    {{915148800, 0}, 1},
+    {{1136073600, 0}, 1},
+    {{1230768000, 0}, 1},
+    {{1341100800, 0}, 1},
+    {{1435708800, 0}, 1},
+    {{1483228800, 0}, 1},
+};
+
+@export
+fn none Time.set_unix(Time* this, int64 value) {
+    this.s = value;
+    this.ns = 0;
+}
+
+@export
+fn Time Time.add(Time* this, Time* value) {
+    uint64 s = this.s + value.s;
+    uint64 ns = this.ns + value.ns;
+    if (ns > 1e9) {
+        s += 1;
+        ns -= 1e9;
+    }
+    return {.s = s, .ns = ns};
+}
+
+@export
+fn none Time.iadd(Time* this, Time* value) {
+    this.s += value.s;
+    this.ns += value.ns;
+    if (this.ns > 1e9) {
+        this.s += 1;
+        this.ns -= 1e9;
+    }
+    return {.s = s, .ns = ns};
+}
+
+@export
+fn Duration Time.sub(Time* this, Time* other) {
+    int64 s = this.s - other.s;
+    int32 ns = this.s - other.ns;
+    if (ns < 0) {
+        s -= 1;
+        ns += 1e9;
+    }
+    return {.s = s, .ns = ns};
+}
+
+@export
+fn none Time.isub(Time* this, Time* other, Duration* out) {
+    out.s = this.s - other.s;
+    int32 ns = this.s - other.ns;
+    if (ns < 0) {
+        out.s -= 1;
+        ns += 1e9;
+    }
+    out.ns = ns;
+}
+
+@export
+fn bool is_leap_second(int64 second) {
+    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i += 1) {
+        if (LEAP_SECONDS[i].time.s == second) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn bool Time.is_leap_second(Time* this) {
+    return #inline(is_leap_second(this.s));
+    for (mut uint64 i = 0; i < LEAP_SECONDS.len; i += 1) {
+        if (LEAP_SECONDS[i].time.s == this.s) {
+            return true;
+        }
+    }
+    return false;
+}
+
+@export
+fn bool is_leap_year(int64 year) {
+    return year % 4 == 0 && !(year % 100 == 0 && !(year % 400 == 0));
+}
+
+@export
+fn int32 get_days_in_year(int64 year) {
+    if (#inline(is_leap_year(year))) {
+        return 366;
+    } else {
+        return 365;
+    }
+}
+
+uint8[12] _DAYS_IN_MONTH = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+fn int32 get_days_in_month(int64 year, uint8 month) {
+    if (month == 2 && #inline(is_leap_year(year))) {
+        return 29;
+    } else {
+        return _DAYS_IN_MONTH[month];
+    }
+}
+
+fn ParsedTime Time.parse(Time* this) {
+    int64 value = this.s;
+    uint8 second = value.real_mod(60);
+    value = (value - second) / 60;
+    uint8 minute = value.real_mod(60);
+    value = (value - minute) / 60;
+    uint8 hour = value.real_mod(24);
+    value = (value - hour) / 24;
+    // convert day number to day and year
+    int64 year = 1970;
+    if (value < 0) {
+        while (value < 0) {
+            year -= 1;
+            value += get_days_in_year(year);
+        }
+    } else {
+        while (value > get_days_in_year(year)) {
+            year += 1;
+            value -= get_days_in_year(year);
+        }
+    }
+    // convert day number to month and day
+    int32 day = value;
+    uint8 month = 1;
+    while (value > get_days_in_month(year, month)) {
+        value -= get_days_in_month(year, month);
+        month += 1;
+    }
+    return {
+        .year = year,
+        .month = month,
+        .day = day,
+        .hour = hour,
+        .minute = minute,
+        .second = second,
+        .nanosecond = this.ns,
+    };
+}
+
+fn none Time.iparse(Time* this, ParsedTime* out) {
+    int64 value = this.s;
+    uint8 second = value.real_mod(60);
+    value = (value - second) / 60;
+    uint8 minute = value.real_mod(60);
+    value = (value - minute) / 60;
+    uint8 hour = value.real_mod(24);
+    value = (value - hour) / 24;
+    // convert day number to day and year
+    int64 year = 1970;
+    if (value < 0) {
+        while (value < 0) {
+            year -= 1;
+            value += get_days_in_year(year);
+        }
+    } else {
+        while (value > get_days_in_year(year)) {
+            year += 1;
+            value -= get_days_in_year(year);
+        }
+    }
+    // convert day number to month and day
+    int32 day = value;
+    uint8 month = 1;
+    while (value > get_days_in_month(year, month)) {
+        value -= get_days_in_month(year, month);
+        month += 1;
+    }
+    out.year = year;
+    out.month = month;
+    out.day = day;
+    out.hour = hour;
+    out.minute = minute;
+    out.second = second;
+    out.nanosecond = this.ns;
+}
+
+fn Time ParsedTime.unparse(ParsedTime* this) {
+    int64 s = this.second + 60 * (this.minute + 60 * (this.hour + 24 * this.day));
+    // add in month
+    uint8 month = this.month;
+    while (month > 1) {
+        s += get_days_in_month(month);
+        month -= 1;
+    }
+    // add in year
+    int64 year = this.year;
+    if (year < 0) {
+        while (year != 1970) {
+            s += get_days_in_year(year) * 86400;
+            year += 1;
+        }
+    } else {
+        while (year != 1970) {
+            s -= get_days_in_year(year) * 86400;
+            year -= 1;
+        }
+    }
+    return {.s = s, .ns = this.nanosecond};
+}
+
+fn none ParsedTime.iunparse(ParsedTime* this, Time* out) {
+    int64 s = this.second + 60 * (this.minute + 60 * (this.hour + 24 * this.day));
+    // add in month
+    uint8 month = this.month;
+    while (month > 1) {
+        s += get_days_in_month(month);
+        month -= 1;
+    }
+    // add in year
+    int64 year = this.year;
+    if (year < 0) {
+        while (year != 1970) {
+            s += get_days_in_year(year) * 86400;
+            year += 1;
+        }
+    } else {
+        while (year != 1970) {
+            s -= get_days_in_year(year) * 86400;
+            year -= 1;
+        }
+    }
+    out.s = s;
+    out.ns = this.nanosecond;
+}
