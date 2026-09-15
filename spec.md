@@ -1986,9 +1986,9 @@ Coda provides intrinsics for inspecting types at compile time.
 
 Examples include:
 
-* `#typeid(value)` — obtains the type identifier of a value or type
-* `#typestr(value)` — obtains a string representation of a type
-* `#enumstr(value)` — obtains the name of an enum variant as a string
+* `#typeid(value)` - obtains the type identifier of a value or type
+* `#typestr(value)` - obtains a string representation of a type
+* `#enumstr(value)` - obtains the name of an enum variant as a string
 
 The exact representation of type identifiers is defined in typeid.md
 
@@ -1998,10 +1998,10 @@ Coda provides intrinsics for obtaining source information.
 
 Examples include:
 
-* `#file()` — the current source file
-* `#line()` — the current line number
-* `#column()` — the current column number
-* `#module()` — the current module name
+* `#file()` - the current source file
+* `#line()` - the current line number
+* `#column()` - the current column number
+* `#module()` - the current module name
 
 These intrinsics are useful for diagnostics, logging, and compile-time generation.
 
@@ -2011,13 +2011,21 @@ Coda provides intrinsics for querying type layout.
 
 Examples include:
 
-* `#sizeof(T)` — the size of `T` in bytes
-* `#alignof(T)` — the alignment of `T` in bytes
-* `#offsetof(T, member)` — the byte offset of a member within a type
+* `#sizeof(T)` - the size of `T` in bytes
+* `#alignof(T)` - the alignment of `T` in bytes
+* `#offsetof(T, member)` - the byte offset of a member within a type
 
 Layout intrinsics reflect the layout rules of the target platform and the type system.
 
-### 11.6 Restrictions
+### 11.6 Miscellaneous Intrinsics
+
+There are some other intrinsics that dont fit into the categories above.
+
+Examples include:
+
+* `#inline(F)` - forces the function `F` to get inlined. Will fail if impossible
+
+### 11.7 Restrictions
 
 Intrinsics are not first-class values.
 

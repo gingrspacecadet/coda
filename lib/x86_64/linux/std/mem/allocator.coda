@@ -1,0 +1,10 @@
+module std::mem;
+
+@export
+constraint Allocator {
+    fn uint8[] allocate(mut Allocator *this, uint64 size, uint64 align);
+
+    fn T *alloc<T>(mut Allocator *this, uint64 count) {
+        return (T *)this.allocate(#sizeof(T) * count, #alignof(T) * count);
+    }
+}

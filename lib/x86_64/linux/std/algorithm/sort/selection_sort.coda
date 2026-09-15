@@ -2,9 +2,10 @@ module std::algorithm;
 
 include std::collections : _;
 include std::constraints : _;
+include std::mem;
 
 @export
-fn none selection_sort<T: Swappable; Comparable>(mut Sequence<T> *seq) {
+fn none selection_sort<T: Comparable>(mut Sequence<T> *seq) {
     for (usize i = 0; i < seq.len(); i += 1) {
         usize min_index = i;
         for (usize j = i + 1; j < seq.len(); j += 1) {
@@ -19,6 +20,6 @@ fn none selection_sort<T: Swappable; Comparable>(mut Sequence<T> *seq) {
 }
 
 @export
-fn none mut Sequence<T>.selection_sort<T: Swappable; Comparable>(Sequence<T> *this) {
+fn none mut Sequence<T>.selection_sort<T: Comparable>(Sequence<T> *this) {
     selection_sort(this);
 }

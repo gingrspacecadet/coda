@@ -1,0 +1,48 @@
+module std::io;
+
+@export
+type IOError = enum {
+    EOS, // End Of Stream
+};
+
+@export
+constraint Reader {
+    fn (uint64 | IOError) read(mut Reader *this, mut uint8[] dst);
+}
+
+@export
+constraint Writer {
+    fn (uint64 | IOError) write(mut Reader *this, uint8[] src);
+
+    fn (uint64 | IOError) writeln(mut Reader *this, uint8[] src) {
+        uint64 n = this.write(src)?;
+        n += this.write("\n")?;
+        return n;
+    }
+}
+
+@export
+type SeekOrigin = enum {
+    BEGIN,
+    CURRENT,
+    END,
+};
+
+@export 
+constraint Seeker {
+    fn uint64 seek(mut Seeker *this, SeekOrigin origin, int64 offset);
+    fn uint64 tell(Seeker *this);
+}
+
+@export
+constraint Flusher {
+    fn none flush(mut Flusher *this);
+}
+
+@export
+fn (uint64 | IOError) copy(mut Reader *src, mut Writer *dst, uint64 count) {
+    mut uint8[count] t;
+    uint64 read = src.read(t)?;
+    uint64 written = dst.write(t)?;
+    return count;
+}
