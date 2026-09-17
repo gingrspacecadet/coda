@@ -261,13 +261,16 @@ Decimal literals:
 0
 42
 1_000_000
+1e6
+100e-1
 ```
 
 Hexadecimal:
 
 ```coda
 0xFF
-0xDEAD_BEEF
+-0xDEAD_BEEF
+0x1Ae2B
 ```
 
 Binary:
@@ -284,6 +287,8 @@ Octal:
 
 Underscores may separate digits but may not occur at the beginning or end of a literal, immediately after a radix prefix, or consecutively.
 
+Exponential literals may be provided using the letter "e" or "E" followed by more digits. A negative sign is permitted after the "e" if it identifies an integer.
+
 Negative integer literals are formed with the unary `-` operator. `-42` is not itself an integer literal.
 
 ### 2.12 Floating-Point Literals
@@ -295,7 +300,7 @@ A floating-point literal contains either a decimal point or an exponent.
 1.5
 3.
 1e6
-6.022e23
+6.022E23
 ```
 
 Floating-point literals are initially untyped.
@@ -415,7 +420,7 @@ The grammar describes syntax only. Semantic validity is specified separately.
 module =
     "module", path, ";",
     { declaration }
-    ;
+;
 ```
 
 ### 3.2 Declarations
@@ -425,16 +430,29 @@ declaration =
     { attribute },
     (
         include_decl
-      | type_decl
-      | function_decl
       | variable_decl
+      | type_decl
+      | constraint_decl
+      | function_decl
     )
-    ;
+;
+
+attribute =
+    "@", identifier,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
 ```
 
 A declaration may have zero or more attributes.
 
-### 3.3 Include Declarations
+#### 3.2.1 Include Declarations
 
 ```ebnf
 include_decl =
@@ -442,50 +460,10 @@ include_decl =
     path,
     [ "=", identifier ],
     ";"
-    ;
+;
 ```
 
-### 3.4 Type Declarations
-
-```ebnf
-type_decl =
-    "type",
-    identifier,
-    [ generic_parameters ],
-    "=",
-    type_definition,
-    ";"
-    ;
-```
-
-A type declaration may introduce:
-
-```coda
-type Int = int32;
-
-type Vec = struct {
-    int32 x;
-    int32 y;
-};
-
-type Result = union {
-    int32 value;
-    Error error;
-};
-```
-
-### 3.5 Type Definitions
-
-```ebnf
-type_definition =
-      type
-    | struct_definition
-    | union_definition
-    | enum_definition
-    ;
-```
-
-### 3.6 Variables
+#### 3.2.2 Variable Declarations
 
 ```ebnf
 variable_decl =
@@ -493,138 +471,710 @@ variable_decl =
     identifier,
     [ "=", expression ],
     ";"
-    ;
+;
 ```
 
 Variables are immutable by default. Mutability is expressed by the type/declaration syntax defined in the Types chapter.
 
-### 3.7 Struct Definitions
+#### 3.2.3 Type Declarations
 
 ```ebnf
-struct_definition =
-    "struct",
-    "{",
-    { field_decl },
-    "}"
-    ;
+type_decl =
+    "type",
+    identifier,
+    [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
+    [ "=", type ],
+    ";"
+;
+```
 
-field_decl =
+#### 3.2.4 Constraint Declarations
+
+```ebnf
+constraint_decl =
+    "constraint",
+    identifier,
+    [ generic_decl_item ],
+    [
+        ":",
+        constraint,
+        { ",", constraint },
+    ],
+    [ "=", constraint ],
+    ";"
+;
+```
+
+#### 3.2.5 Function Declarations
+
+```ebnf
+function_decl =
+    [ "$" ],
+    "fn",
     type,
     identifier,
-    ";"
-    ;
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    "{",
+    { statement },
+    "}"
+;
+
+parameter_spec =
+    type,
+    identifier
+;
 ```
 
-### 3.8 Union Definitions
+#### 3.2.6 Generic Declaration Items
 
 ```ebnf
-union_definition =
-    "union",
-    "{",
-    { field_decl },
-    "}"
-    ;
-```
+generic_decl_item =
+    "<",
+    generic_field,
+    { ",", generic_field },
+    ">"
+;
 
-### 3.9 Enum Definitions
-
-```ebnf
-enum_definition =
-    "enum",
-    [ ":", type ],
-    "{",
-    { enum_value },
-    "}"
-    ;
-
-enum_value =
+generic_field =
     identifier,
-    [ "=", expression ],
-    ","
-    ;
+    [
+        ":",
+        constraint,
+    ]
+;
 ```
 
-The optional underlying type specifies the representation of the enum.
+### 3.3 Statements
 
-### 3.10 Types
+```ebnf
+statement =
+    [ "$" ],
+    (
+        expr_stmt
+      | declaration
+      | block_stmt
+      | if_stmt
+      | for_stmt
+      | while_stmt
+      | break_stmt
+      | continue_stmt
+      | match_stmt
+      | defer_stmt
+    ),
+    ";"
+;
+```
+
+#### 3.3.1 Expression Statement
+
+```ebnf
+expr_stmt =
+    expression
+;
+```
+
+#### 3.3.2 Block Statement
+
+```ebnf
+block_stmt =
+    "{",
+    { statement },
+    "}"
+;
+```
+
+#### 3.3.3 If Statement
+
+```ebnf
+if_stmt =
+    "if",
+    "(", expression, ")",
+    statement,
+    [
+        "else",
+        statement
+    ]
+;
+```
+
+#### 3.3.4 For Statement
+
+```ebnf
+for_stmt =
+    "for",
+    "(",
+    statement,
+    expression, ";",
+    expression,
+    ")",
+    statement
+;
+```
+
+#### 3.3.5 While Statement
+
+```ebnf
+while_stmt =
+    "while",
+    "(", expression, ")",
+    statement
+;
+```
+
+#### 3.3.6 Break Statement
+
+```ebnf
+break_stmt =
+    "break",
+    [ expression ]
+;
+```
+
+#### 3.3.7 Continue Statement
+
+```ebnf
+continue_stmt =
+    "break",
+    [ expression ]
+;
+```
+
+#### 3.3.8 Match Statement
+
+```ebnf
+match_stmt =
+    "match",
+    "(", expression, ")",
+    "{",
+    { match_part },
+    "}",
+;
+
+match_part =
+    type,
+    [ identifier ],
+    block_stmt,
+;
+```
+
+#### 3.3.9 Defer Statement
+
+```ebnf
+defer_stmt =
+    "defer",
+    [ expression ]
+;
+```
+
+### 3.4 Expressions
+
+```ebnf
+expression =
+        identifier
+      | literal
+      | initializer
+      | parenthesised_expr
+      | unary_expr
+      | binary_expr
+      | assignment_expr
+      | conditional_expr
+      | call_expr
+      | index_expr
+      | member_expr
+      | cast_expr
+      | deref_expr
+      | intrinsic_expr
+      | bubble_expr
+      | lambda_expr
+      | code_expr
+      | splice_expr
+      | type
+      | constraint
+;
+
+identifier = ? defined in tokenisation ?;
+```
+
+#### 3.4.1 Literals
+
+```ebnf
+literal =
+        null_literal
+      | integer_literal
+      | float_literal
+      | boolean_literal
+      | char_literal
+      | string_literal
+;
+
+null_literal = ? defined in tokenisation ?;
+
+integer_literal = ? defined in tokenisation ?;
+
+float_literal = ? defined in tokenisation ?;
+
+boolean_literal = ? defined in tokenisation ?;
+
+char_literal = ? defined in tokenisation ?;
+
+string_literal = ? defined in tokenisation ?;
+```
+
+#### 3.4.2 Initializers
+
+```ebnf
+initializer =
+    "{",
+    { init_field },
+    "}"
+;
+
+init_field =
+    [
+        ".",
+        ( 
+            identifier
+            |
+            "[", expression, "]"
+        ),
+        "="
+    ],
+    expression
+;
+```
+
+#### 3.4.3 Parenthesised Expressions
+
+```ebnf
+parenthesised_expr =
+    "(", expression, ")"
+;
+```
+
+#### 3.4.4 Unary Expressions
+
+```ebnf
+unary_expr =
+    unary_op,
+    expression
+;
+
+unary_op =
+        "+" | "-"
+      | "~"
+      | "!"
+      | "&"
+;
+```
+
+#### 3.4.5 Binary Expressions
+
+```ebnf
+binary_expr =
+    expression,
+    binary_op,
+    expression
+;
+
+binary_op =
+        "+" | "-" | "*" | "/" | "%"
+      | "&" | "|" | "^" | "~&" | "~|" | "<<" | ">>" | ">>>"
+      | "&&" | "||" | "!&" | "!|"
+      | "==" | "!=" | "<" | "<=" | ">" | ">="
+;
+```
+
+#### 3.4.6 Assignment Expressions
+
+```ebnf
+assignment_expr =
+    lvalue,
+    assignment_op,
+    expression
+;
+
+assignment_op =
+        "="
+      | "+=" | "-=" | "*=" | "/=" | "%="
+      | "&=" | "|=" | "^=" | "~&=" | "~|=" | "<<=" | ">>=" | ">>>="
+      | "&&=" | "||=" | "!&=" | "!|="
+;
+
+lvalue =
+        identifier
+      | member_expr
+      | index_expr
+      | deref_expr
+;
+```
+
+#### 3.4.7 Conditional Expressions
+
+```ebnf
+conditional_expr =
+    expression,
+    "?",
+    expression,
+    ":",
+    expression
+;
+```
+
+#### 3.4.8 Call Expressions
+
+```ebnf
+call_expr =
+    expression,
+    "(",
+    [
+        expression,
+        { ",", expression }
+    ],
+    ")"
+;
+```
+
+#### 3.4.9 Index Expressions
+
+```ebnf
+index_expr =
+    expression,
+    "[",
+    expression,
+    "]"
+;
+```
+
+#### 3.4.10 Member Expressions
+
+```ebnf
+member_expr =
+    expression,
+    ".",
+    identifier
+;
+```
+
+#### 3.4.11 Cast Expressions
+
+```ebnf
+cast_expr =
+    "(",
+    type,
+    ")",
+    expression,
+;
+```
+
+#### 3.4.12 Dereferencing Expressions
+
+```ebnf
+deref_expr =
+    "*",
+    expression
+;
+```
+
+#### 3.4.13 Intrinsic Expressions
+
+```ebnf
+intrinsic_expr =
+    "#",
+    path,
+    [
+        "(",
+        [
+            expression,
+            { ",", expression }
+        ],
+        ")"
+    ]
+;
+```
+
+#### 3.4.14 Bubble Expressions
+
+```ebnf
+bubble_expr =
+    expression,
+    "?"
+;
+```
+
+#### 3.4.15 Lambda Expressions
+
+```ebnf
+lambda_expr =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    "{",
+    { statement },
+    "}"
+;
+```
+
+#### 3.4.16 Code Expressions
+
+```ebnf
+code_expr =
+    "#",
+    "{",
+    ? tbd ?,
+    "}"
+;
+```
+
+#### 3.4.17 Splice Expressions
+
+```ebnf
+splice_expr =
+    "#",
+    "(",
+    expression,
+    ")"
+;
+```
+
+### 3.5 Types
 
 ```ebnf
 type =
-    type_base,
-    { type_modifier }
-    ;
+        type_literal
+      | identifier
+      | intrinsic_type
+      | generic_type
+      | mutable_type
+      | pointer_type
+      | array_type
+      | function_type
+      | struct_type
+      | union_type
+      | enum_type
+      | sum_type
+;
+```
 
-type_base =
-      path
-    | generic_type
-    | function_type
-    ;
+#### 3.5.1 Type Literals
 
+```ebnf
+type_literal =
+        "none"
+      | "null"
+      | "bool"
+      | "int8" | "int16" | "int32" | "int64"
+      | "uint8" | "uint16" | "uint32" | "uint64"
+      | "ssize" | "usize"
+      | "float16" | "float32" | "float64"
+      | "any"
+;
+```
+
+#### 3.5.2 Intrinsic Types
+
+```ebnf
+intrinsic_type =
+    "#",
+    path
+;
+```
+
+#### 3.5.3 Generic Types
+
+```ebnf
 generic_type =
-    path,
+    type,
     "<",
-    type_list,
+    type,
+    { ",", type },
     ">"
-    ;
+;
+```
 
-type_list =
+#### 3.5.4 Mutable Types
+
+```ebnf
+mutable_type =
+    "mut",
+    type
+;
+```
+
+#### 3.5.5 Pointer Types
+
+```ebnf
+pointer_type =
     type,
-    { ",", type }
-    ;
-
-function_type =
-    "fn",
-    type,
-    "(",
-    [ parameter_types ],
-    ")"
-    ;
-
-parameter_types =
-    type,
-    { ",", type }
-    ;
-
-type_modifier =
-      pointer_modifier
-    | array_modifier
-    ;
-
-pointer_modifier =
     [ "mut" ],
     "*",
     [ "?" ]
-    ;
-
-array_modifier =
-      "[", "]"
-    | "[", integer_literal, "]"
-    ;
+;
 ```
 
-T[] denotes a slice.
+#### 3.5.6 Array Types
 
-T[n] denotes a fixed-size array.
-
-An optional pointer is written T*?.
-
-General optional values are represented by sum types, not by ?.
-
-For example:
-
-```coda
-(string | none)
+```ebnf
+array_type =
+    type,
+    [ "mut" ],
+    "[",
+    [ expression ],
+    "]"
+;
 ```
 
-is a sum type.
+#### 3.5.7 Function Types
 
-### 3.11 Paths
+```ebnf
+function_type =
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+;
+```
+
+#### 3.5.8 Structure Types
+
+```ebnf
+struct_type =
+    "struct",
+    [ ":", constraint ],
+    "{",
+    { struct_member },
+    "}"
+;
+
+struct_member =
+    { attribute },
+    type,
+    identifier,
+    ";"
+;
+```
+
+#### 3.5.9 Union Types
+
+```ebnf
+union_type =
+    "union",
+    "{",
+    { union_member },
+    "}"
+;
+
+union_member =
+    { attribute },
+    type,
+    identifier,
+    ";"
+;
+```
+
+#### 3.5.10 Enumerated Types
+
+```ebnf
+enum_type =
+    "enum",
+    [ ":", type ],
+    "{",
+    { enum_member },
+    "}"
+;
+
+enum_member =
+    identifier,
+    [ "=", expression ]
+;
+```
+
+#### 3.5.11 Sum Types
+
+```ebnf
+sum_type =
+    type,
+    "|", type,
+    { "|", type}
+;
+```
+
+### 3.6 Constraints
+
+```ebnf
+constraint =
+    (
+        identifier,
+        [
+            "<",
+            ( type | constraint ),
+            {
+                ",",
+                ( type | constraint)
+            },
+            ">"
+        ]
+    ) | (
+        "{",
+        {
+            constraint_member
+          | constraint_method
+          | ( expression, ";" )
+        },
+        "}"
+    )
+;
+
+constraint_member =
+    type,
+    identifier,
+    ";"
+;
+
+constraint_method =
+    [ "$" ],
+    "fn",
+    type,
+    [ generic_decl_item ],
+    "(",
+    [
+        parameter_spec,
+        { ",", parameter_spec }
+    ],
+    ")",
+    ";"
+;
+```
+
+### 3.7 Paths
 
 ```ebnf
 path =
     identifier,
     { "::", identifier }
-    ;
+;
 ```
 
 Paths are used to refer to declarations across module boundaries and to qualify names.
@@ -984,12 +1534,18 @@ uint8
 uint16
 uint32
 uint64
+
+float16
+float32
+float64
 ```
 
 The language also provides:
 
 ```text
+none
 bool
+any
 ```
 
 Additional implementation-defined integer types may be provided by a target or standard library where specified.
