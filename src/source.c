@@ -15,6 +15,8 @@ void source_build_lines(Source *source, Arena *arena) {
 }
 
 size_t source_line(const Source *source, size_t offset) {
+    if (!source) return -1;
+
     size_t lo = 0;
     size_t hi = source->line_offsets.len;
 
@@ -33,6 +35,8 @@ size_t source_line(const Source *source, size_t offset) {
 }
 
 size_t source_column(const Source *source, size_t offset) {
+    if (!source) return -1;
+    
     size_t line = source_line(source, offset);
 
     const size_t *line_start = array_at((Array(size_t) *)&source->line_offsets, line - 1);

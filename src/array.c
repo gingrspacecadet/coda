@@ -52,7 +52,7 @@ void array_push_impl(Array *v, void *item, const char *file, int line) {
 }
 
 void array_append_impl(Array *v, size_t num, void *item, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_append: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }
@@ -63,7 +63,7 @@ void array_append_impl(Array *v, size_t num, void *item, const char *file, int l
 }
 
 void array_free_impl(Array *v, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_free: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }
@@ -74,7 +74,7 @@ void array_free_impl(Array *v, const char *file, int line) {
 }
 
 void *array_at_impl(Array *v, size_t index, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_at: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }
@@ -88,7 +88,7 @@ void *array_at_impl(Array *v, size_t index, const char *file, int line) {
 }
 
 void array_resize_impl(Array *v, size_t elems, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_resize: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }
@@ -109,7 +109,7 @@ void array_resize_impl(Array *v, size_t elems, const char *file, int line) {
 }
 
 void array_clear_impl(Array *v, const char *file, int line) {
-    if (!v->alive) {
+    if (!v || !v->alive) {
         fprintf(stderr, "array_clear: uninitialised array at %s:%d\n", file, line);
         exit(1);
     }

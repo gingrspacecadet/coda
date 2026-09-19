@@ -302,6 +302,10 @@ Token lexer_next(Lexer *ctx) {
         case '^':
             if (match(ctx, '=')) return token_make(ctx, TK_CARET_EQ, start, 2);
             return token_make(ctx, TK_CARET, start, 1);
+
+        case '=':
+            if (match(ctx, '=')) return token_make(ctx, TK_EQ_EQ, start, 2);
+            return token_make(ctx, TK_EQ, start, 1);
     }
 
     DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, 6767, (Span){.source = ctx->source, .offset = ctx->index}, STRING("Unexpected character"));

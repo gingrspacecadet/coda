@@ -271,6 +271,7 @@ AstDecl *parse_decl(Parser *p) {
     if (try_parse_var_decl(p, &var)) {
         decl->kind = AST_DECL_VAR;
         decl->var = var;
+        decl->span = decl->var.span;
         return decl;
     }
 

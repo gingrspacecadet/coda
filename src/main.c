@@ -209,15 +209,13 @@ int main() {
 
     Source s = {
         .contents = STRING(
-            "module lambda;\n"
-            "\n"
-"fn uint32 foo() {\n"
-"    return 0;\n"
-"}\n"
-"\n"
-"fn uint32 foo() {\n"
-"    return 1;\n"
-"}\n"
+            "module main;\n"
+"fn uint32 foo(bool x) {"
+"    if (x)"
+"        return 1;"
+"    else"
+"        return 2;"
+"}"
         ),
         .path = STRING(__FILE__)
     };
@@ -259,7 +257,7 @@ int main() {
 
     print_diags(p.diags);
 
-    // print_ast_module(stdout, m);
+    print_ast_module(stdout, m);
 
     Sema sema = sema_create(arena, &d);
     Array(String) includes = array_create(arena, sizeof(String));
@@ -268,7 +266,7 @@ int main() {
 
     print_diags(sema.diags);
 
-    // print_hir_module(stdout, hm);
+    print_hir_module(stdout, hm);
 
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC, &end);

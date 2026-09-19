@@ -116,7 +116,7 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type);
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
 void sema_fn_decl(Sema *sema, AstFnDecl *ast);
 void sema_type_decl(Sema *sema, AstTypeDecl *ast);
-void sema_var_decl(Sema *sema, AstVarDecl *ast);
+bool sema_var_decl(Sema *sema, AstVarDecl *ast);
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
 void sema_include_decl(Sema *sema, AstIncludeDecl *ast);
 void sema_decl(Sema *sema, AstDecl *ast);

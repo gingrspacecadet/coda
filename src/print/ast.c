@@ -29,8 +29,8 @@ static void print_path(FILE *out, const Path *path) {
         if (i != 0)
             fputs("::", out);
 
-        String *part = array_at((Array *)&path->parts, i);
-        fprintf(out, "%.*s", (int)part->length, part->data);
+        AstName *part = array_at((Array *)&path->parts, i);
+        fprintf(out, "%.*s", string_fmt(part->ident));
     }
 }
 
