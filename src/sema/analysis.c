@@ -1167,9 +1167,10 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
         return false;
     }
 
-    s = sema_lookup(sema, ast->name);
-    if (s != NULL) {
-        error_shadowing(sema->diags, ast->name.ident, ast->span, s->span);
+    Symbol *existing = sema_lookup(sema, ast->name);
+
+    if (existing != NULL) {
+        error_shadowing(sema->diags, ast->name.ident, ast->span, existing->span);
         return false;
     }
 
@@ -1190,10 +1191,10 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
     *symbol = (Symbol) {
         .kind = SYMBOL_LOCAL,
-        .name = ast->name,
         .decl = NULL,
         .type = type,
         .span = ast->span,
+        .namespace_scope = NULL,
     };
 
     scope_insert(scope, symbol);
@@ -1767,6 +1768,9 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     HirType *type = sema_type(sema, ast->type);
 
     if (type == NULL || type->kind == HIR_TYPE_ERROR)
+        return false;
+
+    if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
         return false;
 
     HirExpr *init = NULL;
