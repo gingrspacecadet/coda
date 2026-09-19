@@ -61,7 +61,7 @@ void *arena_calloc(Arena *a, size_t size) {
 
 
 void arena_clear(Arena *a) {
-    // Not implemented, since we don't reuse
+    a->current_index = 0;
 }
 
 char *arena_strdup(Arena *a, char *s) {

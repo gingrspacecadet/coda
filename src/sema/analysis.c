@@ -1195,6 +1195,7 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
         .type = type,
         .span = ast->span,
         .namespace_scope = NULL,
+        .name = ast->name,
     };
 
     scope_insert(scope, symbol);
@@ -1471,6 +1472,38 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             hir->_return.value = value;
             return hir;
 
+        case AST_STMT_IF: {
+            hir->kind = HIR_STMT_IF;
+            hir->_if.cond = sema_expr(sema, ast->_if.cond, NULL);
+
+            if (hir->_if.cond == NULL || hir->_if.cond->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            hir->_if.then = sema_stmt(sema, ast->_if.then);
+
+            if (hir->_if.then == NULL || hir->_if.then->kind == HIR_STMT_ERROR) {
+                hir->kind = HIR_STMT_ERROR;
+                return hir;
+            }
+
+            hir->_if._else = NULL;
+
+            if (ast->_if._else != NULL) {
+                hir->_if._else = sema_stmt(sema, ast->_if._else);
+
+                if (hir->_if._else == NULL || hir->_if._else->kind == HIR_STMT_ERROR) {
+                    hir->kind = HIR_STMT_ERROR;
+                    return hir;
+                }
+            }
+
+            //! TODO: require bool condition
+
+            return hir;
+        }
+
         case AST_STMT_WHILE: {
             hir->kind = HIR_STMT_WHILE;
             hir->_while.cond = sema_expr(sema, ast->_while.cond, NULL);
@@ -1658,12 +1691,13 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
-    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
         return;
     }
+
+    symbol->span = ast->span;
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error
@@ -1728,16 +1762,16 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     }
 
     HirType *return_type = fn->return_type;
-    bool returns_none = return_type != NULL && return_type->kind == HIR_TYPE_BUILTIN && return_type->builtin == BUILTIN_NONE;
+    bool returns_none =
+        return_type != NULL &&
+        return_type->kind == HIR_TYPE_BUILTIN &&
+        return_type->builtin == BUILTIN_NONE;
 
     if (!returns_none && !hir_stmt_terminates(fn->body))
         error_missing_return_value(sema->diags, return_type, ast->body->span);
 
     sema->current_fn = previous_fn;
     sema_pop_scope(sema);
-
-    if (fn->body == NULL)
-        return;
 
     array_push(&sema->hir_module->functions, fn);
 }

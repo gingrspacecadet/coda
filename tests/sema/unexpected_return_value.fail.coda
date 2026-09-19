@@ -1,0 +1,5 @@
+module test;
+
+fn none foo() {
+    return 42;
+}

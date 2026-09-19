@@ -203,68 +203,110 @@ void print_diags(Diags *diags) {
     }
 }
 
-int main() {
+static bool load_source(const char *path, Source *source) {
+    FILE *file = fopen(path, "rb");
+
+    if (file == NULL) {
+        perror(path);
+        return false;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return false;
+    }
+
+    long size = ftell(file);
+
+    if (size < 0) {
+        fclose(file);
+        return false;
+    }
+
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return false;
+    }
+
+    char *contents = malloc((size_t)size + 1);
+
+    if (contents == NULL) {
+        fclose(file);
+        return false;
+    }
+
+    if (fread(contents, 1, (size_t)size, file) != (size_t)size) {
+        free(contents);
+        fclose(file);
+        return false;
+    }
+
+    fclose(file);
+
+    contents[size] = '\0';
+
+    *source = (Source) {
+        .path = (String) {
+            .data = (char *)path,
+            .length = strlen(path),
+        },
+        .contents = (String) {
+            .data = contents,
+            .length = (size_t)size,
+        },
+    };
+
+    return true;
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "usage: %s <input.coda>\n", argv[0]);
+        return 1;
+    }
+
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-    Source s = {
-        .contents = STRING(
-            "module main;\n"
-"fn uint32 foo(bool x) {"
-"    if (x)"
-"        return 1;"
-"    else"
-"        return 2;"
-"}"
-        ),
-        .path = STRING(__FILE__)
-    };
+    Source source;
+
+    if (!load_source(argv[1], &source))
+        return 1;
 
     Arena *arena = arena_create();
+    source_build_lines(&source, arena);
 
-    source_build_lines(&s, arena);
+    Diags diags = {.arena = arena, .diags = array_create(arena, sizeof(Diag))};
 
-    Diags d = {
-        .arena = arena,
+    Lexer lexer = {
+        .source = &source,
+        .diags = &diags,
     };
 
-    array_init(&d.diags, arena, sizeof(Diag));
-
-    Lexer l = {
-        .source = &s,
-        .diags = &d,
-    };
-
-    print_diags(l.diags);
-
-    // Token t;
-    // do {
-    //     t = lexer_next(&l);
-    //     printf("%s", TokenTypeNames[t.type]);
-
-    //     if (t.type == TK_STRING || t.type == TK_IDENT) {
-    //         printf("    %.*s", (int)t.span.length, &t.span.source->contents.data[t.span.offset]);
-    //     }
-    
-    //     putchar('\n');
-    // } while (t.type != TK_EOF);
-
-    l.index = 0;
+    lexer.index = 0;
 
     Parser p;
-    parser_init(&p, &l, arena);
+    parser_init(&p, &lexer, arena);
+
     AstModule *m = parser_parse_module(&p);
 
-    print_diags(p.diags);
+    if (diags.diags.len != 0) {
+        print_diags(&diags);
+        return 1;
+    }
 
     print_ast_module(stdout, m);
 
-    Sema sema = sema_create(arena, &d);
+    Sema sema = sema_create(arena, &diags);
     Array(String) includes = array_create(arena, sizeof(String));
     array_push(&includes, &STRING("."));
+
     HirModule *hm = sema_analyse(&sema, m, includes);
 
-    print_diags(sema.diags);
+    if (diags.diags.len != 0) {
+        print_diags(&diags);
+        return 1;
+    }
 
     print_hir_module(stdout, hm);
 
@@ -272,4 +314,6 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     printf("Compilation took %ld seconds (%lf milliseconds)\n", end.tv_sec - start.tv_sec, (end.tv_nsec - start.tv_nsec) / 1000000.f);
+
+    return 0;
 }

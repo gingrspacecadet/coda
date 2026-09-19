@@ -1,0 +1,5 @@
+module test;
+
+fn uint32 foo() {
+    return 42;
+}

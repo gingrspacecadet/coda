@@ -1,0 +1,6 @@
+module test;
+
+fn uint32 foo(bool condition) {
+    if (condition)
+        return 42;
+}

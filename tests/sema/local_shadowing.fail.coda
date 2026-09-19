@@ -1,0 +1,8 @@
+module test;
+
+uint32 x = 42;
+
+fn uint32 foo(uint32 x) {
+    uint32 x = x;
+    return x;
+}

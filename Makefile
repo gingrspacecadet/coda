@@ -65,7 +65,7 @@ STDLIB_OBJS      = $(patsubst build/lib/%.s,build/lib/%.o,$(STDLIB_GEN_ASM) $(ST
 STDLIB_TARGET_DIR = build/$(HOST_ARCH)/$(HOST_OS)/lib
 STDLIB_SO         = $(STDLIB_TARGET_DIR)/libcoda.$(SOEXT)
 
-.PHONY: all clean backends stdlib
+.PHONY: all clean backends stdlib test
 .SECONDARY: $(STDLIB_GEN_ASM)
 
 all: $(TARGET) backends stdlib
@@ -130,5 +130,14 @@ locs:
 .PHONY: tree
 tree:
 	git ls-files | tree --fromfile
+
+TEST := build/tests
+
+$(TEST)/run: tests/run.c
+	mkdir -p $(TEST)
+	$(CC) $(CFLAGS) -o $@ $<
+
+test: $(TEST)/run
+	$(TEST)/run $(TARGET)
 
 -include $(patsubst %.o,%.d,$(OBJS) $(BACKEND_OBJS))
