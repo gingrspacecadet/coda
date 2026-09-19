@@ -1167,35 +1167,46 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast) {
         return false;
     }
 
-    s = sema_lookup(sema, ast->name);
-    if (s != NULL) {
-        error_shadowing(sema->diags, ast->name.ident, ast->span, s->span);
+    Symbol *existing = sema_lookup(sema, ast->name);
+
+    if (existing != NULL) {
+        error_shadowing(sema->diags, ast->name.ident, ast->span, existing->span);
         return false;
     }
+
+    HirType *type = sema_type(sema, ast->type);
+
+    if (type == NULL || type->kind == HIR_TYPE_ERROR)
+        return false;
 
     Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
 
     *symbol = (Symbol) {
         .kind = SYMBOL_LOCAL,
-        .name = ast->name,
         .decl = NULL,
-        .type = sema_type(sema, ast->type),
+        .name = ast->name,
+        .type = type,
         .span = ast->span,
+        .namespace_scope = NULL,
     };
 
-    if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
-        return false;
-
-    scope_insert(scope, symbol);
+    HirExpr *init = NULL;
 
     if (ast->init != NULL) {
-        HirExpr *init = sema_expr(sema, ast->init, symbol->type);
+        init = sema_expr(sema, ast->init, type);
 
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
             return false;
     }
 
-    //! TODO: create HirLocal
+    scope_insert(scope, symbol);
+
+    HirLocal local = {
+        .symbol = symbol,
+        .type = type,
+    };
+
+    array_push(&sema->current_fn->locals, &local);
 
     return true;
 }
@@ -1662,6 +1673,8 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     *fn = (HirFunction) {
         .symbol = symbol,
         .return_type = symbol->type->function.ret,
+        .params = array_create(sema->arena, sizeof(HirParam)),
+        .locals = array_create(sema->arena, sizeof(HirLocal))
     };
 
     sema_push_scope(sema);
@@ -1708,28 +1721,39 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
     symbol->type = sema_type(sema, ast->type);
 }
 
-void sema_var_decl(Sema *sema, AstVarDecl *ast) {
+bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
-    symbol->span = ast->span;
 
-    if (symbol == NULL) {
-        //! TODO: internal compiler error
-        return;
-    }
+    if (symbol == NULL)
+        return false;
 
-    if (symbol->kind != SYMBOL_GLOBAL) {
-        //! TODO: internal compiler error
-        return;
-    }
+    if (symbol->kind != SYMBOL_GLOBAL)
+        return false;
 
     symbol->type = sema_type(sema, ast->type);
 
+    if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
+        return false;
+
     HirExpr *init = NULL;
 
-    if (ast->init != NULL)
+    if (ast->init != NULL) {
         init = sema_expr(sema, ast->init, symbol->type);
 
-    //! TODO: create HirGlobal
+        if (init == NULL || init->kind == HIR_EXPR_ERROR)
+            return false;
+    }
+
+    HirGlobal global = {
+        .symbol = symbol,
+        .type = symbol->type,
+        .init = init,
+        .is_export = false,
+    };
+
+    array_push(&sema->hir_module->globals, &global);
+
+    return true;
 }
 
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast) {}
