@@ -1,6 +1,7 @@
 #ifndef HIR_H
 #define HIR_H
 
+#include <stdint.h>
 #include "ast.h"
 
 typedef struct Symbol Symbol;
@@ -108,6 +109,26 @@ struct HirEnumItem {
 };
 
 typedef enum {
+    HIR_LITERAL_ERROR,
+    HIR_LITERAL_INTEGER,
+    HIR_LITERAL_FLOAT,
+    HIR_LITERAL_STRING,
+    HIR_LITERAL_BOOL,
+    HIR_LITERAL_NULL,
+} HirLiteralKind;
+
+typedef struct {
+    HirLiteralKind kind;
+
+    union {
+        uint64_t integer;
+        double floating;
+        String string;
+        bool boolean;
+    };
+} HirLiteral;
+
+typedef enum {
     HIR_EXPR_ERROR,
     HIR_EXPR_LITERAL,
     HIR_EXPR_VALUE,
@@ -127,7 +148,7 @@ struct HirExpr {
     HirType *type;
 
     union {
-        AstLiteral literal;
+        HirLiteral literal;
 
         struct {
             Symbol *symbol;

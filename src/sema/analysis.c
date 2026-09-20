@@ -1,3 +1,6 @@
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 #include "common.h"
 
 static size_t sema_loop_scope(Sema *sema, size_t level) {
@@ -492,8 +495,8 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
     return NULL;
 }
 
-static bool sema_literal_fits(Sema *sema, AstLiteral *literal, HirType *type) {
-    if (literal->kind == AST_LIT_NULL)
+static bool sema_literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
+    if (literal->kind == HIR_LITERAL_NULL)
         return type->kind == HIR_TYPE_POINTER &&
                type->pointer.optional;
 
@@ -501,26 +504,25 @@ static bool sema_literal_fits(Sema *sema, AstLiteral *literal, HirType *type) {
         return false;
 
     switch (literal->kind) {
-        case AST_LIT_INTEGER:
-        case AST_LIT_CHAR:
+        case HIR_LITERAL_INTEGER:
             //! TODO: integer range check
             return true;
 
-        case AST_LIT_FLOAT:
+        case HIR_LITERAL_FLOAT:
             //! TODO: float range / precision check
             return true;
 
-        case AST_LIT_BOOL:
+        case HIR_LITERAL_BOOL:
             return type->builtin == BUILTIN_BOOL;
 
-        case AST_LIT_STRING:
+        case HIR_LITERAL_STRING:
             //! TODO: string literal conversion
             return false;
 
-        case AST_LIT_NULL:
+        case HIR_LITERAL_NULL:
             return false;
 
-        case AST_LIT_ERROR:
+        case HIR_LITERAL_ERROR:
             return false;
     }
 
@@ -698,6 +700,241 @@ static void sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
     scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), symbol);
 }
 
+static String sema_literal_compact(Sema *sema, String raw) {
+    char *data = arena_alloc(sema->arena, raw.length + 1);
+    size_t len = 0;
+
+    for (size_t i = 0; i < raw.length; i++) {
+        if (raw.data[i] != '_')
+            data[len++] = raw.data[i];
+    }
+
+    data[len] = '\0';
+
+    return (String){
+        .data = data,
+        .length = len,
+    };
+}
+
+static uint64_t sema_parse_integer(String raw) {
+    size_t i = 0;
+    int base = 10;
+
+    if (raw.length >= 2 && raw.data[0] == '0') {
+        if (raw.data[1] == 'x' || raw.data[1] == 'X') {
+            base = 16;
+            i = 2;
+        } else if (raw.data[1] == 'b' || raw.data[1] == 'B') {
+            base = 2;
+            i = 2;
+        } else if (raw.length > 1 && raw.data[1] >= '0' && raw.data[1] <= '7') {
+            base = 8;
+            i = 1;
+        }
+    }
+
+    uint64_t value = 0;
+
+    for (; i < raw.length; i++) {
+        char c = raw.data[i];
+        uint64_t digit;
+
+        if (c >= '0' && c <= '9')
+            digit = (uint64_t)(c - '0');
+        else if (c >= 'a' && c <= 'f')
+            digit = (uint64_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            digit = (uint64_t)(c - 'A' + 10);
+        else
+            break;
+
+        assert(digit < (uint64_t)base);
+        value = value * (uint64_t)base + digit;
+    }
+
+    return value;
+}
+
+static uint32_t sema_hex_digit(char c) {
+    if (c >= '0' && c <= '9')
+        return (uint32_t)(c - '0');
+
+    if (c >= 'a' && c <= 'f')
+        return (uint32_t)(c - 'a' + 10);
+
+    if (c >= 'A' && c <= 'F')
+        return (uint32_t)(c - 'A' + 10);
+
+    assert(!"invalid hexadecimal digit");
+    return 0;
+}
+
+static uint32_t sema_decode_escape(String raw, size_t *index) {
+    assert(*index < raw.length);
+
+    char c = raw.data[(*index)++];
+
+    switch (c) {
+        case '\\': return '\\';
+        case '"': return '"';
+        case '\'': return '\'';
+        case 'n': return '\n';
+        case 'r': return '\r';
+        case 't': return '\t';
+        case '0': return '\0';
+
+        case 'x':
+            assert(*index + 2 <= raw.length);
+
+            uint32_t value = (sema_hex_digit(raw.data[*index]) << 4) | sema_hex_digit(raw.data[*index + 1]);
+            *index += 2;
+            return value;
+    }
+
+    assert(!"invalid escape sequence");
+    return 0;
+}
+
+static uint32_t sema_decode_utf8(String raw, size_t *index) {
+    assert(*index < raw.length);
+
+    uint8_t c0 = (uint8_t)raw.data[(*index)++];
+
+    if (c0 < 0x80)
+        return c0;
+
+    if ((c0 & 0xe0) == 0xc0) {
+        assert(*index < raw.length);
+        uint8_t c1 = (uint8_t)raw.data[(*index)++];
+        return ((uint32_t)(c0 & 0x1f) << 6) | (uint32_t)(c1 & 0x3f);
+    }
+
+    if ((c0 & 0xf0) == 0xe0) {
+        assert(*index + 1 < raw.length);
+        uint8_t c1 = (uint8_t)raw.data[(*index)++];
+        uint8_t c2 = (uint8_t)raw.data[(*index)++];
+        return ((uint32_t)(c0 & 0x0f) << 12) | ((uint32_t)(c1 & 0x3f) << 6) | (uint32_t)(c2 & 0x3f);
+    }
+
+    assert((c0 & 0xf8) == 0xf0);
+    assert(*index + 2 < raw.length);
+
+    uint8_t c1 = (uint8_t)raw.data[(*index)++];
+    uint8_t c2 = (uint8_t)raw.data[(*index)++];
+    uint8_t c3 = (uint8_t)raw.data[(*index)++];
+
+    return ((uint32_t)(c0 & 0x07) << 18) | ((uint32_t)(c1 & 0x3f) << 12) | ((uint32_t)(c2 & 0x3f) << 6) | (uint32_t)(c3 & 0x3f);
+}
+
+static uint64_t sema_decode_char(String raw) {
+    size_t start = raw.length > 0 && raw.data[0] == '\'' ? 1 : 0;
+    size_t end = raw.length > 1 && raw.data[raw.length - 1] == '\'' ? raw.length - 1 : raw.length;
+    size_t index = start;
+
+    assert(index < end);
+
+    uint32_t value;
+
+    if (raw.data[index] == '\\') {
+        index++;
+        value = sema_decode_escape((String){
+            .data = raw.data,
+            .length = end
+        }, &index);
+    } else {
+        String content = {
+            .data = raw.data,
+            .length = end
+        };
+        value = sema_decode_utf8(content, &index);
+    }
+
+    assert(index == end);
+    return value;
+}
+
+static String sema_decode_string(Sema *sema, String raw) {
+    size_t start = raw.length > 0 && raw.data[0] == '"' ? 1 : 0;
+    size_t end = raw.length > 1 && raw.data[raw.length - 1] == '"' ? raw.length - 1 : raw.length;
+
+    char *data = arena_alloc(sema->arena, end - start + 1);
+    size_t out = 0;
+    size_t index = start;
+
+    while (index < end) {
+        if (raw.data[index] == '\\') {
+            index++;
+            String content = {
+                .data = raw.data,
+                .length = end
+            };
+
+            uint32_t value = sema_decode_escape(content, &index);
+            assert(value <= 0xff);
+            data[out++] = (char)value;
+            continue;
+        }
+
+        data[out++] = raw.data[index++];
+    }
+
+    data[out] = '\0';
+
+    return (String){
+        .data = data,
+        .length = out,
+    };
+}
+
+static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
+    switch (literal.kind) {
+        case AST_LIT_INTEGER: {
+            String raw = sema_literal_compact(sema, literal.raw);
+
+            return (HirLiteral){
+                .kind = HIR_LITERAL_INTEGER,
+                .integer = sema_parse_integer(raw),
+            };
+        }
+
+        case AST_LIT_FLOAT: {
+            String raw = sema_literal_compact(sema, literal.raw);
+
+            return (HirLiteral){
+                .kind = HIR_LITERAL_FLOAT,
+                .floating = strtod(raw.data, NULL),
+            };
+        }
+
+        case AST_LIT_BOOL:
+            return (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = literal.raw.length == 4 && memcmp(literal.raw.data, "true", 4) == 0,
+            };
+
+        case AST_LIT_CHAR:
+            return (HirLiteral){
+                .kind = HIR_LITERAL_INTEGER,
+                .integer = sema_decode_char(literal.raw),
+            };
+
+        case AST_LIT_STRING:
+            return (HirLiteral){
+                .kind = HIR_LITERAL_STRING,
+                .string = sema_decode_string(sema, literal.raw),
+            };
+
+        case AST_LIT_NULL:
+            return (HirLiteral){
+                .kind = HIR_LITERAL_NULL,
+            };
+    }
+
+    assert(!"unhandled AST literal");
+    return (HirLiteral){0};
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
 
@@ -707,11 +944,9 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     switch (ast->kind) {
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
-            hir->literal = ast->literal;
-
+            hir->literal = sema_literal(sema, ast->literal);
             if (expected != NULL)
                 hir = sema_expr_coerce(sema, hir, expected);
-
             break;
 
         case AST_EXPR_IDENT: {
@@ -1251,9 +1486,9 @@ static HirExpr *sema_hir_bool(Sema *sema, bool value) {
     expr->span = (Span) { 0 };
     expr->kind = HIR_EXPR_LITERAL;
     expr->type = NULL;
-    expr->literal = (AstLiteral) {
-        .kind = AST_LIT_BOOL,
-        .raw = value ? STRING("true") : STRING("false"),
+    expr->literal = (HirLiteral) {
+        .kind = HIR_LITERAL_BOOL,
+        .boolean = value,
     };
 
     return expr;
@@ -1380,7 +1615,7 @@ static bool sema_expr_uint(HirExpr *expr, size_t *value) {
     if (expr == NULL || expr->kind != HIR_EXPR_LITERAL)
         return false;
 
-    if (expr->literal.kind != AST_LIT_INTEGER)
+    if (expr->literal.kind != HIR_LITERAL_INTEGER)
         return false;
 
     //! TODO: parse integer literal

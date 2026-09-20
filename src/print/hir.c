@@ -198,29 +198,24 @@ static void print_type(FILE *out, const HirType *type, unsigned depth) {
     }
 }
 
-static void print_literal(FILE *out, const AstLiteral *literal) {
+static void print_literal(FILE *out, const HirLiteral *literal) {
     switch (literal->kind) {
-    case AST_LIT_INTEGER:
+    case HIR_LITERAL_INTEGER:
         fputs("integer ", out);
         break;
-    case AST_LIT_FLOAT:
+    case HIR_LITERAL_FLOAT:
         fputs("float ", out);
         break;
-    case AST_LIT_STRING:
+    case HIR_LITERAL_STRING:
         fputs("string ", out);
         break;
-    case AST_LIT_CHAR:
-        fputs("char ", out);
-        break;
-    case AST_LIT_BOOL:
+    case HIR_LITERAL_BOOL:
         fputs("bool ", out);
         break;
-    case AST_LIT_ERROR:
+    case HIR_LITERAL_ERROR:
         fputs("error ", out);
         break;
     }
-
-    fprintf(out, "%.*s", string_fmt(literal->raw));
 }
 
 
