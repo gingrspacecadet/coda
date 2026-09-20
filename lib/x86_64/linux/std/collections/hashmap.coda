@@ -27,7 +27,7 @@ fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
         bucket = bucket.next;
     }
 
-    Bucket<K, V> *new_bucket = allocator.alloc<Bucket<K, V>>();
+    Bucket<K, V> *new_bucket = map.allocator.alloc<Bucket<K, V>>();
     new_bucket.key = key;
     new_bucket.value = value;
     new_bucket.next = map.at(hash);
@@ -89,7 +89,7 @@ fn bool HashMap<K, V>.try_remove(mut HashMap<K, V> *map, K key) {
             } else {
                 prev.next = bucket.next;
             }
-            allocator.free(bucket);
+            map.allocator.free(bucket);
             return true;
         }
         prev = bucket;

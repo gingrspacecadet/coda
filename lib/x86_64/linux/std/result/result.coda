@@ -96,7 +96,7 @@ fn T (T | E).recover((T | E) *this, fn T (E) f) {
     }
 }
 
-@export
+@export @inline
 fn U (T | E).map_or((T | E) *this, U fallback, fn U (T) f) {
     match (*this) {
         T value return f(value);
@@ -104,7 +104,7 @@ fn U (T | E).map_or((T | E) *this, U fallback, fn U (T) f) {
     }
 }
 
-@export
+@export @inline
 fn U (T | E).map_or_else((T | E) *this, fn U (E) fallback, fn U (T) f) {
     match (*this) {
         T value return f(value);

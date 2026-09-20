@@ -1,4 +1,4 @@
-module std::collections;
+module std::constraints;
 
 constraint Sequence<T> {
     fn usize len(Sequence<T> *this);
