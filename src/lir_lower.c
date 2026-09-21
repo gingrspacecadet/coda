@@ -22,11 +22,11 @@ static LirBinding *lir_find_binding(LirLower *lower, Symbol *symbol) {
     for (size_t i = lower->bindings.len; i > 0; i--) {
         LirBinding *binding = &((LirBinding *)lower->bindings.data)[i - 1];
 
-        if (binding->symbol == symbol) {
+        if (binding->symbol == symbol || string_eq(binding->symbol->name.ident, symbol->name.ident)) {
             return binding;
         }
     }
-
+    
     return NULL;
 }
 
@@ -323,6 +323,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
 
     LirLower lower = {
         .function = function,
+        .bindings = array_create(module->arena, sizeof(LirBinding)),
     };
 
     lower.block = lir_block_create(function);
@@ -330,7 +331,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
     for (size_t i = 0; i < hir->params.len; i++) {
         HirParam *param = &((HirParam *)hir->params.data)[i];
 
-        LirValueId value = lir_block_add_param(function, lower.block, param->type);
+        LirValueId value = lir_function_add_param(function, param->symbol, param->type);
 
         lir_bind(&lower, param->symbol, lir_operand_value(value, param->type));
     }

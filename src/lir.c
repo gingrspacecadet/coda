@@ -27,6 +27,7 @@ static void lir_assert_unterminated(LirFunction *function, LirBlockId block) {
 LirModule *lir_module_create(Arena *arena) {
     LirModule *module = arena_calloc(arena, sizeof(*module));
     module->arena = arena;
+    module->functions = array_create(arena, sizeof(LirFunction *));
     return module;
 }
 
@@ -40,6 +41,8 @@ LirFunction *lir_function_create(LirModule *module, Symbol *symbol, HirType *ret
     function->is_export = is_export;
     function->entry = LIR_INVALID_BLOCK;
     function->next_value = 0;
+    function->blocks = array_create(module->arena, sizeof(LirBlock *));
+    function->params = array_create(module->arena, sizeof(LirFunctionParam));
 
     array_push(&module->functions, &function);
 
@@ -49,6 +52,8 @@ LirFunction *lir_function_create(LirModule *module, Symbol *symbol, HirType *ret
 LirBlockId lir_block_create(LirFunction *function) {
     LirBlock *block = arena_calloc(function->arena, sizeof(*block));
     block->id = (LirBlockId)function->blocks.len;
+    block->params = array_create(function->arena, sizeof(LirBlockParam));
+    block->instructions = array_create(function->arena, sizeof(LirInstruction));
 
     array_push(&function->blocks, &block);
 
@@ -104,6 +109,8 @@ LirValueId lir_emit(LirFunction *function, LirBlockId block_id, LirOpcode opcode
         .result_type = result_type,
     };
 
+    instruction.operands = array_create(function->arena, sizeof(LirOperand));
+
     if (result_type) {
         instruction.result = lir_new_value(function);
     }
@@ -134,17 +141,9 @@ void lir_branch(LirFunction *function, LirBlockId block_id, LirOperand condition
     block->terminator.branch.then_block = then_block;
     block->terminator.branch.else_block = else_block;
 
-    lir_copy_operands(
-        &block->terminator.branch.then_args,
-        then_args,
-        then_arg_count
-    );
+    lir_copy_operands(&block->terminator.branch.then_args, then_args, then_arg_count);
 
-    lir_copy_operands(
-        &block->terminator.branch.else_args,
-        else_args,
-        else_arg_count
-    );
+    lir_copy_operands(&block->terminator.branch.else_args, else_args, else_arg_count);
 }
 
 void lir_return(LirFunction *function, LirBlockId block_id, const LirOperand *value) {
@@ -393,7 +392,7 @@ static void lir_print_function(FILE *out, const LirFunction *function) {
                     fprintf(out, ", ");
                 }
 
-                fprintf(out, "%%%u", ((LirFunctionParam *)block->params.data)[j].value);
+                fprintf(out, "%%%u", ((LirBlockParam *)block->params.data)[j].value);
             }
 
             fprintf(out, ")");

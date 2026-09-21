@@ -686,7 +686,7 @@ static HirField *sema_init_field_lookup(HirType *type, AstName name) {
     }
 }
 
-static void sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
+static Symbol *sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
     Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
 
     *symbol = (Symbol) {
@@ -694,10 +694,11 @@ static void sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
         .name = param->name,
         .decl = NULL,
         .type = type,
-        .span = param->span,
     };
 
     scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), symbol);
+
+    return symbol;
 }
 
 static String sema_literal_compact(Sema *sema, String raw) {
@@ -1969,6 +1970,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     *fn = (HirFunction) {
         .symbol = symbol,
         .return_type = symbol->type->function.ret,
+        .params = array_create(sema->arena, sizeof(HirParam)),
         .locals = array_create(sema->arena, sizeof(HirLocal)),
     };
 
@@ -1979,8 +1981,14 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     for (size_t i = 0; i < ast->params.len; i++) {
         AstParam *param = (AstParam *)array_at(&ast->params, i);
         HirType *param_type = *(HirType **)array_at(&type->function.params, i);
+        Symbol *parameter = sema_insert_parameter(sema, param, param_type);
 
-        sema_insert_parameter(sema, param, param_type);
+        HirParam hir_param = {
+            .symbol = parameter,
+            .type = param_type,
+        };
+
+        array_push(&fn->params, &hir_param);
     }
 
     HirFunction *previous_fn = sema->current_fn;

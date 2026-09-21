@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "sema.h"
 #include "print.h"
+#include "lir_lower.h"
 
 #define BOLD_WHITE "\x1b[1;37m"
 #define RED "\x1b[1;31m"
@@ -309,6 +310,9 @@ int main(int argc, char **argv) {
     }
 
     print_hir_module(stdout, hm);
+
+    LirModule *lir = lir_lower_module(arena, hm);
+    lir_print(stdout, lir);
 
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC, &end);
