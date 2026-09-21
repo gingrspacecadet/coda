@@ -91,6 +91,7 @@ AstName parse_name(Parser *p) {
     }
 
     error_expected_identifier(p->diags, p->current.span);
+    name.kind = AST_NAME_ERROR;
     return name;
 }
 

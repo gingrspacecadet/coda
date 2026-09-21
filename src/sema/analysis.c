@@ -1640,7 +1640,26 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             return init;
         }
 
-        case AST_STMT_EXPR:
+        case AST_STMT_EXPR: {
+            if (ast->expr->kind == AST_EXPR_BINARY &&
+                ast->expr->binary.op == AST_BINARY_ASSIGN) {
+                HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
+                HirExpr *target = sema_expr(sema, ast->expr->binary.left, NULL);
+                HirExpr *value = sema_expr(sema, ast->expr->binary.right, target->type);
+
+                if (target == NULL || target->kind == HIR_EXPR_ERROR ||
+                    value == NULL || value->kind == HIR_EXPR_ERROR) {
+                    stmt->kind = HIR_STMT_ERROR;
+                    return stmt;
+                }
+
+                stmt->span = ast->span;
+                stmt->kind = HIR_STMT_ASSIGN;
+                stmt->assign.target = target;
+                stmt->assign.value = value;
+                return stmt;
+            }
+
             hir->kind = HIR_STMT_EXPR;
             hir->expr = sema_expr(sema, ast->expr, NULL);
 
@@ -1650,6 +1669,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             }
 
             break;
+        }
 
         case AST_STMT_BLOCK:
             if (!sema_block(sema, ast, hir)) {
