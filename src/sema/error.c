@@ -436,3 +436,15 @@ void error_module_not_found(Diags *diags, Path path, Span span) {
 
     diag_finish(&b);
 }
+
+void error_not_mutable(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_NOT_MUTABLE,
+        span,
+        STRING("(TMP) This is not mutable.")
+    );
+
+    diag_finish(&b);
+}

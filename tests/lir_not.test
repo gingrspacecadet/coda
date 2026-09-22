@@ -1,0 +1,17 @@
+name: lir boolean not
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_not;
+
+fn bool negate(bool value) {
+    return !value;
+}
+
+[lir]
+negate:
+    block0(%0):
+        %1 = not %0
+        return %1

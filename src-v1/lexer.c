@@ -3,7 +3,7 @@
 #include "lexer.h"
 #include "error.h"
 #include "optional.h"
-#include "string.h"
+#include "String.h"
 
 INSTANTIATE(char, char, OPTIONAL_TEMPLATE)
 

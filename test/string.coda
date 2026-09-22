@@ -1,7 +1,0 @@
-module strings;
-
-@export
-fn int main() {
-    string s = "Hello, world!";
-    return s.len;
-}

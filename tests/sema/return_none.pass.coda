@@ -1,5 +1,0 @@
-module test;
-
-fn none foo() {
-    return;
-}

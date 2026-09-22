@@ -1,0 +1,17 @@
+name: lir comparison
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_comparison;
+
+fn bool equal(uint64 a, uint64 b) {
+    return a == b;
+}
+
+[lir]
+equal:
+    block0(%0, %1):
+        %2 = eq %0, %1
+        return %2

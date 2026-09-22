@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include "array.h"
-#include "string.h"
+#include "String.h"
 #include "optional.h"
 #include "arena.h"
 

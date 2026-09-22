@@ -2,7 +2,7 @@
 #define SOURCE_H
 
 #include <stddef.h>
-#include "string.h"
+#include "String.h"
 #include "array.h"
 
 typedef struct {

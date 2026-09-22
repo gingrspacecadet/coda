@@ -1,6 +1,0 @@
-module test;
-
-@export
-fn int tester() {
-    return 1;
-}

@@ -1,0 +1,16 @@
+name: basic arithmetic
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module test;
+fn uint32 add(uint32 a, uint32 b) {
+    return a + b;
+}
+
+[lir]
+add:
+    block0(%0, %1):
+        %2 = add %0, %1
+        return %2

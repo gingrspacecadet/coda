@@ -6,22 +6,11 @@ static void indent(FILE *out, unsigned depth) {
 }
 
 static void print_span(FILE *out, Span span) {
-    fprintf(
-        out,
-        "[%zu:%zu+%zu]",
-        source_line(span.source, span.offset),
-        source_column(span.source, span.offset),
-        span.length
-    );
+    fprintf(out, "[%zu:%zu+%zu]", source_line(span.source, span.offset), source_column(span.source, span.offset), span.length);
 }
 
 static void print_string(FILE *out, String s) {
-    fprintf(
-        out,
-        "\"%.*s\"",
-        (int)s.length,
-        s.data
-    );
+    fprintf(out, "\"%.*s\"", (int)s.length, s.data);
 }
 
 static void print_path(FILE *out, const Path *path) {

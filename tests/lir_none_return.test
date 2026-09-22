@@ -1,0 +1,16 @@
+name: lir none return
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_none_return;
+
+fn none noop() {
+    return;
+}
+
+[lir]
+noop:
+    block0:
+        return

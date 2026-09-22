@@ -142,5 +142,6 @@ void error_invalid_break(Diags *diags, size_t level, Span span);
 void error_invalid_continue(Diags *diags, size_t level, Span span);
 void error_namespace_value(Diags *diags, Span span);
 void error_module_not_found(Diags *diags, Path path, Span span);
+void error_not_mutable(Diags *diags, Span span);
 
 #endif

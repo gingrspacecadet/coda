@@ -1,0 +1,12 @@
+name: assignment to immutable parameter
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+module sema_bad_assignment;
+
+fn int64 bad(int64 value) {
+    value = value + value;
+    return value;
+}

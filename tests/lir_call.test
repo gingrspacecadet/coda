@@ -1,0 +1,15 @@
+name: lir function call
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_call;
+
+fn int64 identity(int64 value) {
+    return value;
+}
+
+fn int64 caller(int64 value) {
+    return identity(value);
+}

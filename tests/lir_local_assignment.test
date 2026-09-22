@@ -1,0 +1,19 @@
+name: lir local assignment
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_local_assignment;
+
+fn int64 foo(int64 a) {
+    mut int64 b = a;
+    b = b + b;
+    return b;
+}
+
+[lir]
+foo:
+    block0(%0):
+        %1 = add %0, %0
+        return %1

@@ -2,7 +2,7 @@
 #define AST_H
 
 #include <stdint.h>
-#include "string.h"
+#include "String.h"
 #include "array.h"
 #include "optional.h"
 #include "arena.h"

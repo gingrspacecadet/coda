@@ -34,6 +34,7 @@ typedef enum {
     E_INVALID_CONTINUE,
     E_NAMESPACE_VALUE,
     E_MODULE_NOT_FOUND,
+    E_NOT_MUTABLE,
 } DiagCode;
 
 typedef struct {

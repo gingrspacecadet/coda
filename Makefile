@@ -3,8 +3,11 @@ CFLAGS = -g -Werror -Wextra -Wall -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # 
 
 SRC := src
 
-SRCS = $(shell find $(SRC) -type f -name "*.c" ! -path "$(SRC)/backends/*" 2>/dev/null)
-OBJS = $(patsubst $(SRC)/%.c,build/%.o,$(SRCS))
+LIB_SRCS = $(shell find $(SRC) -type f -name "*.c" ! -name "main.c" ! -path "$(SRC)/backends/*" 2>/dev/null)
+LIB_OBJS = $(patsubst $(SRC)/%.c,build/%.o,$(LIB_SRCS))
+
+CLI_OBJ = build/main.o
+LIB = build/libcoda.a
 
 TARGET = codac
 
@@ -68,10 +71,14 @@ STDLIB_SO         = $(STDLIB_TARGET_DIR)/libcoda.$(SOEXT)
 .PHONY: all clean backends stdlib test
 .SECONDARY: $(STDLIB_GEN_ASM)
 
-all: $(TARGET) backends stdlib
+all: $(LIB) $(TARGET) backends stdlib
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ -rdynamic
+$(LIB): $(LIB_OBJS)
+	@mkdir -p $(dir $@)
+	ar rcs $@ $^
+
+$(TARGET): $(CLI_OBJ) $(LIB)
+	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) -rdynamic
 
 build/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
@@ -131,13 +138,18 @@ locs:
 tree:
 	git ls-files | tree --fromfile
 
-TEST := build/tests
+TEST_SRC = $(wildcard test/*.c)
+TEST_OBJS = $(patsubst test/%.c,build/test/%.o,$(TEST_SRC))
+TEST_TARGET = build/codac-test
 
-$(TEST)/run: tests/run.c
-	mkdir -p $(TEST)
-	$(CC) $(CFLAGS) -o $@ $<
+$(TEST_TARGET): $(TEST_OBJS) $(LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_OBJS) $(LIB)
 
-test: $(TEST)/run
-	$(TEST)/run $(TARGET)
+build/test/%.o: test/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I$(SRC) -c -o $@ $<
 
--include $(patsubst %.o,%.d,$(OBJS) $(BACKEND_OBJS))
+test: $(TEST_TARGET)
+	$(TEST_TARGET) tests
+
+-include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(BACKEND_OBJS) $(TEST_OBJS))

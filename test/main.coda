@@ -1,7 +1,0 @@
-module main;
-
-@export
-fn int main() {
-    int x = 42;
-    return x;
-}

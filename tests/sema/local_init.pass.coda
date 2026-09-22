@@ -1,6 +1,0 @@
-module test;
-
-fn uint32 foo(uint32 arg) {
-    uint32 x = arg;
-    return x;
-}

@@ -1,9 +1,6 @@
 #include <time.h>
-#include "lexer.h"
-#include "parser.h"
-#include "sema.h"
 #include "print.h"
-#include "lir_lower.h"
+#include "coda.h"
 
 #define BOLD_WHITE "\x1b[1;37m"
 #define RED "\x1b[1;31m"
@@ -261,63 +258,26 @@ static bool load_source(const char *path, Source *source) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "usage: %s <input.coda>\n", argv[0]);
-        return 1;
-    }
-
-    struct timespec start;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    Source source;
-
-    if (!load_source(argv[1], &source))
+    if (argc != 2)
         return 1;
 
     Arena *arena = arena_create();
-    source_build_lines(&source, arena);
-
     Diags diags = {.arena = arena, .diags = array_create(arena, sizeof(Diag))};
 
-    Lexer lexer = {
-        .source = &source,
-        .diags = &diags,
-    };
+    Source source;
+    load_source(argv[1], &source);
+    CodaCompiler compiler;
 
-    lexer.index = 0;
+    coda_compiler_init(&compiler, arena, &diags);
 
-    Parser p;
-    parser_init(&p, &lexer, arena);
-
-    AstModule *m = parser_parse_module(&p);
-
-    if (diags.diags.len != 0) {
+    if (!coda_compile(&compiler, &source, CODA_STAGE_LIR)) {
         print_diags(&diags);
         return 1;
     }
 
-    print_ast_module(stdout, m);
-
-    Sema sema = sema_create(arena, &diags);
-    Array(String) includes = array_create(arena, sizeof(String));
-    array_push(&includes, &STRING("."));
-
-    HirModule *hm = sema_analyse(&sema, m, includes);
-
-    if (diags.diags.len != 0) {
-        print_diags(&diags);
-        return 1;
-    }
-
-    print_hir_module(stdout, hm);
-
-    LirModule *lir = lir_lower_module(arena, hm);
-    lir_print(stdout, lir);
-
-    struct timespec end;
-    clock_gettime(CLOCK_MONOTONIC, &end);
-
-    printf("Compilation took %ld seconds (%lf milliseconds)\n", end.tv_sec - start.tv_sec, (end.tv_nsec - start.tv_nsec) / 1000000.f);
+    print_ast_module(stdout, compiler.compilation.ast);
+    print_hir_module(stdout, compiler.compilation.hir);
+    lir_print(stdout, compiler.compilation.lir);
 
     return 0;
 }

@@ -1,7 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
-#include "string.h"
+#include "String.h"
 #include "array.h"
 #include "source.h"
 

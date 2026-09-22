@@ -152,9 +152,6 @@ static bool sema_type_equal(HirType *a, HirType *b) {
     if (a->kind != b->kind)
         return false;
 
-    if (a->mutable != b->mutable)
-        return false;
-
     switch (a->kind) {
         case HIR_TYPE_ERROR:
             return true;
@@ -275,7 +272,6 @@ HirType *sema_type(Sema *sema, AstType *ast) {
     hir->mutable = ast->mutable;
 
     switch (ast->kind) {
-        //! TODO: builtin types!
         case AST_TYPE_NAMED: {
             Symbol *symbol = sema_lookup_path(sema, ast->named.path);
 
@@ -293,13 +289,15 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
 
             if (symbol->type == NULL) {
-                //! TODO: malformed type symbol
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
 
-            if (symbol->type->kind == HIR_TYPE_BUILTIN)
-                return symbol->type;
+            if (symbol->type->kind == HIR_TYPE_BUILTIN) {
+                hir->kind = HIR_TYPE_BUILTIN;
+                hir->builtin = symbol->type->builtin;
+                return hir;
+            }
 
             hir->kind = HIR_TYPE_NAMED;
             hir->named.symbol = symbol;
@@ -529,6 +527,20 @@ static bool sema_literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     return false;
 }
 
+static HirType *sema_builtin_type(Sema *sema, BuiltinType builtin) {
+    for (size_t i = 0; i < sema->global_scope.syms.len; i++) {
+        Symbol *symbol = (Symbol *)array_at(&sema->global_scope.syms, i);
+
+        if (symbol->kind == SYMBOL_TYPE &&
+            symbol->type != NULL &&
+            symbol->type->kind == HIR_TYPE_BUILTIN &&
+            symbol->type->builtin == builtin)
+            return symbol->type;
+    }
+
+    return NULL;
+}
+
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr == NULL || type == NULL)
         return expr;
@@ -551,7 +563,7 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     }
 
     if (!sema_literal_fits(sema, &expr->literal, type)) {
-        //! TODO: cannot coerce literal to type
+        error_type_mismatch(sema->diags, type, expr->type ? expr->type : sema_builtin_type(sema, BUILTIN_UINT32), expr->span);
         return NULL;
     }
 
@@ -590,9 +602,15 @@ static HirType *sema_binary_operand_type(Sema *sema, AstBinaryOp op, HirExpr *le
 
 static HirType *sema_binary_result_type(Sema *sema, AstBinaryOp op, HirType *operand) {
     switch (op) {
-        //! TODO: comparisons return bool
-        //! TODO: logical operators return bool
-        //! TODO: other operators
+        case AST_BINARY_LT:
+        case AST_BINARY_LTE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GTE:
+        case AST_BINARY_EQUAL:
+        case AST_BINARY_NOT_EQUAL:
+        case AST_BINARY_LOGICAL_AND:
+        case AST_BINARY_LOGICAL_OR:
+            return sema_builtin_type(sema, BUILTIN_BOOL);
 
         default:
             return operand;
@@ -653,7 +671,10 @@ static HirType *sema_unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
             return operand->type;
 
         case AST_UNARY_NOT:
-            //! TODO: require bool
+            if (operand->type->kind != HIR_TYPE_BUILTIN ||
+                operand->type->builtin != BUILTIN_BOOL)
+                return NULL;
+
             return operand->type;
 
         case AST_UNARY_DEREF:
@@ -1649,6 +1670,12 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
 
                 if (target == NULL || target->kind == HIR_EXPR_ERROR ||
                     value == NULL || value->kind == HIR_EXPR_ERROR) {
+                    stmt->kind = HIR_STMT_ERROR;
+                    return stmt;
+                }
+
+                if (!target->type->mutable) {
+                    error_not_mutable(sema->diags, target->span);
                     stmt->kind = HIR_STMT_ERROR;
                     return stmt;
                 }

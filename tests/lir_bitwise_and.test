@@ -1,0 +1,17 @@
+name: lir bitwise and
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+module lir_bitwise_and;
+
+fn uint64 bitwise_and(uint64 a, uint64 b) {
+    return a & b;
+}
+
+[lir]
+bitwise_and:
+    block0(%0, %1):
+        %2 = and %0, %1
+        return %2
