@@ -2,22 +2,30 @@ module std::constraints;
 
 @export
 constraint Comparable {
+    // Operations are defined here for integral types to reduce boilerplate
+    // Any non-integral type will fail this constraint and must have these methods implemented separately.
+
+    @export,inline
     fn bool lt(Comparable *a, Comparable *b) {
         return a < b;
     }
 
+    @export,inline
     fn bool gt(Comparable *a, Comparable *b) {
         return a > b;
     }
 
+    @export,inline
     fn bool le(Comparable *a, Comparable *b) {
         return a <= b;
     }
 
+    @export,inline
     fn bool ge(Comparable *a, Comparable *b) {
         return a >= b;
     }
 
+    @export,inline
     fn bool eq(Comparable *a, Comparable *b) {
         return a == b;
     }

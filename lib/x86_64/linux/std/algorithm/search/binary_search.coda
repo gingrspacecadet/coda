@@ -22,7 +22,7 @@ fn T *? binary_search<T: Comparable>(Sequence<T> *seq, T value) {
     return null;
 }
 
-@export
+@export,inline
 fn T*? Sequence<T>.binary_search(Sequence<T> *this, T value) {
     return binary_search(this, value);
 }

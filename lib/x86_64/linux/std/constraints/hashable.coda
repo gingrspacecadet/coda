@@ -4,6 +4,7 @@ module std::constraints;
 constraint Hashable {
     // Basic hash function as a default implementation.
     // It is advised to override this function for non-trivial types.
+    @export,inline
     fn uint64 hash(Hashable *self, usize size) {
         uint64 total = 0;
         for (usize i = 0; i < #sizeof(Hashable); i++) {

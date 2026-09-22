@@ -19,7 +19,7 @@ fn none selection_sort<T: Comparable>(mut Sequence<T> *seq) {
     }
 }
 
-@export
+@export,inline
 fn none mut Sequence<T>.selection_sort<T: Comparable>(Sequence<T> *this) {
     selection_sort(this);
 }

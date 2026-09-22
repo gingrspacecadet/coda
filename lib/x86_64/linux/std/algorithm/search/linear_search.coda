@@ -11,3 +11,8 @@ fn T *? linear_search<T>(Sequence<T> *seq, T value) {
     }
     return null;
 }
+
+@export,inline
+fn T *? Sequence<T>.linear_search(Sequence<T> *this, T value) {
+    return linear_search(this, value);
+}

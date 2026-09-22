@@ -28,7 +28,7 @@ fn none quick_sort<T: Comparable>(mut Sequence<T> *seq, int low, int high) {
     }
 }
 
-@export
+@export,inline
 fn none mut Sequence<T>.quick_sort<T: Comparable>(mut Sequence<T> *seq) {
     quick_sort(seq, 0, seq.length() - 1);
 }

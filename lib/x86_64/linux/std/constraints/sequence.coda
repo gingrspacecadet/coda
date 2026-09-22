@@ -5,27 +5,25 @@ constraint Sequence<T> {
     fn T *? try_at(Sequence<T> *this, usize index);
     fn bool try_set(Sequence<T> *this, usize index, T value);
 
+    @inline
     fn T *at(Sequence<T> *this, usize index) {
-        T *? result = this.try_at(index);
-        if (result == null) {
-            panic("Index out of bounds"); // TODO: implement panic function
-        }
-        return result;
+        T *? r = this.try_at(index);
+        if (r == null) panic("Index out of bounds"); // TODO: implement panic function
+        return r;
     }
 
+    @inline
     fn none set(Sequence<T> *this, usize index, T value) {
-        if (!this.try_set(index, value)) {
-            panic("Index out of bounds");
-        }
+        if (!this.try_set(index, value)) panic("Index out of bounds");
     }
 }
 
-@export @inline
+@export,inline
 fn usize T[].len<T>(T[] *this) {
     return this.len;
 }
 
-@export @inline
+@export,inline
 fn T *? T[].try_at<T>(T[] *this, usize index) {
     if (index >= this.len) {
         return null;
@@ -33,7 +31,7 @@ fn T *? T[].try_at<T>(T[] *this, usize index) {
     return &this[index];
 }
 
-@export @inline
+@export,inline
 fn bool T[].try_set<T>(T[] *this, usize index, T value) {
     if (index >= this.len) {
         return false;

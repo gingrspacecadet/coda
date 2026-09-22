@@ -35,15 +35,6 @@ fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
 }
 
 @export
-fn V *HashMap<K, V>.get(HashMap<K, V> *map, K key) {
-    V *? value = map.try_get(key);
-    if (value == null) {
-        panic("Key not found in HashMap");
-    }
-    return value;
-}
-
-@export
 fn V *? HashMap<K, V>.try_get(HashMap<K, V> *map, K key) {
     uint64 hash = key.hash(map.cap());
     
@@ -62,13 +53,6 @@ fn V *? HashMap<K, V>.try_get(HashMap<K, V> *map, K key) {
 @export
 fn bool HashMap<K, V>.contains(HashMap<K, V> *map, K key) {
     return map.try_get(key) != null;
-}
-
-@export
-fn none HashMap<K, V>.remove(mut HashMap<K, V> *map, K key) {
-    if (!map.try_remove(key)) {
-        panic("Key not found in HashMap");
-    }
 }
 
 @export
