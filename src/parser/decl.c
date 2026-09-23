@@ -158,6 +158,10 @@ void parse_type_decl(Parser *p, AstTypeDecl *decl) {
     decl->name = parse_name(p);
     decl->generics = parse_generic_params(p);
 
+    if (at(p, TK_COLON)) {
+        decl->constraint = parse_name(p);
+    }
+
     expect(p, TK_EQ);
 
     decl->type = parse_type(p);
@@ -212,6 +216,7 @@ bool try_parse_var_decl(Parser *p, AstVarDecl *var) {
     return true;
 }
 
+//! TODO: we need to allow constraints of the form `Constraint<T, ...>`
 void parse_constraint_decl(Parser *p, AstConstraintDecl *decl) {
     decl->span = p->current.span;
 

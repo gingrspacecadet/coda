@@ -1956,7 +1956,6 @@ Compiler intrinsics may expose additional low-level operations without constitut
 
 ## scratchpad
 
-NEW!!! postfix operator `!`. Acts identical to `?`, but panics instead of returning. 
 NEW!!! type decls can impose that the type must satisfay constraint C:
 ```
 type T: C;

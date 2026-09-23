@@ -59,6 +59,11 @@ Array parse_attributes(Parser *p) {
     while (at(p, TK_AT)) {
         AstAttribute attr = parse_attribute(p);
         array_push(&attrs, &attr);
+
+        while (at(p, TK_COMMA)) {
+            AstAttribute attr = parse_attribute(p);
+            array_push(&attrs, &attr);
+        }
     }
 
     return attrs;
