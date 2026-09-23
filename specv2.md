@@ -1961,12 +1961,10 @@ NEW!!! type decls can impose that the type must satisfay constraint C:
 type T: C;
 ```
 which also adds `C`'s default methods if applicable.
-NEW!!! multiple attributes can be condensed.
+NEW!!! methods on types can have their target types omitted if easily inferrable.
+Example:
+```rs
+// both are equivalent
+BigInt a = BigInt.create(420_000_000_000_000_000_000);
+BigInt a = .create(420_000_000_000_000_000_000);
 ```
-// before:
-@export @inline @pure
-// after:
-@export,inline,pure
-```
-each attribute can still have arguments too with `()`
-`@export(true),inline,pure`

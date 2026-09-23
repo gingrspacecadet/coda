@@ -8,3 +8,4 @@ a.out
 !lib/
 !lib/**/*.s
 *.vsix
+e.coda

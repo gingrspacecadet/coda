@@ -89,16 +89,20 @@ typedef struct {
 
 typedef enum {
     LIR_TERM_NONE,
+    LIR_TERM_RETURN,
     LIR_TERM_JUMP,
     LIR_TERM_BRANCH,
-    LIR_TERM_RETURN,
-    LIR_TERM_UNREACHABLE,
 } LirTerminatorKind;
 
 typedef struct {
     LirTerminatorKind kind;
 
     union {
+        struct {
+            bool has_value;
+            LirOperand value;
+        } _return;
+
         struct {
             LirBlockId target;
             Array(LirOperand) args;
@@ -111,11 +115,6 @@ typedef struct {
             LirBlockId else_block;
             Array(LirOperand) else_args;
         } branch;
-
-        struct {
-            bool has_value;
-            LirOperand value;
-        } _return;
     };
 } LirTerminator;
 
@@ -160,11 +159,10 @@ LirBlockId lir_block_create(LirFunction *function);
 LirValueId lir_function_add_param(LirFunction *function, Symbol *symbol, HirType *type);
 LirValueId lir_block_add_param(LirFunction *function, LirBlockId block, HirType *type);
 
-LirValueId lir_emit(LirFunction *function, LirBlockId block, LirOpcode opcode, HirType *result_type, const LirOperand *operands, size_t operand_count);
-void lir_jump(LirFunction *function, LirBlockId block, LirBlockId target, const LirOperand *args, size_t arg_count);
-void lir_branch(LirFunction *function, LirBlockId block, LirOperand condition, LirBlockId then_block, const LirOperand *then_args, size_t then_arg_count, LirBlockId else_block, const LirOperand *else_args, size_t else_arg_count);
-void lir_return(LirFunction *function, LirBlockId block, const LirOperand *value);
-void lir_unreachable(LirFunction *function, LirBlockId block);
+LirValueId lir_emit(LirFunction *function, LirBlockId block_id, LirOpcode opcode, HirType *result_type, Array(LirOperand) operands);
+void lir_return(LirFunction *function, LirBlockId block_id, LirOperand *value);
+void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Array(LirOperand) args);
+void lir_branch(LirFunction *function, LirBlockId block_id, LirOperand condition, LirBlockId then_block, Array(LirOperand) then_args, LirBlockId else_block, Array(LirOperand) else_args);
 
 LirOperand lir_operand_value(LirValueId value, HirType *type);
 LirOperand lir_operand_int(int64_t value, HirType *type);

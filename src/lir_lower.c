@@ -18,6 +18,10 @@ static LirBlock *lir_lower_block(LirLower *lower) {
     return ((LirBlock **)lower->function->blocks.data)[lower->block];
 }
 
+static bool lir_lower_block_terminated(LirLower *lower) {
+    return lir_lower_block(lower)->terminator.kind != LIR_TERM_NONE;
+}
+
 static LirBinding *lir_find_binding(LirLower *lower, Symbol *symbol) {
     for (size_t i = lower->bindings.len; i > 0; i--) {
         LirBinding *binding = &((LirBinding *)lower->bindings.data)[i - 1];
@@ -205,7 +209,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         case HIR_EXPR_UNARY: {
             LirOperand operand = lir_lower_expr(lower, expr->unary.operand);
 
-            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_unary_op(expr->unary.op), expr->type, &operand, 1);
+            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_unary_op(expr->unary.op), expr->type, (Array){.data = &operand, .len = 1});
 
             return lir_operand_value(result, expr->type);
         }
@@ -216,7 +220,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 lir_lower_expr(lower, expr->binary.right),
             };
 
-            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_binary_op(expr->binary.op), expr->type, operands, 2);
+            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_binary_op(expr->binary.op), expr->type, (Array){.data = operands, .len = 2});
 
             return lir_operand_value(result, expr->type);
         }
@@ -231,7 +235,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 operands[i + 1] = lir_lower_expr(lower, ((HirExpr **)expr->call.args.data)[i]);
             }
 
-            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CALL, expr->type, operands, operand_count);
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CALL, expr->type, (Array){.data = operands, .len = operand_count});
 
             if (expr->type->kind == HIR_TYPE_BUILTIN && expr->type->builtin == BUILTIN_NONE) {
                 return lir_operand_invalid();
@@ -243,7 +247,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         case HIR_EXPR_CAST: {
             LirOperand operand = lir_lower_expr(lower, expr->cast.operand);
 
-            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CAST, expr->type, &operand, 1);
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CAST, expr->type, (Array){.data = &operand, .len = 1});
 
             return lir_operand_value(result, expr->type);
         }
@@ -262,11 +266,156 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     return lir_operand_invalid();
 }
 
+static bool lir_binding_contains(Array(LirBinding) *bindings, Symbol *symbol) {
+    for (size_t i = 0; i < bindings->len; i++) {
+        LirBinding *binding = &((LirBinding *)bindings->data)[i];
+
+        if (binding->symbol == symbol) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void lir_snapshot_bindings(LirLower *lower, Array(LirBinding) *snapshot) {
+    for (size_t i = lower->bindings.len; i > 0; i--) {
+        LirBinding *binding = &((LirBinding *)lower->bindings.data)[i - 1];
+
+        if (lir_binding_contains(snapshot, binding->symbol)) {
+            continue;
+        }
+
+        array_push(snapshot, binding);
+    }
+}
+
+static void lir_collect_branch_args(LirLower *lower, Array(LirBinding) *snapshot, Array(LirOperand) *args) {
+    for (size_t i = snapshot->len; i > 0; i--) {
+        LirBinding *binding = &((LirBinding *)snapshot->data)[i - 1];
+        LirBinding *current = lir_find_binding(lower, binding->symbol);
+
+        assert(current);
+        array_push(args, &current->operand);
+    }
+}
+
+static void lir_snapshot_operands(Array(LirBinding) *snapshot, Array(LirOperand) *operands) {
+    for (size_t i = 0; i < snapshot->len; i++) {
+        LirBinding *binding = &((LirBinding *)snapshot->data)[i];
+        array_push(operands, &binding->operand);
+    }
+}
+
+static void lir_lower_stmt(LirLower *lower, HirStmt *stmt);
+
+static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
+    LirFunction *function = lower->function;
+    LirBlockId entry_block = lower->block;
+    LirOperand condition = lir_lower_expr(lower, stmt->_if.cond);
+
+    Array(LirBinding) snapshot = array_create(function->arena, sizeof(LirBinding));
+
+    lir_snapshot_bindings(lower, &snapshot);
+
+    LirBlockId then = lir_block_create(function);
+    LirBlockId _else = stmt->_if._else ? lir_block_create(function) : LIR_INVALID_BLOCK;
+    LirBlockId merge_block = LIR_INVALID_BLOCK;
+
+    size_t bindings_len = lower->bindings.len;
+
+    lower->block = then;
+    lir_lower_stmt(lower, stmt->_if.then);
+    bool then_falls_through = !lir_lower_block_terminated(lower);
+
+    Array(LirOperand) then_args = array_create(function->arena, sizeof(LirOperand));
+
+    if (then_falls_through) {
+        lir_collect_branch_args(lower, &snapshot, &then_args);
+    }
+
+    lower->bindings.len = bindings_len;
+
+    bool else_falls_through = false;
+    Array(LirOperand) else_args = array_create(function->arena, sizeof(LirOperand));
+
+    if (_else != LIR_INVALID_BLOCK) {
+        lower->block = _else;
+        lir_lower_stmt(lower, stmt->_if._else);
+        else_falls_through = !lir_lower_block_terminated(lower);
+
+        if (else_falls_through) {
+            lir_collect_branch_args(lower, &snapshot, &else_args);
+        }
+
+        lower->bindings.len = bindings_len;
+    } else {
+        else_falls_through = true;
+    }
+
+    if (!then_falls_through && !else_falls_through) {
+        lir_branch(function, entry_block, condition, then, (Array){0}, _else, (Array){0});
+        lower->block = entry_block;
+        return;
+    }
+
+    merge_block = lir_block_create(function);
+
+    Array(LirOperand) merge_params = array_create(function->arena, sizeof(LirOperand));
+
+    for (size_t i = 0; i < snapshot.len; i++) {
+        LirBinding *binding = &((LirBinding *)snapshot.data)[i];
+        LirValueId value = lir_block_add_param(function, merge_block, binding->operand.type);
+
+        LirOperand operand = lir_operand_value(value, binding->operand.type);
+        array_push(&merge_params, &operand);
+    }
+
+    if (then_falls_through) {
+        lower->block = then;
+        lir_jump(function, then, merge_block, then_args);
+    }
+
+    if (_else != LIR_INVALID_BLOCK) {
+        if (else_falls_through) {
+            lower->block = _else;
+            lir_jump(function, _else, merge_block, else_args);
+        }
+    }
+
+    Array(LirOperand) entry_else_args = array_create(function->arena, sizeof(LirOperand));
+
+    if (_else == LIR_INVALID_BLOCK) {
+        lir_snapshot_operands(&snapshot, &entry_else_args);
+        lir_branch(function, entry_block, condition, then, then_args, merge_block, entry_else_args);
+    } else {
+        lir_branch(function, entry_block, condition, then, then_args, _else, else_args);
+    }
+
+    lower->block = merge_block;
+    lower->bindings.len = bindings_len;
+
+    for (size_t i = 0; i < snapshot.len; i++) {
+        LirBinding *binding = &((LirBinding *)snapshot.data)[i];
+        LirBlockParam *param = &((LirBlockParam *)lir_lower_block(lower)->params.data)[i];
+
+        lir_bind(lower, binding->symbol, lir_operand_value(param->value, param->type));
+    }
+}
+
 static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
+    if (lir_lower_block_terminated(lower)) {
+        return;
+    }
+
     switch (stmt->kind) {
         case HIR_STMT_BLOCK:
             for (size_t i = 0; i < stmt->block.stmts.len; i++) {
                 lir_lower_stmt(lower, ((HirStmt **)stmt->block.stmts.data)[i]);
+
+                if (lir_lower_block_terminated(lower)) {
+                    break;
+                }
             }
             return;
 
@@ -289,19 +438,19 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
             (void)lir_lower_expr(lower, stmt->expr);
             return;
 
-        case HIR_STMT_RETURN: {
+        case HIR_STMT_RETURN:
             if (stmt->_return.value) {
                 LirOperand value = lir_lower_expr(lower, stmt->_return.value);
-
                 lir_return(lower->function, lower->block, &value);
             } else {
                 lir_return(lower->function, lower->block, NULL);
             }
-
             return;
-        }
 
         case HIR_STMT_IF:
+            lir_lower_if(lower, stmt);
+            return;
+        
         case HIR_STMT_WHILE:
         case HIR_STMT_BREAK:
         case HIR_STMT_CONTINUE:

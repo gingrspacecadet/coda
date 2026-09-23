@@ -159,7 +159,7 @@ void parse_type_decl(Parser *p, AstTypeDecl *decl) {
     decl->generics = parse_generic_params(p);
 
     if (at(p, TK_COLON)) {
-        decl->constraint = parse_name(p);
+        // decl->constraint = parse_name(p);
     }
 
     expect(p, TK_EQ);
