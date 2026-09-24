@@ -1,0 +1,56 @@
+name: control flow
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 loop_control(mut int64 n) {
+    mut int64 value = 0;
+
+    while (n > 0) {
+        n = n - 1;
+
+        if (n == 2) {
+            continue;
+        }
+
+        if (n == 0) {
+            break;
+        }
+
+        value = value + 1;
+    }
+
+    return value;
+}
+
+[lir]
+loop_control:
+    block0(%0):
+        jump block1(%0, 0)
+
+    block1(%1, %2):
+        %5 = gt %1, 0
+        branch %5, block2, block3(%1, %2)
+
+    block2:
+        %6 = sub %0, 1
+        %7 = eq %6, 2
+        branch %7, block4, block5(%0, 0, %6)
+
+    block3(%3, %4):
+        return %4
+
+    block4:
+        jump block1(%6, 0)
+
+    block5(%8, %9, %10):
+        %11 = eq %10, 0
+        branch %11, block6, block7(%8, %9, %10)
+
+    block6:
+        jump block3(%10, %9)
+
+    block7(%12, %13, %14):
+        %15 = add %13, 1
+        jump block1(%14, %15)

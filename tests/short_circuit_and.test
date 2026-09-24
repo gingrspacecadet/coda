@@ -1,0 +1,29 @@
+name: short circuit &&
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn bool side_effect() {
+    return true;
+}
+
+fn bool short_circuit_and(bool value) {
+    return value && side_effect();
+}
+
+[lir]
+side_effect:
+    block0:
+        return true
+
+short_circuit_and:
+    block0(%0):
+        branch %0, block1, block2(false)
+
+    block1:
+        %2 = call @side_effect
+        branch %2, block2(true), block2(false)
+
+    block2(%1):
+        return %1

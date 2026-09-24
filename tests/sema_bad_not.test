@@ -4,8 +4,6 @@ stop: hir
 errors: 1
 
 [source]
-module sema_bad_not;
-
 fn int64 bad(int64 value) {
     return !value;
 }

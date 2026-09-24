@@ -4,8 +4,6 @@ stop: ast
 errors: 0
 
 [source]
-module stop_ast;
-
 fn int64 value(int64 a) {
     return a;
 }

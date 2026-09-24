@@ -4,8 +4,6 @@ stop: lir
 errors: 0
 
 [source]
-module lir_none_return;
-
 fn none noop() {
     return;
 }

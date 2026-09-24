@@ -148,7 +148,21 @@ void lir_return(LirFunction *function, LirBlockId block_id, LirOperand *value) {
     lir_set_terminator(function, block_id, terminator);
 }
 
+static void lir_assert_block_args(LirFunction *function, LirBlockId block_id, Array(LirOperand) args) {
+    LirBlock *block = lir_get_block(function, block_id);
+
+    assert(block->params.len == args.len);
+
+    for (size_t i = 0; i < args.len; i++) {
+        LirBlockParam *param = &((LirBlockParam *)block->params.data)[i];
+
+        assert(param->type == ((LirOperand *)args.data)[i].type);
+    }
+}
+
 void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Array(LirOperand) args) {
+    lir_assert_block_args(function, target, args);
+
     LirTerminator terminator = {
         .kind = LIR_TERM_JUMP,
         .jump = {
@@ -162,6 +176,9 @@ void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Arr
 }
 
 void lir_branch(LirFunction *function, LirBlockId block_id, LirOperand condition, LirBlockId then_block, Array(LirOperand) then_args, LirBlockId else_block, Array(LirOperand) else_args) {
+    lir_assert_block_args(function, then_block, then_args);
+    lir_assert_block_args(function, else_block, else_args);
+
     LirTerminator terminator = {
         .kind = LIR_TERM_BRANCH,
         .branch = {

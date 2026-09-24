@@ -4,8 +4,6 @@ stop: lir
 errors: 0
 
 [source]
-module lir_call;
-
 fn int64 identity(int64 value) {
     return value;
 }

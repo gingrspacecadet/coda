@@ -4,8 +4,6 @@ stop: lir
 errors: 0
 
 [source]
-module lir_shift;
-
 fn uint64 shift(uint64 a, uint64 b) {
     return a << b;
 }

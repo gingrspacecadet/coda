@@ -4,8 +4,6 @@ stop: lir
 errors: 0
 
 [source]
-module lir_negation;
-
 fn int64 negate(int64 a) {
     return -a;
 }

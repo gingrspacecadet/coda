@@ -1,0 +1,49 @@
+name: nested control flow
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 nested(mut int64 value) {
+    mut int64 result = 0;
+
+    while (value > 0) {
+        if (value > 5) {
+            result = result + 2;
+        } else {
+            result = result + 1;
+        }
+
+        value = value - 1;
+    }
+
+    return result;
+}
+
+[lir]
+nested:
+    block0(%0):
+        jump block1(%0, 0)
+
+    block1(%1, %2):
+        %5 = gt %1, 0
+        branch %5, block2, block3(%1, %2)
+
+    block2:
+        %6 = gt %0, 5
+        branch %6, block4, block5
+
+    block3(%3, %4):
+        return %4
+
+    block4:
+        %7 = add 0, 2
+        jump block6(%0, %7)
+
+    block5:
+        %8 = add 0, 1
+        jump block6(%0, %8)
+
+    block6(%9, %10):
+        %11 = sub %9, 1
+        jump block1(%11, %10)

@@ -4,8 +4,6 @@ stop: hir
 errors: 1
 
 [source]
-module sema_unknown_name;
-
 fn int64 bad() {
     return missing;
 }
