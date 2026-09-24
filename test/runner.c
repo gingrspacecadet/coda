@@ -736,7 +736,7 @@ static bool test_run_file(const char *path, TestStats *stats) {
     TestFailure failure;
     bool pass = test_check(path, &test, &failure);
 
-    printf("%s  %.*s\n", pass ? "PASS" : "FAIL", string_fmt(test.name));
+    printf("%s\x1b[0m  %.*s\n", pass ? "\x1b[32mPASS" : "\x1b[31mFAIL", string_fmt(test.name));
 
     if (!pass) {
         test_print_failures(&test, &failure);
@@ -852,7 +852,7 @@ int main(int argc, char **argv) {
             test_run_path(argv[i], &stats);
     }
 
-    printf("\n%zu passed, %zu failed\n", stats.passed, stats.failed);
+    printf("\n\x1b[32m%zu\x1b[0m passed, \x1b[31m%zu\x1b[0m failed\n", stats.passed, stats.failed);
 
     return stats.failed != 0;
 }

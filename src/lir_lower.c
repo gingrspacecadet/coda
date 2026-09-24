@@ -8,6 +8,11 @@ typedef struct {
 } LirBinding;
 
 typedef struct {
+    LirOperand address;
+    HirType *type;
+} LirPlace;
+
+typedef struct {
     LirBlockId header;
     LirBlockId exit;
     Array(LirBinding) bindings;
@@ -190,6 +195,10 @@ static LirOperand lir_lower_literal(HirExpr *expr) {
 static LirOperand lir_lower_logical_and(LirLower *lower, HirExpr *expr);
 static LirOperand lir_lower_logical_or(LirLower *lower, HirExpr *expr);
 
+static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr);
+static LirOperand lir_lower_load(LirLower *lower, LirPlace place);
+static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -216,13 +225,28 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             }
         }
 
-        case HIR_EXPR_UNARY: {
-            LirOperand operand = lir_lower_expr(lower, expr->unary.operand);
+        case HIR_EXPR_UNARY:
+            switch (expr->unary.op) {
+                case AST_UNARY_DEREF: {
+                    LirPlace place = lir_lower_place(lower, expr);
 
-            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_unary_op(expr->unary.op), expr->type, (Array){.data = &operand, .len = 1});
+                    return lir_lower_load(lower, place);
+                }
 
-            return lir_operand_value(result, expr->type);
-        }
+                case AST_UNARY_ADDRESS: {
+                    LirPlace place = lir_lower_place(lower, expr->unary.operand);
+
+                    return place.address;
+                }
+
+                default: {
+                    LirOperand operand = lir_lower_expr(lower, expr->unary.operand);
+
+                    LirValueId result = lir_emit(lower->function, lower->block, lir_lower_unary_op(expr->unary.op), expr->type, (Array){.data = &operand, .len = 1});
+
+                    return lir_operand_value(result, expr->type);
+                }
+            }
 
         case HIR_EXPR_BINARY:
             if (expr->binary.op == AST_BINARY_LOGICAL_AND) {
@@ -339,6 +363,52 @@ static LirOperand lir_lower_logical_or(LirLower *lower, HirExpr *expr) {
     lower->block = merge_block;
 
     return lir_operand_value(result, expr->type);
+}
+
+static LirOperand lir_lower_load(LirLower *lower, LirPlace place) {
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_LOAD, place.type, (Array){.data = &place.address, .len = 1});
+
+    return lir_operand_value(result, place.type);
+}
+
+static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value) {
+    LirOperand operands[2] = {
+        place.address,
+        value,
+    };
+
+    lir_emit(lower->function, lower->block, LIR_OP_STORE, NULL, (Array){.data = operands, .len = 2});
+}
+
+static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
+    switch (expr->kind) {
+        case HIR_EXPR_UNARY:
+            if (expr->unary.op == AST_UNARY_DEREF) {
+                LirOperand address = lir_lower_expr(lower, expr->unary.operand);
+
+                return (LirPlace){
+                    .address = address,
+                    .type = expr->type,
+                };
+            }
+
+            break;
+
+        case HIR_EXPR_INDEX:
+            assert(!"index places not lowered yet");
+
+        case HIR_EXPR_FIELD:
+            assert(!"field places not lowered yet");
+
+        case HIR_EXPR_VALUE:
+            assert(!"address of local not lowered yet");
+
+        default:
+            break;
+    }
+
+    assert(!"expression is not an lvalue");
+    return (LirPlace){0};
 }
 
 static bool lir_binding_contains(Array(LirBinding) *bindings, Symbol *symbol) {
@@ -605,16 +675,19 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
 
         case HIR_STMT_ASSIGN: {
             HirExpr *target = stmt->assign.target;
-
-            assert(target->kind == HIR_EXPR_VALUE);
-
             LirOperand value = lir_lower_expr(lower, stmt->assign.value);
 
-            Symbol *symbol = target->value.symbol;
+            if (target->kind == HIR_EXPR_VALUE) {
+                Symbol *symbol = target->value.symbol;
 
-            assert(symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER);
+                assert(symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER);
 
-            lir_bind(lower, symbol, value);
+                lir_bind(lower, symbol, value);
+                return;
+            }
+
+            LirPlace place = lir_lower_place(lower, target);
+            lir_lower_store(lower, place, value);
             return;
         }
 

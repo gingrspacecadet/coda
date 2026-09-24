@@ -344,60 +344,36 @@ AstStmt *parse_match_stmt(Parser *p) {
     return stmt;
 }
 
+static bool can_start_var_stmt(Parser *p) {
+    return at(p, TK_IDENT) || at(p, TK_KW_MUT) || at(p, TK_KW_FN);
+}
+
 AstStmt *parse_statement(Parser *p) {
-    bool comptime = match(p, TK_DOLLAR);
+    if (at(p, TK_KW_IF))
+        return parse_if_stmt(p);
+
+    if (at(p, TK_KW_WHILE))
+        return parse_while_stmt(p);
+
+    if (at(p, TK_KW_FOR))
+        return parse_for_stmt(p);
+
+    if (at(p, TK_KW_RETURN))
+        return parse_return_stmt(p);
+
+    if (at(p, TK_KW_BREAK))
+        return parse_break_stmt(p);
+
+    if (at(p, TK_KW_CONTINUE))
+        return parse_continue_stmt(p);
+
+    if (at(p, TK_LBRACE))
+        return parse_block(p);
 
     AstStmt *stmt = NULL;
 
-    switch (p->current.type) {
-    case TK_KW_RETURN:
-        stmt = parse_return_stmt(p);
-        break;
+    if (can_start_var_stmt(p) && try_parse_var_stmt(p, &stmt))
+        return stmt;
 
-    case TK_KW_IF:
-        stmt = parse_if_stmt(p);
-        break;
-
-    case TK_KW_FOR:
-        stmt = parse_for_stmt(p);
-        break;
-
-    case TK_KW_WHILE:
-        stmt = parse_while_stmt(p);
-        break;
-
-    case TK_KW_DEFER:
-        stmt = parse_defer_stmt(p);
-        break;
-
-    case TK_KW_BREAK:
-        stmt = parse_break_stmt(p);
-        break;
-
-    case TK_KW_CONTINUE:
-        stmt = parse_continue_stmt(p);
-        break;
-
-    case TK_KW_MATCH:
-        stmt = parse_match_stmt(p);
-        break;
-
-    case TK_LBRACE:
-        stmt = parse_block(p);
-        break;
-
-    default:
-        break;
-    }
-
-    if (stmt == NULL) {
-        if (!try_parse_var_stmt(p, &stmt)) {
-            stmt = parse_expr_stmt(p);
-        }
-    }
-
-    if (stmt != NULL)
-        stmt->comptime = comptime;
-
-    return stmt;
+    return parse_expr_stmt(p);
 }

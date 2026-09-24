@@ -1,0 +1,25 @@
+name: dereference
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 read(int64 *p) {
+    return *p;
+}
+
+fn none write(mut int64* p, int64 value) {
+    *p = value;
+    return;
+}
+
+[lir]
+read:
+    block0(%0):
+        %1 = load %0
+        return %1
+
+write:
+    block0(%0, %1):
+        store %0, %1
+        return
