@@ -293,7 +293,11 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             return lir_operand_value(result, expr->type);
         }
 
-        case HIR_EXPR_INDEX:
+        case HIR_EXPR_INDEX: {
+            LirPlace place = lir_lower_place(lower, expr);
+            return lir_lower_load(lower, place);
+        }
+
         case HIR_EXPR_FIELD:
         case HIR_EXPR_INIT:
         case HIR_EXPR_LAMBDA:
@@ -394,8 +398,35 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
 
             break;
 
-        case HIR_EXPR_INDEX:
-            assert(!"index places not lowered yet");
+        case HIR_EXPR_INDEX: {
+            LirOperand base = lir_lower_expr(lower, expr->index.object);
+            LirOperand index = lir_lower_expr(lower, expr->index.index);
+
+            size_t elem_size = get_type_size(expr->type);
+            assert(elem_size != 0);
+
+            HirType *index_type = expr->index.index->type;
+            LirOperand scale = lir_operand_uint(elem_size, index_type);
+
+            LirOperand mul_operands[2] = {
+                index,
+                scale,
+            };
+
+            LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_type, (Array){.data = mul_operands, .len = 2});
+
+            LirOperand add_operands[2] = {
+                base,
+                lir_operand_value(offset, index_type),
+            };
+
+            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = add_operands, .len = 2});
+
+            return (LirPlace){
+                .address = lir_operand_value(address, base.type),
+                .type = expr->type,
+            };
+        }
 
         case HIR_EXPR_FIELD:
             assert(!"field places not lowered yet");
