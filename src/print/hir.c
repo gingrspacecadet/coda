@@ -178,11 +178,11 @@ static void print_type(FILE *out, const HirType *type, unsigned depth) {
     case HIR_TYPE_ENUM:
         indent(out, depth + 1);
         fputs("underlying\n", out);
-        print_type(out, type->enumeration.underlying, depth + 2);
+        print_type(out, type->_enum.underlying, depth + 2);
 
-        for (size_t i = 0; i < type->enumeration.items.len; i++) {
+        for (size_t i = 0; i < type->_enum.items.len; i++) {
             HirEnumItem *item =
-                ((HirEnumItem *)type->enumeration.items.data) + i;
+                ((HirEnumItem *)type->_enum.items.data) + i;
 
             indent(out, depth + 1);
             fprintf(out, "item ");

@@ -131,7 +131,7 @@ struct AstType {
         struct {
             AstType *underlying;
             Array(AstEnumItem) items;
-        } enumeration;
+        } _enum;
 
         struct {
             AstExpr *expr;

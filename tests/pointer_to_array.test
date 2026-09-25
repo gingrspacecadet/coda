@@ -1,0 +1,29 @@
+name: pointer to array
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 get(int64[4] *p, int64 i) {
+    return (*p)[i];
+}
+
+fn none set(mut int64[4]* p, int64 i, int64 value) {
+    (*p)[i] = value;
+    return;
+}
+
+[lir]
+get:
+    block0(%0, %1):
+        %2 = mul %1, 8
+        %3 = addr_add %0, %2
+        %4 = load %3
+        return %4
+
+set:
+    block0(%0, %1, %2):
+        %3 = mul %1, 8
+        %4 = addr_add %0, %3
+        store %4, %2
+        return

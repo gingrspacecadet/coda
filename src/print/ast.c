@@ -544,11 +544,11 @@ static void print_type(FILE *out, const AstType *type, unsigned depth) {
         break;
 
     case AST_TYPE_ENUM:
-        if (type->enumeration.underlying != NULL)
-            print_type(out, type->enumeration.underlying, depth + 1);
+        if (type->_enum.underlying != NULL)
+            print_type(out, type->_enum.underlying, depth + 1);
 
-        for (size_t i = 0; i < type->enumeration.items.len; i++) {
-            AstEnumItem *item = array_at((Array *)&type->enumeration.items, i);
+        for (size_t i = 0; i < type->_enum.items.len; i++) {
+            AstEnumItem *item = array_at((Array *)&type->_enum.items, i);
 
             indent(out, depth + 1);
             fputs("enum-item ", out);

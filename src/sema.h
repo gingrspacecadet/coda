@@ -17,6 +17,9 @@ typedef struct {
 
     ModuleIndex modules;
 
+    //! TODO: a nicer system for this!
+    size_t pointer_size;
+
     Diags *diags;
     Arena *arena;
 } Sema;

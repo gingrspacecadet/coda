@@ -52,6 +52,9 @@ struct HirType {
     HirTypeKind kind;
     bool mutable;
 
+    size_t size;
+    size_t align;
+
     union {
         BuiltinType builtin;
 
@@ -93,13 +96,14 @@ struct HirType {
         struct {
             HirType *underlying;
             Array(HirEnumItem) items;
-        } enumeration;
+        } _enum;
     };
 };
 
 struct HirField {
     Symbol *symbol;
     HirType *type;
+    size_t offset;
 };
 
 struct HirEnumItem {

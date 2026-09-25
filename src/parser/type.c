@@ -180,14 +180,14 @@ AstType *parse_enum_type(Parser *p) {
 
     type->kind = AST_TYPE_ENUM;
     type->span = p->current.span;
-    type->enumeration.underlying = NULL;
-    type->enumeration.items =
+    type->_enum.underlying = NULL;
+    type->_enum.items =
         array_create(p->arena, sizeof(AstEnumItem));
 
     advance(p);
 
     if (match(p, TK_COLON))
-        type->enumeration.underlying = parse_type(p);
+        type->_enum.underlying = parse_type(p);
 
     expect(p, TK_LBRACE);
 
@@ -201,7 +201,7 @@ AstType *parse_enum_type(Parser *p) {
         if (match(p, TK_EQ))
             item.value = parse_expression(p);
 
-        array_push(&type->enumeration.items, &item);
+        array_push(&type->_enum.items, &item);
 
         if (!match(p, TK_COMMA) && !at(p, TK_RBRACE))
             error_expected_token(p->diags, TK_COMMA, p->current.span);

@@ -399,43 +399,42 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             break;
 
         case HIR_EXPR_INDEX: {
-            LirOperand base = lir_lower_expr(lower, expr->index.object);
+            HirType *object_type = expr->index.object->type;
+            LirOperand base;
+
+            if (object_type->kind == HIR_TYPE_POINTER) {
+                base = lir_lower_expr(lower, expr->index.object);
+            } else {
+                LirPlace object = lir_lower_place(lower, expr->index.object);
+                base = object.address;
+            }
+
             LirOperand index = lir_lower_expr(lower, expr->index.index);
+            HirType *element_type = expr->type;
 
-            size_t elem_size = get_type_size(expr->type);
-            assert(elem_size != 0);
-
-            HirType *index_type = expr->index.index->type;
-            LirOperand scale = lir_operand_uint(elem_size, index_type);
+            LirOperand scale = hir_type_is_signed_integer(index.type)
+                ? lir_operand_int((int64_t)element_type->size, index.type)
+                : lir_operand_uint((uint64_t)element_type->size, index.type);
 
             LirOperand mul_operands[2] = {
                 index,
                 scale,
             };
 
-            LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_type, (Array){.data = mul_operands, .len = 2});
+            LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index.type, (Array){.data = mul_operands, .len = 2});
 
             LirOperand add_operands[2] = {
                 base,
-                lir_operand_value(offset, index_type),
+                lir_operand_value(offset, index.type),
             };
 
             LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = add_operands, .len = 2});
 
             return (LirPlace){
                 .address = lir_operand_value(address, base.type),
-                .type = expr->type,
+                .type = element_type,
             };
         }
-
-        case HIR_EXPR_FIELD:
-            assert(!"field places not lowered yet");
-
-        case HIR_EXPR_VALUE:
-            assert(!"address of local not lowered yet");
-
-        default:
-            break;
     }
 
     assert(!"expression is not an lvalue");

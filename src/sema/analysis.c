@@ -242,15 +242,15 @@ static bool sema_type_equal(HirType *a, HirType *b) {
             return true;
 
         case HIR_TYPE_ENUM:
-            if (!sema_type_equal(a->enumeration.underlying, b->enumeration.underlying))
+            if (!sema_type_equal(a->_enum.underlying, b->_enum.underlying))
                 return false;
 
-            if (a->enumeration.items.len != b->enumeration.items.len)
+            if (a->_enum.items.len != b->_enum.items.len)
                 return false;
 
-            for (size_t i = 0; i < a->enumeration.items.len; i++) {
-                HirEnumItem *ai = ((HirEnumItem *)a->enumeration.items.data) + i;
-                HirEnumItem *bi = ((HirEnumItem *)b->enumeration.items.data) + i;
+            for (size_t i = 0; i < a->_enum.items.len; i++) {
+                HirEnumItem *ai = ((HirEnumItem *)a->_enum.items.data) + i;
+                HirEnumItem *bi = ((HirEnumItem *)b->_enum.items.data) + i;
 
                 if (ai->symbol != bi->symbol)
                     return false;
@@ -265,6 +265,12 @@ static bool sema_type_equal(HirType *a, HirType *b) {
     return false;
 }
 
+static size_t sema_align_up(size_t value, size_t align) {
+    assert(align != 0);
+    size_t remainder = value % align;
+    return remainder == 0 ? value : value + align - remainder;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected);
 HirType *sema_type(Sema *sema, AstType *ast) {
     HirType *hir = arena_alloc(sema->arena, sizeof(HirType));
@@ -274,7 +280,6 @@ HirType *sema_type(Sema *sema, AstType *ast) {
     switch (ast->kind) {
         case AST_TYPE_NAMED: {
             Symbol *symbol = sema_lookup_path(sema, ast->named.path);
-
             if (symbol == NULL) {
                 error_unknown_type(sema->diags, ast->named.path, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
@@ -282,7 +287,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
 
             if (symbol->kind != SYMBOL_TYPE) {
-                AstName *name = (AstName *)array_at(&ast->named.path.parts, ast->named.path.parts.len - 1);
+                AstName *name = array_at(&ast->named.path.parts, ast->named.path.parts.len - 1);
                 error_expected_type_symbol(sema->diags, name->ident, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
@@ -296,11 +301,15 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             if (symbol->type->kind == HIR_TYPE_BUILTIN) {
                 hir->kind = HIR_TYPE_BUILTIN;
                 hir->builtin = symbol->type->builtin;
+                hir->size = symbol->type->size;
+                hir->align = symbol->type->align;
                 return hir;
             }
 
             hir->kind = HIR_TYPE_NAMED;
             hir->named.symbol = symbol;
+            hir->size = symbol->type->size;
+            hir->align = symbol->type->align;
             break;
         }
 
@@ -308,6 +317,8 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             hir->kind = HIR_TYPE_POINTER;
             hir->pointer.pointee = sema_type(sema, ast->pointer.pointee);
             hir->pointer.optional = ast->pointer.optional;
+            hir->size = sema->pointer_size;
+            hir->align = sema->pointer_size;
             break;
 
         case AST_TYPE_ARRAY: {
@@ -316,6 +327,8 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             if (!ast->array.sized) {
                 hir->kind = HIR_TYPE_SLICE;
                 hir->slice.element = element;
+                hir->size = sema->pointer_size * 2;
+                hir->align = sema->pointer_size;
                 break;
             }
 
@@ -330,13 +343,17 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             hir->kind = HIR_TYPE_ARRAY;
             hir->array.element = element;
-            //! TODO: turn literals into integer
-            // hir->array.length = length->literal.integer;
+            hir->array.length = (size_t)length->literal.integer;
+            assert(element->size == 0 || hir->array.length <= SIZE_MAX / element->size);
+            hir->size = element->size * hir->array.length;
+            hir->align = element->align;
             break;
         }
 
         case AST_TYPE_FN:
             hir->kind = HIR_TYPE_FUNCTION;
+            hir->size = 0;
+            hir->align = 0;
             hir->function.ret = sema_type(sema, ast->fn.ret);
             hir->function.params = array_create(sema->arena, sizeof(HirType *));
 
@@ -360,77 +377,97 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
             break;
 
-        case AST_TYPE_STRUCT:
+        case AST_TYPE_STRUCT: {
             hir->kind = HIR_TYPE_STRUCT;
             hir->structure.fields = array_create(sema->arena, sizeof(HirField));
 
-            for (size_t i = 0; i < ast->structure.fields.len; i++) {
-                AstField *field = ((AstField *)ast->structure.fields.data) + i;
-                Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+            size_t offset = 0;
+            size_t align = 1;
 
+            for (size_t i = 0; i < ast->structure.fields.len; i++) {
+                AstField *field = array_at(&ast->structure.fields, i);
+                Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
                 *symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
                     .decl = NULL,
                     .span = ast->span,
                 };
-
                 symbol->type = sema_type(sema, field->type);
 
                 HirField hir_field = {
                     .symbol = symbol,
                     .type = symbol->type,
                 };
+
+                offset = sema_align_up(offset, hir_field.type->align);
+                hir_field.offset = offset;
+                offset += hir_field.type->size;
+
+                if (hir_field.type->align > align)
+                    align = hir_field.type->align;
 
                 array_push(&hir->structure.fields, &hir_field);
             }
 
+            hir->align = align;
+            hir->size = sema_align_up(offset, align);
             break;
+        }
 
-        case AST_TYPE_UNION:
+        case AST_TYPE_UNION: {
             hir->kind = HIR_TYPE_UNION;
             hir->union_.fields = array_create(sema->arena, sizeof(HirField));
 
-            for (size_t i = 0; i < ast->union_.fields.len; i++) {
-                AstField *field = ((AstField *)ast->union_.fields.data) + i;
-                Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+            size_t size = 0;
+            size_t align = 1;
 
+            for (size_t i = 0; i < ast->union_.fields.len; i++) {
+                AstField *field = array_at(&ast->union_.fields, i);
+                Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
                 *symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
                     .decl = NULL,
-                    .span = ast->span
+                    .span = ast->span,
                 };
-
                 symbol->type = sema_type(sema, field->type);
 
                 HirField hir_field = {
                     .symbol = symbol,
                     .type = symbol->type,
+                    .offset = 0,
                 };
+
+                if (hir_field.type->size > size)
+                    size = hir_field.type->size;
+                if (hir_field.type->align > align)
+                    align = hir_field.type->align;
 
                 array_push(&hir->union_.fields, &hir_field);
             }
 
+            hir->align = align;
+            hir->size = sema_align_up(size, align);
             break;
+        }
 
         case AST_TYPE_ENUM:
             hir->kind = HIR_TYPE_ENUM;
-            hir->enumeration.underlying =
-                sema_type(sema, ast->enumeration.underlying);
+            hir->_enum.underlying = sema_type(sema, ast->_enum.underlying);
+            hir->size = hir->_enum.underlying->size;
+            hir->align = hir->_enum.underlying->align;
 
-            hir->enumeration.items =
-                array_create(sema->arena, sizeof(HirEnumItem));
+            hir->_enum.items = array_create(sema->arena, sizeof(HirEnumItem));
 
-            for (size_t i = 0; i < ast->enumeration.items.len; i++) {
-                AstEnumItem *item =
-                    ((AstEnumItem *)ast->enumeration.items.data) + i;
+            for (size_t i = 0; i < ast->_enum.items.len; i++) {
+                AstEnumItem *item = ((AstEnumItem *)ast->_enum.items.data) + i;
 
                 //! TODO: resolve enum item name/value
                 HirEnumItem hir_item = {
                 };
 
-                array_push(&hir->enumeration.items, &hir_item);
+                array_push(&hir->_enum.items, &hir_item);
             }
             break;
 
@@ -957,6 +994,21 @@ static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
     return (HirLiteral){0};
 }
 
+static bool is_integer(HirType *type) {
+    if (!type || type->kind != HIR_TYPE_BUILTIN || (
+        type->builtin != BUILTIN_INT8 &&
+        type->builtin != BUILTIN_INT16 &&
+        type->builtin != BUILTIN_INT32 &&
+        type->builtin != BUILTIN_INT64 &&
+        type->builtin != BUILTIN_UINT8 &&
+        type->builtin != BUILTIN_UINT16 &&
+        type->builtin != BUILTIN_UINT32 &&
+        type->builtin != BUILTIN_UINT64)
+    )
+        return false;
+    return true;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
 
@@ -1155,13 +1207,36 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            HirExpr *object = sema_implicit_deref(sema, hir->index.object);
-            hir->index.object = object;
-
-            HirType *object_type = object->type;
+            HirType *object_type = hir->index.object->type;
 
             if (object_type == NULL) {
-                //! TODO: expected indexable type
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            if (object_type->kind == HIR_TYPE_POINTER) {
+                HirType *pointee = object_type->pointer.pointee;
+
+                if (pointee == NULL) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                if (pointee->kind != HIR_TYPE_ARRAY && pointee->kind != HIR_TYPE_SLICE) {
+                    hir->type = pointee;
+
+                    if (expected != NULL)
+                        return sema_expr_coerce(sema, hir, expected);
+
+                    return hir;
+                }
+            }
+
+            HirExpr *object = sema_implicit_deref(sema, hir->index.object);
+            hir->index.object = object;
+            object_type = object->type;
+
+            if (object_type == NULL) {
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -1176,12 +1251,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     break;
 
                 default:
-                    //! TODO: expected array or slice
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
             }
 
-            //! TODO: require integer index
+            // TODO: require integer index
 
             if (expected != NULL)
                 return sema_expr_coerce(sema, hir, expected);
@@ -2153,16 +2227,46 @@ void sema_decl(Sema *sema, AstDecl *ast) {
     }
 }
 
-static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
-    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
-    HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+static void sema_builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
+    switch (builtin) {
+        case BUILTIN_UINT8:
+        case BUILTIN_INT8:
+        case BUILTIN_BOOL:
+            *size = 1;
+            *align = 1;
+            return;
+        case BUILTIN_UINT16:
+        case BUILTIN_INT16:
+            *size = 2;
+            *align = 2;
+            return;
+        case BUILTIN_UINT32:
+        case BUILTIN_INT32:
+            *size = 4;
+            *align = 4;
+            return;
+        case BUILTIN_UINT64:
+        case BUILTIN_INT64:
+            *size = 8;
+            *align = 8;
+            return;
+        case BUILTIN_NONE:
+            *size = 0;
+            *align = 1;
+            return;
+    }
+    assert(!"unhandled builtin type");
+}
 
+static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
+    Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
+    HirType *type = arena_alloc(sema->arena, sizeof(*type));
     *type = (HirType) {
         .kind = HIR_TYPE_BUILTIN,
         .mutable = false,
         .builtin = builtin,
     };
-
+    sema_builtin_layout(builtin, &type->size, &type->align);
     *symbol = (Symbol) {
         .kind = SYMBOL_TYPE,
         .name = (AstName) {
@@ -2172,7 +2276,6 @@ static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builti
         .decl = NULL,
         .type = type,
     };
-
     scope_insert(&sema->global_scope, symbol);
 }
 
