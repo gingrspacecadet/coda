@@ -14,7 +14,7 @@ type DynArray<T>: Sequence<T> = struct {
 @export,inline
 fn DynArray<T> DynArray<T>.create(Allocator allocator) {
     DynArray<T> arr;
-    DynArray<T>.init(&arr, allocator);
+    arr.init(allocator);
     return arr;
 }
 
