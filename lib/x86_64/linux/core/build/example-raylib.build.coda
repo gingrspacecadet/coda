@@ -1,0 +1,14 @@
+include core::build : build;
+include core::build::c : c;
+
+@export
+Project project = .create("raylib");
+
+@export
+c::Library* raylib = c::library(&project, "raylib")
+    .sources({
+        "src/*.c",
+    })
+    .include_dirs({
+        "src",
+    });

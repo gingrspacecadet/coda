@@ -1,0 +1,21 @@
+include core::build : build;
+include core::build::coda : coda;
+include core::pkg : pkg;
+
+@export
+Project project = .create("mygame");
+
+build::Target *raylib = pkg::target(pkg::package("raylib", "5.5"), "raylib");
+
+coda::Library *game = coda::library(&project, "game")
+    .sources({
+        "src/**/*.coda",
+    })
+    .depend(raylib);
+
+coda::Executable* executable = coda::executable(&project, "mygame")
+    .sources({
+        "app/**/*.coda",
+    })
+    .depend(game)
+    .depend(raylib);

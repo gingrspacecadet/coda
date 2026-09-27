@@ -1,5 +1,43 @@
 module core::build;
 
-type Build = struct {
+include std::mem : mem;
 
+@export
+constraint Action {
+    fn none execute(Action *self, Build *build);
+}
+
+@export
+constraint Target {
+    fn Target[] dependencies(Target *self);
+    fn string[] inputs(Target *self);
+    fn string[] outputs(Target *self);
+    fn Action *action(Target *self);
+}
+
+@export
+type Project = struct {
+    string name;
+    mem::Arena arena;
+    DynArray<Target *> targets;
 };
+
+@export
+type Build = struct {
+    Project *project;
+    mem::Arena arena;
+};
+
+@export
+fn Project Project.create(string name) {
+    return {
+        .name = name,
+        .arena = .create(),
+        .targets = .create(),
+    };
+}
+
+@export
+fn none Project.add(Project *self, Target *target) {
+    self.targets.push(target);
+}
