@@ -1,0 +1,6 @@
+module std::debug;
+
+include std::format : _;
+
+@export
+fn println<T: Formattable>(T t);
