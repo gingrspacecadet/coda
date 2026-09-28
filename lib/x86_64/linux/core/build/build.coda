@@ -3,29 +3,41 @@ module core::build;
 include std::mem : mem;
 
 @export
+constraint Profile {
+    fn string name(Profile *self) { return self.name; }
+}
+
+@export
 constraint Action {
+    fn string[] inputs(Action *self);
+    fn string[] outputs(Action *self);
     fn none execute(Action *self, Build *build);
 }
 
 @export
 constraint Target {
-    fn Target[] dependencies(Target *self);
-    fn string[] inputs(Target *self);
-    fn string[] outputs(Target *self);
-    fn Action *action(Target *self);
+    fn string name(Target *self) { return self.name; }
+    fn dyn Target[] dependencies(Target *self) { return self.dependencies; }
+    fn string[] outputs(Target *self) { return self.outputs; }
+    fn none plan(Target *self, Build *build);
 }
 
 @export
 type Project = struct {
     string name;
     mem::Arena arena;
-    DynArray<Target *> targets;
+
+    DynArray<dyn Profile *> profiles;
+    DynArray<dyn Target *> targets;
 };
 
 @export
 type Build = struct {
     Project *project;
-    mem::Arena arena;
+    dyn Profile *profile;
+
+    DynArray<dyn Target *> targets;
+    DynArray<dyn Action *> actions;
 };
 
 @export
@@ -33,11 +45,42 @@ fn Project Project.create(string name) {
     return {
         .name = name,
         .arena = .create(),
+        .profiles = .create(),
         .targets = .create(),
     };
 }
 
 @export
-fn none Project.add(Project *self, Target *target) {
+fn none Project.add_profile(Project *self, dyn Profile *profile) {
+    self.profiles.push(profile);
+}
+
+@export
+fn none Project.add_target(Project *self, dyn Target *target) {
     self.targets.push(target);
+}
+
+@export
+fn Build Build.create(Project *project, dyn Profile *profile) {
+    return {
+        .project = project,
+        .profile = profile,
+        .targets = .create(project.arena),
+        .actions = .create(project.arena),
+    };
+}
+
+@export
+fn none Build.add_target(Build *self, dyn Target *target) {
+    self.targets.push(target);
+}
+
+@export
+fn none Build.add_action(Build *self, dyn Action *action) {
+    self.actions.push(action);
+}
+
+@export
+fn none Build.run(Build *self) {
+    // TODO 
 }

@@ -5,6 +5,9 @@ include core::pkg : pkg;
 @export
 Project project = .create("mygame");
 
+coda::debug(&project);
+coda::release(&project);
+
 build::Target *raylib = pkg::target(pkg::package("raylib", "5.5"), "raylib");
 
 coda::Library *game = coda::library(&project, "game")
@@ -13,7 +16,7 @@ coda::Library *game = coda::library(&project, "game")
     })
     .depend(raylib);
 
-coda::Executable* executable = coda::executable(&project, "mygame")
+coda::Executable *executable = coda::executable(&project, "mygame")
     .sources({
         "app/**/*.coda",
     })

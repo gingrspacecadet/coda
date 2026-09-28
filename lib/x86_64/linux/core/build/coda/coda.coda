@@ -1,0 +1,191 @@
+module core::build::coda;
+
+include core::build : build;
+
+@export
+constraint Toolchain {
+    fn none plan_library(Toolchain *self, build::Build *build, Library *library);
+    fn none plan_executable(Toolchain *self, build::Build *build, Executable *executable);
+}
+
+@export
+type Profile = struct {
+    string name;
+    dyn Toolchain toolchain;
+};
+
+@export
+fn Profile *profile(build::Project *project, string name) {
+    Profile *profile = project.arena.alloc<Profile>();
+
+    *profile = {
+        .name = name,
+        .toolchain = none,
+    };
+
+    project.add_profile(profile);
+    return profile;
+}
+
+@export
+fn Profile *Profile.toolchain(Profile *self, dyn Toolchain toolchain) {
+    self.toolchain = toolchain;
+    return self;
+}
+
+@export
+type Native = struct {
+};
+
+@export
+type LLVM = struct {
+};
+
+@export
+fn dyn Toolchain native() {
+    return (Native){};
+}
+
+fn none Native.plan_library(Native *self, build::Build *build, Library *library) {
+    ...
+}
+
+fn none Native.plan_executable(Native *self, build::Build *build, Executable *executable) {
+    ...
+}
+
+@export
+fn dyn Toolchain llvm() {
+    return (LLVM){};
+}
+
+fn none LLVM.plan_library(LLVM *self, build::Build *build, Library *library) {
+    ...
+}
+
+fn none LLVM.plan_executable(LLVM *self, build::Build *build, Executable *executable) {
+    ...
+}
+
+@export
+type Library: Target = struct {
+    build::Project *project;
+    string name;
+
+    DynArray<string> sources;
+    DynArray<dyn build::Target *> dependencies;
+    DynArray<string> outputs;
+};
+
+@export
+type Executable: Target = struct {
+    build::Project *project;
+    string name;
+
+    DynArray<string> sources;
+    DynArray<dyn build::Target *> dependencies;
+    DynArray<string> outputs;
+};
+
+@export
+fn Library *library(build::Project *project, string name) {
+    Library *library = project.arena.alloc<Library>();
+
+    *library = {
+        .project = project,
+        .name = name,
+        .sources = .create(project.arena),
+        .dependencies = .create(project.arena),
+        .outputs = .create(project.arena),
+    };
+
+    library.outputs.push("build/lib" + name + ".a");
+
+    project.add_target(library);
+    return library;
+}
+
+@export
+fn Executable *executable(build::Project *project, string name) {
+    Executable *executable = project.arena.alloc<Executable>();
+
+    *executable = {
+        .project = project,
+        .name = name,
+        .sources = .create(project.arena),
+        .dependencies = .create(project.arena),
+        .outputs = .create(project.arena),
+    };
+
+    executable.outputs.push("build/" + name);
+
+    project.add_target(executable);
+    return executable;
+}
+
+@export
+fn Library *Library.sources(Library *self, string[] sources) {
+    self.sources = .from_splice(sources);
+    return self;
+}
+
+@export
+fn Library *Library.depend(Library *self, dyn build::Target *dependency) {
+    self.dependencies.push(dependency);
+    return self;
+}
+
+@export
+fn Library *Library.output(Library *self, string output) {
+    self.outputs = .from_splice({ output });
+    return self;
+}
+
+@export
+fn Executable *Executable.sources(Executable *self, string[] sources) {
+    self.sources = .from_splice(sources);
+    return self;
+}
+
+@export
+fn Executable *Executable.depend(Executable *self, dyn build::Target *dependency) {
+    self.dependencies.push(dependency);
+    return self;
+}
+
+@export
+fn Executable *Executable.output(Executable *self, string output) {
+    self.outputs = .from_splice({ output });
+    return self;
+}
+
+fn none Library.plan(Library *self, build::Build *build) {
+    Profile *profile = coda_profile(build);
+    profile.toolchain.plan_library(build, self);
+}
+
+fn none Executable.plan(Executable *self, build::Build *build) {
+    Profile *profile = coda_profile(build);
+    profile.toolchain.plan_executable(build, self);
+}
+
+@export
+fn Profile *debug(build::Project *project) {
+    return profile(project, "debug")
+        .toolchain(native());
+}
+
+@export
+fn Profile *release(build::Project *project) {
+    return profile(project, "release")
+        .toolchain(llvm());
+}
+
+@export
+fn Executable *default(build::Project *project) {
+    debug(project);
+    release(project);
+
+    return executable(project, project.name)
+        .sources({"src/**/*.coda"});
+}
