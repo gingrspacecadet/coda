@@ -10,7 +10,7 @@ constraint Toolchain {
 }
 
 @export
-type Profile = struct {
+type Profile: build::Profile = struct {
     string name;
     dyn Toolchain toolchain;
 };
@@ -184,9 +184,17 @@ fn Profile *release(build::Project *project) {
 
 @export
 fn Executable *default(build::Project *project) {
-    debug(project);
+    Profile *debug_profile = debug(project);
     release(project);
 
-    return executable(project, project.name)
-        .sources({"src/**/*.coda"});
+    project.set_default_profile(debug_profile);
+
+    Executable *executable = executable(project, project.name)
+        .sources({
+            "src/**/*.coda",
+        });
+
+    project.add_default_target(executable);
+
+    return executable;
 }

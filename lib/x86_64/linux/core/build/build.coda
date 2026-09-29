@@ -29,6 +29,9 @@ type Project = struct {
 
     DynArray<dyn Profile *> profiles;
     DynArray<dyn Target *> targets;
+
+    dyn Profile *default_profile;
+    DynArray<dyn Target *> default_targets;
 };
 
 @export
@@ -47,6 +50,8 @@ fn Project Project.create(string name) {
         .arena = .create(),
         .profiles = .create(),
         .targets = .create(),
+        .default_profile = none,
+        .default_targets = .create(),
     };
 }
 
@@ -58,6 +63,16 @@ fn none Project.add_profile(Project *self, dyn Profile *profile) {
 @export
 fn none Project.add_target(Project *self, dyn Target *target) {
     self.targets.push(target);
+}
+
+@export
+fn none Project.set_default_profile(Project *self, dyn Profile *profile) {
+    self.default_profile = profile;
+}
+
+@export
+fn none Project.add_default_target(Project *self, dyn Target *target) {
+    self.default_targets.push(target);
 }
 
 @export
@@ -82,5 +97,10 @@ fn none Build.add_action(Build *self, dyn Action *action) {
 
 @export
 fn none Build.run(Build *self) {
-    // TODO 
+    // TODO
+}
+
+@export
+fn none run(Project *project, int argc, char[][] argv) {
+    // TODO
 }
