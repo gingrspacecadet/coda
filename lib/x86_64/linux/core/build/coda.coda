@@ -1,6 +1,7 @@
 module core::build::coda;
 
 include core::build : build;
+include std::string : string;
 
 @export
 constraint Toolchain {
@@ -99,7 +100,7 @@ fn Library *library(build::Project *project, string name) {
         .outputs = .create(project.arena),
     };
 
-    library.outputs.push("build/lib" + name + ".a");
+    library.outputs.push(string::concat("build/lib", name, ".a", project.arena));
 
     project.add_target(library);
     return library;
@@ -117,7 +118,7 @@ fn Executable *executable(build::Project *project, string name) {
         .outputs = .create(project.arena),
     };
 
-    executable.outputs.push("build/" + name);
+    executable.outputs.push(string::concat("build/", name, project.arena));
 
     project.add_target(executable);
     return executable;

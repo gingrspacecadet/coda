@@ -2,13 +2,18 @@ include core::build : build;
 include core::build::c : c;
 
 @export
-Project project = .create("raylib");
-
-@export
-c::Library* raylib = c::library(&project, "raylib")
+c::Library *raylib = c::library(&project, "raylib")
     .sources({
         "src/*.c",
     })
     .include_dirs({
         "src",
     });
+
+@entry
+fn int main() {
+    Project project = .create("raylib");
+    c::default(&project)
+        .depend(raylib);
+    return build::run(&project);
+}
