@@ -24,6 +24,7 @@ typedef enum {
     LIR_OPERAND_FLOAT,
     LIR_OPERAND_BOOL,
     LIR_OPERAND_SYMBOL,
+    LIR_OPERAND_OFFSET,
 } LirOperandKind;
 
 typedef struct {
@@ -37,6 +38,7 @@ typedef struct {
         double float_value;
         bool bool_value;
         Symbol *symbol;
+        size_t offset;
     };
 } LirOperand;
 
@@ -164,6 +166,7 @@ void lir_return(LirFunction *function, LirBlockId block_id, LirOperand *value);
 void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Array(LirOperand) args);
 void lir_branch(LirFunction *function, LirBlockId block_id, LirOperand condition, LirBlockId then_block, Array(LirOperand) then_args, LirBlockId else_block, Array(LirOperand) else_args);
 
+//! TODO: convert the rest of these
 LirOperand lir_operand_value(LirValueId value, HirType *type);
 LirOperand lir_operand_int(int64_t value, HirType *type);
 LirOperand lir_operand_uint(uint64_t value, HirType *type);
@@ -171,6 +174,12 @@ LirOperand lir_operand_float(double value, HirType *type);
 LirOperand lir_operand_bool(bool value, HirType *type);
 LirOperand lir_operand_symbol(Symbol *symbol, HirType *type);
 LirOperand lir_operand_invalid(void);
+static inline LirOperand lir_operand_offset(size_t offset) {
+    return (LirOperand){
+        .kind = LIR_OPERAND_OFFSET,
+        .offset = offset,
+    };
+}
 
 const char *lir_opcode_name(LirOpcode opcode);
 void lir_print(FILE *out, const LirModule *module);

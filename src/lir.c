@@ -307,6 +307,10 @@ static void lir_print_operand(FILE *out, LirOperand operand) {
             fprintf(out, "@%.*s", (int)operand.symbol->name.ident.length, operand.symbol->name.ident.data);
             break;
 
+        case LIR_OPERAND_OFFSET:
+            fprintf(out, "$%zu", operand.offset);
+            break;
+
         case LIR_OPERAND_INVALID:
             fprintf(out, "<invalid>");
             break;

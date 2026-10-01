@@ -448,3 +448,19 @@ void error_not_mutable(Diags *diags, Span span) {
 
     diag_finish(&b);
 }
+
+void error_expected_member(Diags *diags, String found, HirType *got, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_MEMBER,
+        span,
+        format(
+            diags->arena,
+            "Expected a type that has members, found %.*s",
+            string_fmt(found)
+        )
+    );
+
+    diag_finish(&b);
+}

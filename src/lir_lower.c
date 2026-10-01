@@ -298,7 +298,11 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             return lir_lower_load(lower, place);
         }
 
-        case HIR_EXPR_FIELD:
+        case HIR_EXPR_FIELD: {
+            LirPlace place = lir_lower_place(lower, expr);
+            return lir_lower_load(lower, place);
+        }
+
         case HIR_EXPR_INIT:
         case HIR_EXPR_LAMBDA:
             assert(!"HIR expression not yet lowered");
@@ -433,6 +437,35 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             return (LirPlace){
                 .address = lir_operand_value(address, base.type),
                 .type = element_type,
+            };
+        }
+
+        case HIR_EXPR_FIELD: {
+            HirType *object_type = expr->field.object->type;
+            LirOperand base;
+
+            if (object_type->kind == HIR_TYPE_POINTER) {
+                base = lir_lower_expr(lower, expr->field.object);
+            } else {
+                LirPlace object = lir_lower_place(lower, expr->field.object);
+                base = object.address;
+            }
+
+            if (expr->field.field->offset == 0) {
+                return (LirPlace){
+                    .address = base,
+                    .type = expr->field.field->type
+                };
+            }
+
+            LirOperand offset = lir_operand_offset(expr->field.field->offset);
+            LirOperand operands[2] = {base, offset};
+
+            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = operands, .len = 2});
+
+            return (LirPlace){
+                .address = lir_operand_value(address, base.type),
+                .type = expr->field.field->type,
             };
         }
     }

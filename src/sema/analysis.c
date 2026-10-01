@@ -480,6 +480,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
         default:
             hir->kind = HIR_TYPE_ERROR;
             //! TODO: internal compiler error
+            fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
             break;
     }
 
@@ -1009,6 +1010,20 @@ static bool is_integer(HirType *type) {
     return true;
 }
 
+static HirType *sema_resolve_named(HirType *type) {
+    while (type != NULL && type->kind == HIR_TYPE_NAMED)
+        type = type->named.symbol->type;
+
+    return type;
+}
+
+static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable) {
+    HirType *copy = arena_alloc(sema->arena, sizeof(HirType));
+    *copy = *type;
+    copy->mutable = mutable;
+    return copy;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
 
@@ -1303,7 +1318,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 hir->field.object = object;
             }
 
-            HirType *object_type = object->type;
+            HirType *object_type = sema_resolve_named(object->type);
             HirField *field = NULL;
 
             switch (object_type->kind) {
@@ -1316,7 +1331,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     break;
 
                 default:
-                    //! TODO: expected struct or union
+                    error_expected_member(sema->diags, ast->member.member.ident, object->type, ast->span);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
             }
@@ -1328,7 +1343,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             hir->field.field = field;
-            hir->type = field->type;
+            hir->type = sema_type_with_mutability(sema, field->type, object->type->mutable);
 
             if (expected != NULL)
                 return sema_expr_coerce(sema, hir, expected);
@@ -1483,6 +1498,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         default:
             hir->kind = HIR_EXPR_ERROR;
             //! TODO: internal compiler error
+fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
             break;
     }
 
@@ -2040,6 +2056,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         default:
             hir->kind = HIR_STMT_ERROR;
             //! TODO: internal compiler error
+fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
             break;
     }
 
@@ -2051,6 +2068,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
+        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
@@ -2058,6 +2076,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error
+        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
@@ -2146,11 +2165,13 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
+        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
     if (symbol->kind != SYMBOL_TYPE) {
         //! TODO: internal compiler error
+        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
@@ -2220,6 +2241,7 @@ void sema_decl(Sema *sema, AstDecl *ast) {
             break;
 
         //! TODO: internal compiler error
+        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
 
         case AST_DECL_ERROR:
         default:
