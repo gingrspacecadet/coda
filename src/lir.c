@@ -276,6 +276,8 @@ const char *lir_opcode_name(LirOpcode opcode) {
         case LIR_OP_ADDR: return "addr";
         case LIR_OP_ADDR_ADD: return "addr_add";
         case LIR_OP_CALL: return "call";
+        case LIR_OP_EXTRACT: return "extract";
+        case LIR_OP_INSERT: return "insert";
     }
 
     return "<invalid>";

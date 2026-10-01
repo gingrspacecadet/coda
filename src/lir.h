@@ -75,6 +75,9 @@ typedef enum {
     LIR_OP_ADDR_ADD,
 
     LIR_OP_CALL,
+
+    LIR_OP_EXTRACT,
+    LIR_OP_INSERT,
 } LirOpcode;
 
 typedef struct {

@@ -1498,7 +1498,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         default:
             hir->kind = HIR_EXPR_ERROR;
             //! TODO: internal compiler error
-fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
+            fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
             break;
     }
 
