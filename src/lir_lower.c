@@ -198,6 +198,8 @@ static LirOperand lir_lower_logical_or(LirLower *lower, HirExpr *expr);
 static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr);
 static LirOperand lir_lower_load(LirLower *lower, LirPlace place);
 static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
+static HirExpr *lir_field_root(HirExpr *expr);
+static bool lir_field_is_ssa(HirExpr *expr);
 
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
@@ -294,17 +296,14 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_FIELD: {
-            HirExpr *object = expr->field.object;
-
-            if (object->kind == HIR_EXPR_UNARY && object->unary.op == AST_UNARY_DEREF) {
+            if (!lir_field_is_ssa(expr)) {
                 LirPlace place = lir_lower_place(lower, expr);
                 return lir_lower_load(lower, place);
             }
 
-            LirOperand aggregate = lir_lower_expr(lower, object);
+            LirOperand aggregate = lir_lower_expr(lower, expr->field.object);
             LirOperand offset = lir_operand_offset(expr->field.field->offset);
             LirOperand operands[2] = {aggregate, offset};
-
             LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->type, (Array){.data = operands, .len = 2});
             return lir_operand_value(result, expr->type);
         }
@@ -731,7 +730,24 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
     lir_bind_snapshot_params(lower, exit, &snapshot);
 }
 
-static void lir_lower_aggregate_store(LirLower *lower, HirExpr *field, LirOperand value) {
+static HirExpr *lir_field_root(HirExpr *expr) {
+    while (expr->kind == HIR_EXPR_FIELD)
+        expr = expr->field.object;
+
+    return expr;
+}
+
+static bool lir_field_is_ssa(HirExpr *expr) {
+    HirExpr *root = lir_field_root(expr);
+
+    if (root->kind != HIR_EXPR_VALUE)
+        return false;
+
+    return root->value.symbol->kind == SYMBOL_LOCAL ||
+           root->value.symbol->kind == SYMBOL_PARAMETER;
+}
+
+static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *field, LirOperand value) {
     HirExpr *object = field->field.object;
     LirOperand aggregate = lir_lower_expr(lower, object);
     LirOperand offset = lir_operand_offset(field->field.field->offset);
@@ -741,17 +757,21 @@ static void lir_lower_aggregate_store(LirLower *lower, HirExpr *field, LirOperan
         value,
     };
 
-    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, object->type, (Array){.data = operands, .len = 3});
-    LirOperand updated = lir_operand_value(result, object->type);
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, aggregate.type, (Array){.data = operands, .len = 3});
+    LirOperand updated = lir_operand_value(result, aggregate.type);
 
     if (object->kind == HIR_EXPR_VALUE) {
         Symbol *symbol = object->value.symbol;
         assert(symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER);
         lir_bind(lower, symbol, updated);
-        return;
+        return updated;
     }
 
-    assert(!"nested aggregate field assignment not yet lowered");
+    if (object->kind == HIR_EXPR_FIELD)
+        return lir_lower_aggregate_store(lower, object, updated);
+
+    assert(!"aggregate field does not terminate in an SSA value");
+    return lir_operand_invalid();
 }
 
 static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
@@ -783,7 +803,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 return;
             }
 
-            if (target->kind == HIR_EXPR_FIELD && target->field.object->kind != HIR_EXPR_UNARY) {
+            if (target->kind == HIR_EXPR_FIELD && lir_field_is_ssa(target)) {
                 lir_lower_aggregate_store(lower, target, value);
                 return;
             }

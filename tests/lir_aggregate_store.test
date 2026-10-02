@@ -1,0 +1,56 @@
+name: lir aggregate store
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+
+type Player = struct {
+    struct {
+        int64 x; int64 y;
+    } position;
+};
+
+fn int64 get_y(Player player) {
+    return player.position.y;
+}
+
+fn none set_y(mut Player player, int64 y) {
+    player.position.y = y;
+    return;
+}
+
+fn int64 get_pointer_y(Player* player) {
+    return player.position.y;
+}
+
+fn none set_pointer_y(mut Player* player, int64 y) {
+    player.position.y = y;
+    return;
+}
+
+[lir]
+get_y:
+    block0(%0):
+        %1 = extract %0, $0
+        %2 = extract %1, $8
+        return %2
+
+set_y:
+    block0(%0, %1):
+        %2 = extract %0, $0
+        %3 = insert %2, $8, %1
+        %4 = insert %0, $0, %3
+        return
+
+get_pointer_y:
+    block0(%0):
+        %1 = addr_add %0, $8
+        %2 = load %1
+        return %2
+
+set_pointer_y:
+    block0(%0, %1):
+        %2 = addr_add %0, $8
+        store %2, %1
+        return
