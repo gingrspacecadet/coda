@@ -670,6 +670,7 @@ static HirField *sema_field_lookup(Array(HirField) fields, AstName name) {
     return NULL;
 }
 
+static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable);
 static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
     if (expr->type == NULL || expr->type->kind != HIR_TYPE_POINTER)
         return expr;
@@ -679,7 +680,7 @@ static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
     *deref = (HirExpr) {
         .span = expr->span,
         .kind = HIR_EXPR_UNARY,
-        .type = expr->type->pointer.pointee,
+        .type = sema_type_with_mutability(sema, expr->type->pointer.pointee, expr->type->pointer.pointee->mutable),
         .unary = {
             .op = AST_UNARY_DEREF,
             .operand = expr,
@@ -1253,11 +1254,18 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             switch (object_type->kind) {
                 case HIR_TYPE_ARRAY:
-                    hir->type = object_type->array.element;
+                    hir->type = sema_type_with_mutability(sema, object_type->array.element, object_type->mutable);
+                    HirExpr *index = hir->index.index;
+
+                    if (index->kind == HIR_EXPR_LITERAL && index->literal.kind == HIR_LITERAL_INTEGER && index->literal.integer >= object_type->array.length) {
+                        error_index_out_of_bounds(sema->diags, index->span, index->literal.integer, object_type->array.length);
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
                     break;
 
                 case HIR_TYPE_SLICE:
-                    hir->type = object_type->slice.element;
+                    hir->type = sema_type_with_mutability(sema, object_type->slice.element, object_type->mutable);
                     break;
 
                 default:

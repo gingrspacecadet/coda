@@ -805,30 +805,88 @@ static bool lir_expr_is_ssa(HirExpr *expr) {
     }
 }
 
-static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *field, LirOperand value) {
-    HirExpr *object = field->field.object;
-    LirOperand aggregate = lir_lower_expr(lower, object);
-    LirOperand offset = lir_operand_offset(field->field.field->offset);
-    LirOperand operands[3] = {
-        aggregate,
-        offset,
-        value,
-    };
+static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr) {
+    size_t constant_offset;
 
-    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, aggregate.type, (Array){.data = operands, .len = 3});
-    LirOperand updated = lir_operand_value(result, aggregate.type);
+    if (lir_constant_array_offset(expr, &constant_offset))
+        return lir_operand_offset(constant_offset);
+
+    HirExpr *index = expr->index.index;
+    LirOperand index_operand = lir_lower_expr(lower, index);
+    HirType *element_type = expr->type;
+
+    LirOperand scale = hir_type_is_signed_integer(index_operand.type)
+        ? lir_operand_int((int64_t)element_type->size, index_operand.type)
+        : lir_operand_uint((uint64_t)element_type->size, index_operand.type);
+
+    LirOperand operands[2] = {index_operand, scale};
+
+    LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_operand.type, (Array){.data = operands, .len = 2});
+
+    return lir_operand_value(offset, index_operand.type);
+}
+
+static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *target, LirOperand value) {
+    HirExpr *object;
+    LirOperand aggregate;
+    LirOperand offset;
+    LirOperand updated;
+
+    switch (target->kind) {
+        case HIR_EXPR_FIELD: {
+            object = target->field.object;
+            aggregate = lir_lower_expr(lower, object);
+            offset = lir_operand_offset(target->field.field->offset);
+
+            LirOperand operands[3] = {aggregate, offset, value};
+
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, aggregate.type, (Array){.data = operands, .len = 3});
+
+            updated = lir_operand_value(result, aggregate.type);
+            break;
+        }
+
+        case HIR_EXPR_INDEX: {
+            object = target->index.object;
+            aggregate = lir_lower_expr(lower, object);
+            offset = lir_lower_array_offset(lower, target);
+
+            bool constant = offset.kind == LIR_OPERAND_OFFSET;
+
+            if (constant) {
+                LirOperand operands[3] = {aggregate, offset, value};
+
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, aggregate.type, (Array){.data = operands, .len = 3});
+
+                updated = lir_operand_value(result, aggregate.type);
+            } else {
+                LirOperand operands[3] = {aggregate, offset, value};
+
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT_DYNAMIC, aggregate.type, (Array){.data = operands, .len = 3});
+
+                updated = lir_operand_value(result, aggregate.type);
+            }
+
+            break;
+        }
+
+        default:
+            assert(!"aggregate store target is not an aggregate expression");
+    }
 
     if (object->kind == HIR_EXPR_VALUE) {
         Symbol *symbol = object->value.symbol;
+
         assert(symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER);
+
         lir_bind(lower, symbol, updated);
         return updated;
     }
 
-    if (object->kind == HIR_EXPR_FIELD)
+    if (object->kind == HIR_EXPR_FIELD || object->kind == HIR_EXPR_INDEX)
         return lir_lower_aggregate_store(lower, object, updated);
 
-    assert(!"aggregate field does not terminate in an SSA value");
+    assert(!"aggregate field/index does not terminate in an SSA value");
     return lir_operand_invalid();
 }
 
@@ -861,7 +919,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 return;
             }
 
-            if (target->kind == HIR_EXPR_FIELD && lir_expr_is_ssa(target)) {
+            if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(target)) {
                 lir_lower_aggregate_store(lower, target, value);
                 return;
             }

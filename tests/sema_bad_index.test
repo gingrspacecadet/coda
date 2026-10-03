@@ -1,0 +1,15 @@
+name: out of bounds index
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+type Values = int64[4];
+
+fn int64 get(Values values) {
+    return values[3];
+}
+
+fn int64 bad(Values values) {
+    return values[4];
+}

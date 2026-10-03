@@ -5,11 +5,11 @@ errors: 0
 
 [source]
 fn int64 get(int64[4] *p, int64 i) {
-    return (*p)[i];
+    return p[i];
 }
 
 fn none set(mut int64[4]* p, int64 i, int64 value) {
-    (*p)[i] = value;
+    p[i] = value;
     return;
 }
 

@@ -17,7 +17,7 @@
         }
     ],
     "figura.librariesFolderPath": "/home/gingrspacecadet/.local/share/.minecraft/figura/avatars/libraries/",
-    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.errorSquiggles": "enabled",
     "python-envs.pythonProjects": [
         {
             "path": "test",

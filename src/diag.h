@@ -36,6 +36,8 @@ typedef enum {
     E_MODULE_NOT_FOUND,
     E_NOT_MUTABLE,
     E_EXPECTED_MEMBER,
+    E_EXPECTED_INTEGER,
+    E_INDEX_OOB,
 } DiagCode;
 
 typedef struct {

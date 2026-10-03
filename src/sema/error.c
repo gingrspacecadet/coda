@@ -466,9 +466,25 @@ void error_expected_integer(Diags *diags, Span span) {
     DiagBuilder b = diag_begin(
         diags,
         DIAG_ERROR,
-        E_EXPECTED_MEMBER,
+        E_EXPECTED_INTEGER,
         span,
         STRING("Expected an integer")
+    );
+
+    diag_finish(&b);
+}
+
+void error_index_out_of_bounds(Diags *diags, Span span, size_t index, size_t bounds) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_INDEX_OOB,
+        span,
+        format(
+            diags->arena, 
+            "Cannot index into array of length %zu at %zu, it is out of bounds",
+            index, bounds
+        )
     );
 
     diag_finish(&b);

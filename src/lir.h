@@ -80,6 +80,7 @@ typedef enum {
     LIR_OP_INSERT,
 
     LIR_OP_EXTRACT_DYNAMIC,
+    LIR_OP_INSERT_DYNAMIC,
 } LirOpcode;
 
 typedef struct {

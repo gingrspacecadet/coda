@@ -213,7 +213,7 @@ AstType *parse_enum_type(Parser *p) {
 }
 
 AstType *parse_type_single(Parser *p) {
-    bool mutable = match(p, TK_KW_MUT);
+    bool prefix_mut = match(p, TK_KW_MUT);
 
     AstType *base = NULL;
 
@@ -229,8 +229,7 @@ AstType *parse_type_single(Parser *p) {
         base->kind = AST_TYPE_FN;
         base->span = start.span;
         base->fn.ret = ret;
-        base->fn.params =
-            array_create(p->arena, sizeof(AstType *));
+        base->fn.params = array_create(p->arena, sizeof(AstType *));
 
         if (!at(p, TK_RPAREN)) {
             for (;;) {
@@ -289,7 +288,7 @@ AstType *parse_type_single(Parser *p) {
         base->span = p->current.span;
     }
 
-    base->mutable = mutable;
+    base->mutable = false;
 
     for (;;) {
         bool postfix_mut = match(p, TK_KW_MUT);
@@ -302,6 +301,11 @@ AstType *parse_type_single(Parser *p) {
             ptr->mutable = postfix_mut;
             ptr->pointer.pointee = base;
             ptr->pointer.optional = match(p, TK_QUERY);
+
+            if (prefix_mut) {
+                base->mutable = true;
+                prefix_mut = false;
+            }
 
             base = ptr;
             continue;
@@ -325,6 +329,11 @@ AstType *parse_type_single(Parser *p) {
                 expect(p, TK_RBRACK);
             }
 
+            if (prefix_mut) {
+                array->mutable = true;
+                prefix_mut = false;
+            }
+
             base = array;
             continue;
         }
@@ -334,6 +343,9 @@ AstType *parse_type_single(Parser *p) {
 
         break;
     }
+
+    if (prefix_mut)
+        base->mutable = true;
 
     return base;
 }

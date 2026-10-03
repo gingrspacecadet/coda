@@ -145,5 +145,6 @@ void error_module_not_found(Diags *diags, Path path, Span span);
 void error_not_mutable(Diags *diags, Span span);
 void error_expected_member(Diags *diags, String found, HirType *got, Span span);
 void error_expected_integer(Diags *diags, Span span);
+void error_index_out_of_bounds(Diags *diags, Span span, size_t index, size_t bounds);
 
 #endif
