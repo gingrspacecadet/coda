@@ -467,7 +467,29 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             HirType *object_type = expr->index.object->type;
             LirOperand base;
 
-            if (object_type->kind == HIR_TYPE_POINTER) {
+            if (object_type->kind == HIR_TYPE_SLICE) {
+                LirOperand aggregate = lir_lower_expr(lower, expr->index.object);
+                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
+
+                *pointer_type = (HirType){
+                    .kind = HIR_TYPE_POINTER,
+                    .mutable = false,
+                    .size = sizeof(void *),
+                    .align = _Alignof(void *),
+                    .pointer = {
+                        .pointee = object_type->slice.element,
+                        .optional = false,
+                    },
+                };
+
+                LirOperand operands[2] = {
+                    aggregate,
+                    lir_operand_offset(0),
+                };
+
+                LirValueId data = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, pointer_type, (Array){.data = operands, .len = 2});
+                base = lir_operand_value(data, pointer_type);
+            } else if (object_type->kind == HIR_TYPE_POINTER) {
                 base = lir_lower_expr(lower, expr->index.object);
             } else {
                 LirPlace object = lir_lower_place(lower, expr->index.object);
@@ -530,7 +552,7 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             };
         }
     }
-
+    fprintf(stderr, "lir_lower_place: kind=%d type=%p\n", expr->kind, (void *)expr->type);
     assert(!"expression is not an lvalue");
     return (LirPlace){0};
 }
@@ -798,7 +820,7 @@ static bool lir_expr_is_ssa(HirExpr *expr) {
             return lir_expr_is_ssa(expr->field.object);
 
         case HIR_EXPR_INDEX:
-            return lir_expr_is_ssa(expr->index.object);
+            return expr->index.object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(expr->index.object);
 
         default:
             return false;
