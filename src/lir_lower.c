@@ -199,7 +199,7 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr);
 static LirOperand lir_lower_load(LirLower *lower, LirPlace place);
 static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
 static HirExpr *lir_field_root(HirExpr *expr);
-static bool lir_field_is_ssa(HirExpr *expr);
+static bool lir_expr_is_ssa(HirExpr *expr);
 
 static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
     HirType *type = expr->index.object->type;
@@ -209,8 +209,7 @@ static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
 
     HirExpr *index = expr->index.index;
 
-    if (index->kind != HIR_EXPR_LITERAL ||
-        index->literal.kind != HIR_LITERAL_INTEGER)
+    if (index->kind != HIR_EXPR_LITERAL || index->literal.kind != HIR_LITERAL_INTEGER)
         return false;
 
     uint64_t value = index->literal.integer;
@@ -320,7 +319,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_FIELD: {
-            if (!lir_field_is_ssa(expr)) {
+            if (!lir_expr_is_ssa(expr)) {
                 LirPlace place = lir_lower_place(lower, expr);
                 return lir_lower_load(lower, place);
             }
@@ -336,11 +335,28 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             HirExpr *object = expr->index.object;
             HirExpr *index = expr->index.index;
 
-            if (object->type->kind == HIR_TYPE_ARRAY && index->kind == HIR_EXPR_LITERAL) {
-                size_t offset = index->literal.integer * object->type->array.element->size;
+            if (object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(object)) {
+                size_t offset;
+
+                if (lir_constant_array_offset(expr, &offset)) {
+                    LirOperand aggregate = lir_lower_expr(lower, object);
+                    LirOperand operands[2] = {aggregate, lir_operand_offset(offset)};
+                    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->type, (Array){.data = operands, .len = 2});
+                    return lir_operand_value(result, expr->type);
+                }
+
                 LirOperand aggregate = lir_lower_expr(lower, object);
-                LirOperand operands[2] = {aggregate, lir_operand_offset(offset)};
-                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->type, (Array){.data=operands,.len=2});
+                LirOperand index_operand = lir_lower_expr(lower, index);
+                LirOperand scale = hir_type_is_signed_integer(index_operand.type)
+                    ? lir_operand_int((int64_t)object->type->array.element->size, index_operand.type)
+                    : lir_operand_uint((uint64_t)object->type->array.element->size, index_operand.type);
+
+                LirOperand mul_operands[2] = {index_operand, scale};
+                LirValueId lir_offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_operand.type, (Array){.data = mul_operands, .len = 2});
+
+                LirOperand extract_operands[2] = {aggregate, lir_operand_value(lir_offset, index_operand.type)};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT_DYNAMIC, expr->type, (Array){.data = extract_operands, .len = 2});
+
                 return lir_operand_value(result, expr->type);
             }
 
@@ -772,14 +788,21 @@ static HirExpr *lir_field_root(HirExpr *expr) {
     return expr;
 }
 
-static bool lir_field_is_ssa(HirExpr *expr) {
-    HirExpr *root = lir_field_root(expr);
+static bool lir_expr_is_ssa(HirExpr *expr) {
+    switch (expr->kind) {
+        case HIR_EXPR_VALUE:
+            return expr->value.symbol->kind == SYMBOL_LOCAL ||
+                   expr->value.symbol->kind == SYMBOL_PARAMETER;
 
-    if (root->kind != HIR_EXPR_VALUE)
-        return false;
+        case HIR_EXPR_FIELD:
+            return lir_expr_is_ssa(expr->field.object);
 
-    return root->value.symbol->kind == SYMBOL_LOCAL ||
-           root->value.symbol->kind == SYMBOL_PARAMETER;
+        case HIR_EXPR_INDEX:
+            return lir_expr_is_ssa(expr->index.object);
+
+        default:
+            return false;
+    }
 }
 
 static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *field, LirOperand value) {
@@ -838,7 +861,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 return;
             }
 
-            if (target->kind == HIR_EXPR_FIELD && lir_field_is_ssa(target)) {
+            if (target->kind == HIR_EXPR_FIELD && lir_expr_is_ssa(target)) {
                 lir_lower_aggregate_store(lower, target, value);
                 return;
             }

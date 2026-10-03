@@ -461,3 +461,15 @@ void error_expected_member(Diags *diags, String found, HirType *got, Span span) 
 
     diag_finish(&b);
 }
+
+void error_expected_integer(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_EXPECTED_MEMBER,
+        span,
+        STRING("Expected an integer")
+    );
+
+    diag_finish(&b);
+}

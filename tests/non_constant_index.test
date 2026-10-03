@@ -1,0 +1,18 @@
+name: non-constant index
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Values = int64[4];
+
+fn int64 get(Values values, int64 i) {
+    return values[i];
+}
+
+[lir]
+get:
+    block0(%0, %1):
+        %2 = mul %1, 8
+        %3 = extract_dynamic %0, %2
+        return %3

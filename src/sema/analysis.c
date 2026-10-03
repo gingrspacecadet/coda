@@ -1018,8 +1018,19 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
             hir->literal = sema_literal(sema, ast->literal);
+
             if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
+                return sema_expr_coerce(sema, hir, expected);
+
+            switch (hir->literal.kind) {
+                case HIR_LITERAL_INTEGER:
+                    hir->type = sema_builtin_type(sema, BUILTIN_INT64);
+                    break;
+
+                default:
+                    break;
+            }
+
             break;
 
         case AST_EXPR_IDENT: {
@@ -1254,7 +1265,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     return hir;
             }
 
-            // TODO: require integer index
+            if (!is_integer(hir->index.index->type)) {
+                error_expected_integer(sema->diags, hir->index.index->span);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
 
             if (expected != NULL)
                 return sema_expr_coerce(sema, hir, expected);
