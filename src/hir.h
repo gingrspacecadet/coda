@@ -24,7 +24,6 @@ typedef struct HirModule HirModule;
 typedef enum {
     HIR_TYPE_ERROR,
     HIR_TYPE_BUILTIN,
-    HIR_TYPE_NAMED,
     HIR_TYPE_POINTER,
     HIR_TYPE_SLICE,
     HIR_TYPE_ARRAY,
@@ -55,12 +54,11 @@ struct HirType {
     size_t size;
     size_t align;
 
+    Symbol *nominal;
+    HirType *base;
+
     union {
         BuiltinType builtin;
-
-        struct {
-            Symbol *symbol;
-        } named;
 
         struct {
             HirType *pointee;

@@ -201,6 +201,30 @@ static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
 static HirExpr *lir_field_root(HirExpr *expr);
 static bool lir_field_is_ssa(HirExpr *expr);
 
+static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
+    HirType *type = expr->index.object->type;
+
+    if (type == NULL || type->kind != HIR_TYPE_ARRAY)
+        return false;
+
+    HirExpr *index = expr->index.index;
+
+    if (index->kind != HIR_EXPR_LITERAL ||
+        index->literal.kind != HIR_LITERAL_INTEGER)
+        return false;
+
+    uint64_t value = index->literal.integer;
+
+    assert(value < type->array.length);
+    assert(value <= SIZE_MAX);
+
+    HirType *element = type->array.element;
+    assert(element->size == 0 || value <= SIZE_MAX / element->size);
+
+    *offset = (size_t)value * element->size;
+    return true;
+}
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -309,6 +333,17 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_INDEX: {
+            HirExpr *object = expr->index.object;
+            HirExpr *index = expr->index.index;
+
+            if (object->type->kind == HIR_TYPE_ARRAY && index->kind == HIR_EXPR_LITERAL) {
+                size_t offset = index->literal.integer * object->type->array.element->size;
+                LirOperand aggregate = lir_lower_expr(lower, object);
+                LirOperand operands[2] = {aggregate, lir_operand_offset(offset)};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->type, (Array){.data=operands,.len=2});
+                return lir_operand_value(result, expr->type);
+            }
+
             LirPlace place = lir_lower_place(lower, expr);
             return lir_lower_load(lower, place);
         }

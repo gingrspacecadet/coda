@@ -23,9 +23,6 @@ static String sema_type_string(Arena *arena, HirType *type) {
             }
             break;
 
-        case HIR_TYPE_NAMED:
-            return type->named.symbol->name.ident;
-
         case HIR_TYPE_POINTER: {
             String pointee = sema_type_string(arena, type->pointer.pointee);
             return format(

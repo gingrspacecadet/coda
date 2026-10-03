@@ -151,6 +151,9 @@ static bool sema_type_equal(HirType *a, HirType *b) {
 
     if (a->kind != b->kind)
         return false;
+        
+    if (a->nominal != NULL || b->nominal != NULL)
+        return a->nominal == b->nominal;
 
     switch (a->kind) {
         case HIR_TYPE_ERROR:
@@ -158,9 +161,6 @@ static bool sema_type_equal(HirType *a, HirType *b) {
 
         case HIR_TYPE_BUILTIN:
             return a->builtin == b->builtin;
-
-        case HIR_TYPE_NAMED:
-            return a->named.symbol == b->named.symbol;
 
         case HIR_TYPE_POINTER:
             return a->pointer.optional == b->pointer.optional &&
@@ -280,6 +280,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
     switch (ast->kind) {
         case AST_TYPE_NAMED: {
             Symbol *symbol = sema_lookup_path(sema, ast->named.path);
+
             if (symbol == NULL) {
                 error_unknown_type(sema->diags, ast->named.path, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
@@ -298,19 +299,9 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 return hir;
             }
 
-            if (symbol->type->kind == HIR_TYPE_BUILTIN) {
-                hir->kind = HIR_TYPE_BUILTIN;
-                hir->builtin = symbol->type->builtin;
-                hir->size = symbol->type->size;
-                hir->align = symbol->type->align;
-                return hir;
-            }
-
-            hir->kind = HIR_TYPE_NAMED;
-            hir->named.symbol = symbol;
-            hir->size = symbol->type->size;
-            hir->align = symbol->type->align;
-            break;
+            *hir = *symbol->type;
+            hir->mutable = ast->mutable;
+            return hir;
         }
 
         case AST_TYPE_POINTER:
@@ -1010,13 +1001,6 @@ static bool is_integer(HirType *type) {
     return true;
 }
 
-static HirType *sema_resolve_named(HirType *type) {
-    while (type != NULL && type->kind == HIR_TYPE_NAMED)
-        type = type->named.symbol->type;
-
-    return type;
-}
-
 static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable) {
     HirType *copy = arena_alloc(sema->arena, sizeof(HirType));
     *copy = *type;
@@ -1318,7 +1302,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 hir->field.object = object;
             }
 
-            HirType *object_type = sema_resolve_named(object->type);
+            HirType *object_type = object->type;
             HirField *field = NULL;
 
             switch (object_type->kind) {
@@ -2056,7 +2040,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         default:
             hir->kind = HIR_STMT_ERROR;
             //! TODO: internal compiler error
-fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
+            fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
             break;
     }
 
@@ -2065,14 +2049,13 @@ fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
+    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
-
-    symbol->span = ast->span;
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error
@@ -2161,21 +2144,31 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 
 void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
-    symbol->span = ast->span;
 
     if (symbol == NULL) {
-        //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
     if (symbol->kind != SYMBOL_TYPE) {
-        //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
 
-    symbol->type = sema_type(sema, ast->type);
+    symbol->span = ast->span;
+
+    HirType *base = sema_type(sema, ast->type);
+
+    if (base == NULL || base->kind == HIR_TYPE_ERROR)
+        return;
+
+    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    *type = *base;
+    type->mutable = false;
+    type->nominal = symbol;
+    type->base = base;
+
+    symbol->type = type;
 }
 
 bool sema_var_decl(Sema *sema, AstVarDecl *ast) {

@@ -11,7 +11,6 @@ static const char *type_kind_name(HirTypeKind kind) {
     switch (kind) {
     case HIR_TYPE_ERROR:   return "error";
     case HIR_TYPE_BUILTIN: return "builtin";
-    case HIR_TYPE_NAMED:   return "named";
     case HIR_TYPE_POINTER: return "pointer";
     case HIR_TYPE_SLICE:   return "slice";
     case HIR_TYPE_ARRAY:   return "array";
@@ -95,13 +94,6 @@ static void print_type(FILE *out, const HirType *type, unsigned depth) {
     case HIR_TYPE_BUILTIN:
         indent(out, depth + 1);
         fprintf(out, "%s\n", builtin_name(type->builtin));
-        break;
-
-    case HIR_TYPE_NAMED:
-        indent(out, depth + 1);
-        fputs("symbol ", out);
-        print_symbol(out, type->named.symbol);
-        fputc('\n', out);
         break;
 
     case HIR_TYPE_POINTER:
