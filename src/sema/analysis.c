@@ -391,10 +391,38 @@ static HirExpr *comp_eval_unary(Sema *sema, HirExpr *expr) {
     return expr;
 }
 
+static HirGlobal *comp_find_global(Sema *sema, Symbol *symbol) {
+    for (size_t i = 0; i < sema->hir_module->globals.len; i++) {
+        HirGlobal *global = (HirGlobal *)array_at(&sema->hir_module->globals, i);
+
+        if (global->symbol == symbol)
+            return global;
+    }
+
+    return NULL;
+}
+
 HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
             return expr;
+
+        case HIR_EXPR_VALUE: {
+            Symbol *symbol = expr->value.symbol;
+
+            if (symbol == NULL || symbol->kind != SYMBOL_GLOBAL)
+                return expr;
+
+            HirGlobal *global = comp_find_global(sema, symbol);
+
+            if (global == NULL || global->init == NULL)
+                return expr;
+
+            if (global->type->mutable)
+                return expr;
+
+            return comp_eval_expr(sema, global->init);
+        }
 
         case HIR_EXPR_UNARY:
             return comp_eval_unary(sema, expr);

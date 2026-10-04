@@ -208,11 +208,7 @@ bool try_parse_var_decl(Parser *p, AstVarDecl *var) {
     else
         var->init = NULL;
 
-    if (!match(p, TK_SEMICOLON)) {
-        restore(p, cp);
-        return false;
-    }
-
+    expect(p, TK_SEMICOLON);
     return true;
 }
 

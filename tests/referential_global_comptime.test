@@ -1,0 +1,23 @@
+name: referential global comptime variables
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+int64 a = 42;
+int64 b = $a;
+int64 c = $(a + 1);
+int64 d = $((a * 2) + 3);
+bool e = $(a < 100);
+
+[lir]
+global @a:
+    $0 = 42
+global @b:
+    $0 = 42
+global @c:
+    $0 = 43
+global @d:
+    $0 = 87
+global @e:
+    $0 = true

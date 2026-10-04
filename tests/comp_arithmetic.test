@@ -4,6 +4,31 @@ stop: lir
 errors: 0
 
 [source]
-int64 answer = $(1 + 2);
-int64 answer2 = $((10 * 4) - 2);
-bool yes = $(3 < 4);
+int64 a = $(1 + 2);
+int64 b = $((10 * 4) - 2);
+bool c = $(3 < 4);
+
+int8 d = $(127);
+uint8 e = $(255);
+
+int64 f = $(2 * 3 + 4);
+bool g = $(true && false);
+int64 h = $(int64)42;
+
+[lir]
+global @a:
+    $0 = 3
+global @b:
+    $0 = 38
+global @c:
+    $0 = true
+global @d:
+    $0 = 127
+global @e:
+    $0 = 255
+global @f:
+    $0 = 10
+global @g:
+    zero
+global @h:
+    $0 = 42
