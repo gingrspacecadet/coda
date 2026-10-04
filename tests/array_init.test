@@ -1,0 +1,56 @@
+name: array initialiser expressions
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64[4] all() {
+    return {1, 2, 3, 4};
+}
+
+fn int64[4] partial() {
+    return {1, 2};
+}
+
+fn int64[4] empty() {
+    return {};
+}
+
+fn int64[2][2] nested() {
+    return {{1, 2}, {3, 4}};
+}
+
+[lir]
+all:
+    block0:
+        %0 = zero
+        %1 = insert %0, $0, 1
+        %2 = insert %1, $8, 2
+        %3 = insert %2, $16, 3
+        %4 = insert %3, $24, 4
+        return %4
+
+partial:
+    block0:
+        %0 = zero
+        %1 = insert %0, $0, 1
+        %2 = insert %1, $8, 2
+        return %2
+
+empty:
+    block0:
+        %0 = zero
+        return %0
+
+nested:
+    block0:
+        %0 = zero
+        %1 = zero
+        %2 = insert %1, $0, 1
+        %3 = insert %2, $8, 2
+        %4 = insert %0, $0, %3
+        %5 = zero
+        %6 = insert %5, $0, 3
+        %7 = insert %6, $8, 4
+        %8 = insert %4, $16, %7
+        return %8

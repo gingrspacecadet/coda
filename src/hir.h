@@ -202,6 +202,7 @@ struct HirExpr {
 
 struct HirInitField {
     HirField *field;
+    size_t offset;
     HirExpr *value;
 };
 

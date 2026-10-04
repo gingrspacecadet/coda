@@ -289,12 +289,14 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
 
     case HIR_EXPR_INIT:
         for (size_t i = 0; i < expr->init.fields.len; i++) {
-            HirInitField *field =
-                ((HirInitField *)expr->init.fields.data) + i;
+            HirInitField *field = ((HirInitField *)expr->init.fields.data) + i;
 
             indent(out, depth + 1);
             fputs("field ", out);
-            print_symbol(out, field->field->symbol);
+            if (field->field != NULL)
+                print_symbol(out, field->field->symbol);
+            else
+                fprintf(out, "%zu", field->offset);
             fputc('\n', out);
 
             print_expr(out, field->value, depth + 2);

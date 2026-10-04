@@ -1429,59 +1429,104 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            if (expected->kind != HIR_TYPE_STRUCT &&
+                expected->kind != HIR_TYPE_UNION &&
+                expected->kind != HIR_TYPE_ARRAY) {
+                //! TODO: expected aggregate initialiser
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            size_t field_count = 0;
+
             switch (expected->kind) {
                 case HIR_TYPE_STRUCT:
+                    field_count = expected->structure.fields.len;
+                    break;
+
                 case HIR_TYPE_UNION:
+                    field_count = expected->union_.fields.len;
+                    break;
+
+                case HIR_TYPE_ARRAY:
+                    field_count = expected->array.length;
                     break;
 
                 default:
-                    //! TODO: expected aggregate initialiser
-                    hir->kind = HIR_EXPR_ERROR;
-                    return hir;
+                    break;
             }
 
+            bool *initialized = arena_calloc(sema->arena, sizeof(bool) * field_count);
             size_t positional = 0;
 
             for (size_t i = 0; i < ast->init.fields.len; i++) {
-                AstInitField *field = ((AstInitField *)ast->init.fields.data) + i;
+                AstInitField *field = &((AstInitField *)ast->init.fields.data)[i];
                 HirField *hir_field = NULL;
+                size_t field_index = SIZE_MAX;
+                size_t offset = 0;
+                HirType *value_type = NULL;
+                bool named = field->name.ident.length != 0;
 
-                if (field->name.kind == AST_NAME_IDENT) {
-                    hir_field = init_field_lookup(expected, field->name);
-                } else {
-                    if (expected->kind == HIR_TYPE_STRUCT) {
-                        if (positional >= expected->structure.fields.len) {
-                            //! TODO: too many initialiser fields
-                            hir->kind = HIR_EXPR_ERROR;
-                            return hir;
-                        }
-
-                        hir_field = &((HirField *)expected->structure.fields.data)[positional++];
-                    } else {
-                        if (positional != 0) {
-                            //! TODO: too many initialiser fields
-                            hir->kind = HIR_EXPR_ERROR;
-                            return hir;
-                        }
-
-                        if (expected->union_.fields.len == 0) {
-                            //! TODO: empty union initialiser
-                            hir->kind = HIR_EXPR_ERROR;
-                            return hir;
-                        }
-
-                        hir_field = &((HirField *)expected->union_.fields.data)[0];
-                        positional++;
+                if (expected->kind == HIR_TYPE_ARRAY) {
+                    if (named) {
+                        //! TODO: invalid designated array initialiser
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
                     }
+
+                    if (positional >= expected->array.length) {
+                        //! TODO: too many initialiser values
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
+
+                    field_index = positional++;
+                    value_type = expected->array.element;
+                    offset = field_index * value_type->size;
+                } else {
+                    if (named) {
+                        hir_field = init_field_lookup(expected, field->name);
+
+                        if (hir_field == NULL) {
+                            //! TODO: unknown initialiser field diagnostic
+                            hir->kind = HIR_EXPR_ERROR;
+                            return hir;
+                        }
+
+                        if (expected->kind == HIR_TYPE_STRUCT)
+                            field_index = (size_t)(hir_field - (HirField *)expected->structure.fields.data);
+                        else
+                            field_index = (size_t)(hir_field - (HirField *)expected->union_.fields.data);
+                    } else {
+                        while (positional < field_count && initialized[positional])
+                            positional++;
+
+                        if (positional >= field_count) {
+                            //! TODO: too many initialiser values
+                            hir->kind = HIR_EXPR_ERROR;
+                            return hir;
+                        }
+
+                        field_index = positional++;
+
+                        if (expected->kind == HIR_TYPE_STRUCT)
+                            hir_field = &((HirField *)expected->structure.fields.data)[field_index];
+                        else
+                            hir_field = &((HirField *)expected->union_.fields.data)[field_index];
+                    }
+
+                    if (initialized[field_index]) {
+                        //! TODO: duplicate initialiser diagnostic
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
+
+                    initialized[field_index] = true;
+                    value_type = hir_field->type;
+                    offset = hir_field->offset;
                 }
 
-                if (hir_field == NULL) {
-                    //! TODO: unknown/invalid initialiser field diagnostic
-                    hir->kind = HIR_EXPR_ERROR;
-                    return hir;
-                }
-
-                HirExpr *value = sema_expr(sema, field->value, hir_field->type);
+                HirExpr *value = sema_expr(sema, field->value, value_type);
 
                 if (value == NULL || value->kind == HIR_EXPR_ERROR) {
                     hir->kind = HIR_EXPR_ERROR;
@@ -1490,6 +1535,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                 HirInitField init_field = {
                     .field = hir_field,
+                    .offset = offset,
                     .value = value,
                 };
 
@@ -1499,7 +1545,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = expected;
             break;
         }
-
+        
         case AST_EXPR_LAMBDA: {
             hir->kind = HIR_EXPR_LAMBDA;
 

@@ -271,11 +271,11 @@ static LirOperand lir_lower_init(LirLower *lower, HirExpr *expr) {
     LirOperand aggregate = lir_operand_value(zero, type);
 
     for (size_t i = 0; i < expr->init.fields.len; i++) {
-        HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
-        LirOperand value = lir_lower_expr(lower, field->value);
+        HirInitField *init = &((HirInitField *)expr->init.fields.data)[i];
+        LirOperand value = lir_lower_expr(lower, init->value);
         LirOperand operands[3] = {
             aggregate,
-            lir_operand_offset(field->field->offset),
+            lir_operand_offset(init->offset),
             value,
         };
 
