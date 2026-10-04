@@ -2313,6 +2313,32 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
     symbol->type = type;
 }
 
+static bool expr_is_static(HirExpr *expr) {
+    if (expr == NULL)
+        return true;
+
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            return true;
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+
+                if (!expr_is_static(field->value))
+                    return false;
+            }
+
+            return true;
+
+        case HIR_EXPR_CAST:
+            return expr_is_static(expr->cast.operand);
+
+        default:
+            return false;
+    }
+}
+
 bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
 
@@ -2324,9 +2350,6 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     if (type == NULL || type->kind == HIR_TYPE_ERROR)
         return false;
 
-    if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR)
-        return false;
-
     HirExpr *init = NULL;
 
     if (ast->init != NULL) {
@@ -2334,6 +2357,11 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
 
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
             return false;
+
+        if (!expr_is_static(init)) {
+            error_global_initialiser_not_static(sema->diags, init->span);
+            return false;
+        }
     }
 
     symbol->type = type;
@@ -2346,7 +2374,6 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     };
 
     array_push(&sema->hir_module->globals, &global);
-
     return true;
 }
 

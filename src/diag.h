@@ -38,6 +38,7 @@ typedef enum {
     E_EXPECTED_MEMBER,
     E_EXPECTED_INTEGER,
     E_INDEX_OOB,
+    E_GINIT_NOT_STATIC,
 } DiagCode;
 
 typedef struct {

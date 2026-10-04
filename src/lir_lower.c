@@ -1107,12 +1107,26 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
     }
 }
 
+static void lir_lower_global(LirModule *module, HirGlobal *hir) {
+    LirGlobal global = {
+        .symbol = hir->symbol,
+        .type = hir->type,
+        .init = hir->init,
+        .is_mutable = hir->type->mutable,
+        .is_export = hir->is_export,
+    };
+
+    array_push(&module->globals, &global);
+}
+
 LirModule *lir_lower_module(Arena *arena, HirModule *hir) {
     LirModule *module = lir_module_create(arena);
 
-    for (size_t i = 0; i < hir->functions.len; i++) {
+    for (size_t i = 0; i < hir->globals.len; i++)
+        lir_lower_global(module, &((HirGlobal *)hir->globals.data)[i]);
+
+    for (size_t i = 0; i < hir->functions.len; i++)
         lir_lower_function(module, &((HirFunction *)hir->functions.data)[i]);
-    }
 
     return module;
 }

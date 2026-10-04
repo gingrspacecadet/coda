@@ -489,3 +489,17 @@ void error_index_out_of_bounds(Diags *diags, Span span, size_t index, size_t bou
 
     diag_finish(&b);
 }
+
+void error_global_initialiser_not_static(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_GINIT_NOT_STATIC,
+        span,
+        STRING("Global initialiser is not statically evaluable")
+    );
+
+    diag_help(&b, STRING("Try adding a '$' beforehand to evaluate at compile-time"));
+
+    diag_finish(&b);
+}   

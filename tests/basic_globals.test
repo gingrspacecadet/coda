@@ -1,0 +1,19 @@
+name: basic globals
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Foo = struct {
+    uint8 x; uint8 y;
+};
+
+Foo global = {.y = 2};
+mut Foo mutable_global = {1, 2};
+
+[lir]
+global @global = zero
+        insert $1, 2
+global mut @mutable_global = zero
+        insert $0, 1
+        insert $1, 2

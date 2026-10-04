@@ -37,6 +37,7 @@ LirModule *lir_module_create(Arena *arena) {
 
     module->arena = arena;
     module->functions = array_create(arena, sizeof(LirFunction *));
+    module->globals = array_create(arena, sizeof(LirGlobal));
 
     return module;
 }
@@ -437,7 +438,88 @@ static void lir_print_function(FILE *out, const LirFunction *function) {
     }
 }
 
+static void lir_print_static_init(FILE *out, HirExpr *expr) {
+    if (expr == NULL) {
+        fprintf(out, "zero");
+        return;
+    }
+
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            switch (expr->literal.kind) {
+                case HIR_LITERAL_INTEGER:
+                    fprintf(out, "%" PRIu64, expr->literal.integer);
+                    return;
+
+                case HIR_LITERAL_FLOAT:
+                    fprintf(out, "%g", expr->literal.floating);
+                    return;
+
+                case HIR_LITERAL_BOOL:
+                    fprintf(out, "%s", expr->literal.boolean ? "true" : "false");
+                    return;
+
+                case HIR_LITERAL_NULL:
+                    fprintf(out, "null");
+                    return;
+
+                case HIR_LITERAL_STRING:
+                    fprintf(out, "<string>");
+                    return;
+
+                case HIR_LITERAL_ERROR:
+                    fprintf(out, "<error>");
+                    return;
+            }
+
+            break;
+
+        case HIR_EXPR_INIT:
+            fprintf(out, "zero");
+
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+
+                fprintf(out, "\n        insert $%zu, ", field->offset);
+                lir_print_static_init(out, field->value);
+            }
+
+            return;
+
+        case HIR_EXPR_CAST:
+            fprintf(out, "cast ");
+            lir_print_static_init(out, expr->cast.operand);
+            return;
+
+        default:
+            fprintf(out, "<non-static>");
+            return;
+    }
+
+    fprintf(out, "<invalid>");
+}
+
+static void lir_print_global(FILE *out, const LirGlobal global) {
+    fprintf(out, "global ");
+
+    if (global.type->mutable)
+        fprintf(out, "mut ");
+
+    fprintf(out, "@%.*s", string_fmt(global.symbol->name.ident));
+
+    if (global.is_export)
+        fprintf(out, " [export]");
+
+    fprintf(out, " = ");
+    lir_print_static_init(out, global.init);
+    fprintf(out, "\n");
+}
+
 void lir_print(FILE *out, const LirModule *module) {
+    for (size_t i = 0; i < module->globals.len; i++) {
+        lir_print_global(out, ((LirGlobal *)module->globals.data)[i]);
+    }
+
     for (size_t i = 0; i < module->functions.len; i++) {
         lir_print_function(out, ((LirFunction **)module->functions.data)[i]);
     }

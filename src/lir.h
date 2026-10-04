@@ -159,8 +159,17 @@ typedef struct {
 } LirFunction;
 
 typedef struct {
+    Symbol *symbol;
+    HirType *type;
+    HirExpr *init;
+    bool is_mutable;
+    bool is_export;
+} LirGlobal;
+
+typedef struct {
     Arena *arena;
     Array(LirFunction *) functions;
+    Array(LirGlobal) globals;
 } LirModule;
 
 LirModule *lir_module_create(Arena *arena);
