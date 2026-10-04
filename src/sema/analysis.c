@@ -3,7 +3,7 @@
 #include <string.h>
 #include "common.h"
 
-static size_t sema_loop_scope(Sema *sema, size_t level) {
+static size_t loop_scope(Sema *sema, size_t level) {
     for (size_t i = sema->scopes.len; i > 0; i--) {
         Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
 
@@ -142,7 +142,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
     }
 }
 
-static bool sema_type_equal(HirType *a, HirType *b) {
+static bool type_equal(HirType *a, HirType *b) {
     if (a == b)
         return true;
 
@@ -164,20 +164,20 @@ static bool sema_type_equal(HirType *a, HirType *b) {
 
         case HIR_TYPE_POINTER:
             return a->pointer.optional == b->pointer.optional &&
-                   sema_type_equal(a->pointer.pointee,
+                   type_equal(a->pointer.pointee,
                                    b->pointer.pointee);
 
         case HIR_TYPE_SLICE:
-            return sema_type_equal(a->slice.element,
+            return type_equal(a->slice.element,
                                    b->slice.element);
 
         case HIR_TYPE_ARRAY:
             return a->array.length == b->array.length &&
-                   sema_type_equal(a->array.element,
+                   type_equal(a->array.element,
                                    b->array.element);
 
         case HIR_TYPE_FUNCTION:
-            if (!sema_type_equal(a->function.ret, b->function.ret))
+            if (!type_equal(a->function.ret, b->function.ret))
                 return false;
 
             if (a->function.params.len != b->function.params.len)
@@ -187,7 +187,7 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 HirType *ap = ((HirType **)a->function.params.data)[i];
                 HirType *bp = ((HirType **)b->function.params.data)[i];
 
-                if (!sema_type_equal(ap, bp))
+                if (!type_equal(ap, bp))
                     return false;
             }
 
@@ -201,7 +201,7 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 HirType *am = ((HirType **)a->sum.members.data)[i];
                 HirType *bm = ((HirType **)b->sum.members.data)[i];
 
-                if (!sema_type_equal(am, bm))
+                if (!type_equal(am, bm))
                     return false;
             }
 
@@ -218,7 +218,7 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 if (af->symbol != bf->symbol)
                     return false;
 
-                if (!sema_type_equal(af->type, bf->type))
+                if (!type_equal(af->type, bf->type))
                     return false;
             }
 
@@ -235,14 +235,14 @@ static bool sema_type_equal(HirType *a, HirType *b) {
                 if (af->symbol != bf->symbol)
                     return false;
 
-                if (!sema_type_equal(af->type, bf->type))
+                if (!type_equal(af->type, bf->type))
                     return false;
             }
 
             return true;
 
         case HIR_TYPE_ENUM:
-            if (!sema_type_equal(a->_enum.underlying, b->_enum.underlying))
+            if (!type_equal(a->_enum.underlying, b->_enum.underlying))
                 return false;
 
             if (a->_enum.items.len != b->_enum.items.len)
@@ -265,7 +265,7 @@ static bool sema_type_equal(HirType *a, HirType *b) {
     return false;
 }
 
-static size_t sema_align_up(size_t value, size_t align) {
+static size_t align_up(size_t value, size_t align) {
     assert(align != 0);
     size_t remainder = value % align;
     return remainder == 0 ? value : value + align - remainder;
@@ -391,7 +391,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                     .type = symbol->type,
                 };
 
-                offset = sema_align_up(offset, hir_field.type->align);
+                offset = align_up(offset, hir_field.type->align);
                 hir_field.offset = offset;
                 offset += hir_field.type->size;
 
@@ -402,7 +402,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
 
             hir->align = align;
-            hir->size = sema_align_up(offset, align);
+            hir->size = align_up(offset, align);
             break;
         }
 
@@ -439,7 +439,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
 
             hir->align = align;
-            hir->size = sema_align_up(size, align);
+            hir->size = align_up(size, align);
             break;
         }
 
@@ -522,7 +522,7 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
     return NULL;
 }
 
-static bool sema_literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
+static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     if (literal->kind == HIR_LITERAL_NULL)
         return type->kind == HIR_TYPE_POINTER &&
                type->pointer.optional;
@@ -556,7 +556,7 @@ static bool sema_literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     return false;
 }
 
-static HirType *sema_builtin_type(Sema *sema, BuiltinType builtin) {
+static HirType *builtin_type(Sema *sema, BuiltinType builtin) {
     for (size_t i = 0; i < sema->global_scope.syms.len; i++) {
         Symbol *symbol = (Symbol *)array_at(&sema->global_scope.syms, i);
 
@@ -578,7 +578,7 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
         return expr;
 
     if (expr->type != NULL) {
-        if (sema_type_equal(expr->type, type))
+        if (type_equal(expr->type, type))
             return expr;
 
         error_type_mismatch(sema->diags, type, expr->type, expr->span);
@@ -591,8 +591,8 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
         return NULL;
     }
 
-    if (!sema_literal_fits(sema, &expr->literal, type)) {
-        error_type_mismatch(sema->diags, type, expr->type ? expr->type : sema_builtin_type(sema, BUILTIN_UINT32), expr->span);
+    if (!literal_fits(sema, &expr->literal, type)) {
+        error_type_mismatch(sema->diags, type, expr->type ? expr->type : builtin_type(sema, BUILTIN_UINT32), expr->span);
         return NULL;
     }
 
@@ -600,7 +600,7 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     return expr;
 }
 
-static HirExpr *sema_expr_coerce(Sema *sema, HirExpr *expr, HirType *expected) {
+static HirExpr *expr_coerce(Sema *sema, HirExpr *expr, HirType *expected) {
     if (expr == NULL)
         return NULL;
 
@@ -629,24 +629,44 @@ static bool is_pointer(HirType *type) {
     return type && type->kind == HIR_TYPE_POINTER && !type->pointer.optional;
 }
 
-static HirType *sema_binary_operand_type(Sema *sema, AstBinaryOp op, HirExpr *left, HirExpr *right, HirType *expected) {
+static bool binop_is_comparison(AstBinaryOp op) {
+    switch (op) {
+        case AST_BINARY_EQUAL:
+        case AST_BINARY_NOT_EQUAL:
+        case AST_BINARY_LT:
+        case AST_BINARY_LTE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GTE:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static HirType *binop_type(Sema *sema, AstBinaryOp op, HirExpr *left, HirExpr *right, HirType *expected) {
     if (left->type != NULL && right->type != NULL) {
-        if (op == AST_BINARY_ADD || op == AST_BINARY_SUB) {
-            if (is_pointer(left->type) && is_integer(right->type))
-                return left->type;
+        if (binop_is_comparison(op) && is_pointer(left->type) && is_pointer(right->type)) {
+            if (!type_equal(left->type->pointer.pointee, right->type->pointer.pointee))
+                return NULL;
 
-            if (op == AST_BINARY_ADD && is_integer(left->type) && is_pointer(right->type))
-                return right->type;
-
-            if (op == AST_BINARY_SUB && is_pointer(left->type) && is_pointer(right->type)) {
-                if (!sema_type_equal(left->type->pointer.pointee, right->type->pointer.pointee))
-                    return NULL;
-
-                return sema_builtin_type(sema, BUILTIN_INT64);
-            }
+            return left->type;
         }
 
-        if (!sema_type_equal(left->type, right->type)) {
+        if ((op == AST_BINARY_ADD || op == AST_BINARY_SUB) && is_pointer(left->type) && is_integer(right->type))
+            return left->type;
+
+        if (op == AST_BINARY_ADD && is_integer(left->type) && is_pointer(right->type))
+            return right->type;
+
+        if (op == AST_BINARY_SUB && is_pointer(left->type) && is_pointer(right->type)) {
+            if (!type_equal(left->type->pointer.pointee, right->type->pointer.pointee))
+                return NULL;
+
+            return builtin_type(sema, BUILTIN_INT64);
+        }
+
+        if (!type_equal(left->type, right->type)) {
             //! TODO: implicit conversion
             return NULL;
         }
@@ -663,9 +683,9 @@ static HirType *sema_binary_operand_type(Sema *sema, AstBinaryOp op, HirExpr *le
     return expected;
 }
 
-static HirType *sema_binary_result_type(Sema *sema, AstBinaryOp op, HirType *left, HirType *right, HirType *operand) {
+static HirType *binary_result_type(Sema *sema, AstBinaryOp op, HirType *left, HirType *right, HirType *operand) {
     if (op == AST_BINARY_SUB && is_pointer(left) && is_pointer(right))
-        return sema_builtin_type(sema, BUILTIN_INT64);
+        return builtin_type(sema, BUILTIN_INT64);
 
     switch (op) {
         case AST_BINARY_LT:
@@ -676,14 +696,14 @@ static HirType *sema_binary_result_type(Sema *sema, AstBinaryOp op, HirType *lef
         case AST_BINARY_NOT_EQUAL:
         case AST_BINARY_LOGICAL_AND:
         case AST_BINARY_LOGICAL_OR:
-            return sema_builtin_type(sema, BUILTIN_BOOL);
+            return builtin_type(sema, BUILTIN_BOOL);
 
         default:
             return operand;
     }
 }
 
-static HirType *sema_call_type(Sema *sema, HirExpr *callee) {
+static HirType *call_type(Sema *sema, HirExpr *callee) {
     if (callee->type == NULL)
         return NULL;
 
@@ -693,7 +713,7 @@ static HirType *sema_call_type(Sema *sema, HirExpr *callee) {
     return callee->type;
 }
 
-static HirField *sema_field_lookup(Array(HirField) fields, AstName name) {
+static HirField *field_lookup(Array(HirField) fields, AstName name) {
     for (size_t i = 0; i < fields.len; i++) {
         HirField *field = ((HirField *)fields.data) + i;
 
@@ -707,8 +727,8 @@ static HirField *sema_field_lookup(Array(HirField) fields, AstName name) {
     return NULL;
 }
 
-static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable);
-static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
+static HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable);
+static HirExpr *implicit_deref(Sema *sema, HirExpr *expr) {
     if (expr->type == NULL || expr->type->kind != HIR_TYPE_POINTER)
         return expr;
 
@@ -717,7 +737,7 @@ static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
     *deref = (HirExpr) {
         .span = expr->span,
         .kind = HIR_EXPR_UNARY,
-        .type = sema_type_with_mutability(sema, expr->type->pointer.pointee, expr->type->pointer.pointee->mutable),
+        .type = type_with_mutability(sema, expr->type->pointer.pointee, expr->type->pointer.pointee->mutable),
         .unary = {
             .op = AST_UNARY_DEREF,
             .operand = expr,
@@ -727,7 +747,7 @@ static HirExpr *sema_implicit_deref(Sema *sema, HirExpr *expr) {
     return deref;
 }
 
-static HirType *sema_unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
+static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     if (operand == NULL || operand->type == NULL)
         return NULL;
 
@@ -758,23 +778,23 @@ static HirType *sema_unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     return NULL;
 }
 
-static HirField *sema_init_field_lookup(HirType *type, AstName name) {
+static HirField *init_field_lookup(HirType *type, AstName name) {
     if (type == NULL)
         return NULL;
 
     switch (type->kind) {
         case HIR_TYPE_STRUCT:
-            return sema_field_lookup(type->structure.fields, name);
+            return field_lookup(type->structure.fields, name);
 
         case HIR_TYPE_UNION:
-            return sema_field_lookup(type->union_.fields, name);
+            return field_lookup(type->union_.fields, name);
 
         default:
             return NULL;
     }
 }
 
-static Symbol *sema_insert_parameter(Sema *sema, AstParam *param, HirType *type) {
+static Symbol *insert_parameter(Sema *sema, AstParam *param, HirType *type) {
     Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
 
     *symbol = (Symbol) {
@@ -789,7 +809,7 @@ static Symbol *sema_insert_parameter(Sema *sema, AstParam *param, HirType *type)
     return symbol;
 }
 
-static String sema_literal_compact(Sema *sema, String raw) {
+static String literal_compact(Sema *sema, String raw) {
     char *data = arena_alloc(sema->arena, raw.length + 1);
     size_t len = 0;
 
@@ -806,7 +826,7 @@ static String sema_literal_compact(Sema *sema, String raw) {
     };
 }
 
-static uint64_t sema_parse_integer(String raw) {
+static uint64_t parse_integer(String raw) {
     size_t i = 0;
     int base = 10;
 
@@ -845,7 +865,7 @@ static uint64_t sema_parse_integer(String raw) {
     return value;
 }
 
-static uint32_t sema_hex_digit(char c) {
+static uint32_t hex_digit(char c) {
     if (c >= '0' && c <= '9')
         return (uint32_t)(c - '0');
 
@@ -859,7 +879,7 @@ static uint32_t sema_hex_digit(char c) {
     return 0;
 }
 
-static uint32_t sema_decode_escape(String raw, size_t *index) {
+static uint32_t decode_escape(String raw, size_t *index) {
     assert(*index < raw.length);
 
     char c = raw.data[(*index)++];
@@ -876,7 +896,7 @@ static uint32_t sema_decode_escape(String raw, size_t *index) {
         case 'x':
             assert(*index + 2 <= raw.length);
 
-            uint32_t value = (sema_hex_digit(raw.data[*index]) << 4) | sema_hex_digit(raw.data[*index + 1]);
+            uint32_t value = (hex_digit(raw.data[*index]) << 4) | hex_digit(raw.data[*index + 1]);
             *index += 2;
             return value;
     }
@@ -885,7 +905,7 @@ static uint32_t sema_decode_escape(String raw, size_t *index) {
     return 0;
 }
 
-static uint32_t sema_decode_utf8(String raw, size_t *index) {
+static uint32_t decode_utf8(String raw, size_t *index) {
     assert(*index < raw.length);
 
     uint8_t c0 = (uint8_t)raw.data[(*index)++];
@@ -916,7 +936,7 @@ static uint32_t sema_decode_utf8(String raw, size_t *index) {
     return ((uint32_t)(c0 & 0x07) << 18) | ((uint32_t)(c1 & 0x3f) << 12) | ((uint32_t)(c2 & 0x3f) << 6) | (uint32_t)(c3 & 0x3f);
 }
 
-static uint64_t sema_decode_char(String raw) {
+static uint64_t decode_char(String raw) {
     size_t start = raw.length > 0 && raw.data[0] == '\'' ? 1 : 0;
     size_t end = raw.length > 1 && raw.data[raw.length - 1] == '\'' ? raw.length - 1 : raw.length;
     size_t index = start;
@@ -927,7 +947,7 @@ static uint64_t sema_decode_char(String raw) {
 
     if (raw.data[index] == '\\') {
         index++;
-        value = sema_decode_escape((String){
+        value = decode_escape((String){
             .data = raw.data,
             .length = end
         }, &index);
@@ -936,14 +956,14 @@ static uint64_t sema_decode_char(String raw) {
             .data = raw.data,
             .length = end
         };
-        value = sema_decode_utf8(content, &index);
+        value = decode_utf8(content, &index);
     }
 
     assert(index == end);
     return value;
 }
 
-static String sema_decode_string(Sema *sema, String raw) {
+static String decode_string(Sema *sema, String raw) {
     size_t start = raw.length > 0 && raw.data[0] == '"' ? 1 : 0;
     size_t end = raw.length > 1 && raw.data[raw.length - 1] == '"' ? raw.length - 1 : raw.length;
 
@@ -959,7 +979,7 @@ static String sema_decode_string(Sema *sema, String raw) {
                 .length = end
             };
 
-            uint32_t value = sema_decode_escape(content, &index);
+            uint32_t value = decode_escape(content, &index);
             assert(value <= 0xff);
             data[out++] = (char)value;
             continue;
@@ -976,19 +996,19 @@ static String sema_decode_string(Sema *sema, String raw) {
     };
 }
 
-static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
+static HirLiteral literal(Sema *sema, AstLiteral literal) {
     switch (literal.kind) {
         case AST_LIT_INTEGER: {
-            String raw = sema_literal_compact(sema, literal.raw);
+            String raw = literal_compact(sema, literal.raw);
 
             return (HirLiteral){
                 .kind = HIR_LITERAL_INTEGER,
-                .integer = sema_parse_integer(raw),
+                .integer = parse_integer(raw),
             };
         }
 
         case AST_LIT_FLOAT: {
-            String raw = sema_literal_compact(sema, literal.raw);
+            String raw = literal_compact(sema, literal.raw);
 
             return (HirLiteral){
                 .kind = HIR_LITERAL_FLOAT,
@@ -1005,13 +1025,13 @@ static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
         case AST_LIT_CHAR:
             return (HirLiteral){
                 .kind = HIR_LITERAL_INTEGER,
-                .integer = sema_decode_char(literal.raw),
+                .integer = decode_char(literal.raw),
             };
 
         case AST_LIT_STRING:
             return (HirLiteral){
                 .kind = HIR_LITERAL_STRING,
-                .string = sema_decode_string(sema, literal.raw),
+                .string = decode_string(sema, literal.raw),
             };
 
         case AST_LIT_NULL:
@@ -1024,7 +1044,7 @@ static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
     return (HirLiteral){0};
 }
 
-static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable) {
+static HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
     HirType *copy = arena_alloc(sema->arena, sizeof(HirType));
     *copy = *type;
     copy->mutable = mutable;
@@ -1040,14 +1060,14 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     switch (ast->kind) {
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
-            hir->literal = sema_literal(sema, ast->literal);
+            hir->literal = literal(sema, ast->literal);
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             switch (hir->literal.kind) {
                 case HIR_LITERAL_INTEGER:
-                    hir->type = sema_builtin_type(sema, BUILTIN_INT64);
+                    hir->type = builtin_type(sema, BUILTIN_INT64);
                     break;
 
                 default:
@@ -1076,7 +1096,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = sema_symbol_type(sema, symbol);
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1101,7 +1121,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = sema_symbol_type(sema, symbol);
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1117,7 +1137,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            HirType *type = sema_unary_type(sema, hir->unary.op, operand);
+            HirType *type = unary_type(sema, hir->unary.op, operand);
 
             if (type == NULL) {
                 error_invalid_unary_operation(sema->diags, unary_op_name(hir->unary.op), operand->type, ast->span);
@@ -1129,7 +1149,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = type;
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1142,7 +1162,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             HirExpr *right = sema_expr(sema, ast->binary.right, NULL);
 
-            HirType *operand_type = sema_binary_operand_type(sema, ast->binary.op, left, right, expected);
+            HirType *operand_type = binop_type(sema, ast->binary.op, left, right, expected);
 
             if (operand_type == NULL) {
                 error_type_mismatch(sema->diags, expected, left->type != NULL ? left->type : right->type, ast->span);
@@ -1164,7 +1184,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             hir->binary.left = left;
             hir->binary.right = right;
-            hir->type = sema_binary_result_type(sema, ast->binary.op, left->type, right->type, operand_type);
+            hir->type = binary_result_type(sema, ast->binary.op, left->type, right->type, operand_type);
 
             if (hir->type == NULL) {
                 error_invalid_binary_operation(sema->diags, binary_op_name(ast->binary.op), left->type, right->type, ast->span);
@@ -1187,7 +1207,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            HirType *function_type = sema_call_type(sema, callee);
+            HirType *function_type = call_type(sema, callee);
 
             if (function_type == NULL) {
                 error_expected_function(sema->diags, callee->type, ast->call.callee->span);
@@ -1225,7 +1245,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = function_type->function.ret;
 
             if (expected != NULL)
-                hir = sema_expr_coerce(sema, hir, expected);
+                hir = expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1259,13 +1279,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     hir->type = pointee;
 
                     if (expected != NULL)
-                        return sema_expr_coerce(sema, hir, expected);
+                        return expr_coerce(sema, hir, expected);
 
                     return hir;
                 }
             }
 
-            HirExpr *object = sema_implicit_deref(sema, hir->index.object);
+            HirExpr *object = implicit_deref(sema, hir->index.object);
             hir->index.object = object;
             object_type = object->type;
 
@@ -1276,7 +1296,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             switch (object_type->kind) {
                 case HIR_TYPE_ARRAY:
-                    hir->type = sema_type_with_mutability(sema, object_type->array.element, object_type->mutable);
+                    hir->type = type_with_mutability(sema, object_type->array.element, object_type->mutable);
                     HirExpr *index = hir->index.index;
 
                     if (index->kind == HIR_EXPR_LITERAL && index->literal.kind == HIR_LITERAL_INTEGER && index->literal.integer >= object_type->array.length) {
@@ -1287,7 +1307,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     break;
 
                 case HIR_TYPE_SLICE:
-                    hir->type = sema_type_with_mutability(sema, object_type->slice.element, object_type->mutable);
+                    hir->type = type_with_mutability(sema, object_type->slice.element, object_type->mutable);
                     break;
 
                 default:
@@ -1302,7 +1322,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1352,11 +1372,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             switch (object_type->kind) {
                 case HIR_TYPE_STRUCT:
-                    field = sema_field_lookup(object_type->structure.fields, ast->member.member);
+                    field = field_lookup(object_type->structure.fields, ast->member.member);
                     break;
 
                 case HIR_TYPE_UNION:
-                    field = sema_field_lookup(object_type->union_.fields, ast->member.member);
+                    field = field_lookup(object_type->union_.fields, ast->member.member);
                     break;
 
                 default:
@@ -1372,10 +1392,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             hir->field.field = field;
-            hir->type = sema_type_with_mutability(sema, field->type, object->type->mutable);
+            hir->type = type_with_mutability(sema, field->type, object->type->mutable);
 
             if (expected != NULL)
-                return sema_expr_coerce(sema, hir, expected);
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -1404,7 +1424,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->init.fields = array_create(sema->arena, sizeof(HirInitField));
 
             if (expected == NULL) {
-                //! TODO: infer initializer type
+                //! TODO: infer initialiser type
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
@@ -1415,17 +1435,48 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     break;
 
                 default:
-                    //! TODO: expected struct or union
+                    //! TODO: expected aggregate initialiser
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
             }
 
+            size_t positional = 0;
+
             for (size_t i = 0; i < ast->init.fields.len; i++) {
                 AstInitField *field = ((AstInitField *)ast->init.fields.data) + i;
-                HirField *hir_field = sema_init_field_lookup(expected, field->name);
+                HirField *hir_field = NULL;
+
+                if (field->name.kind == AST_NAME_IDENT) {
+                    hir_field = init_field_lookup(expected, field->name);
+                } else {
+                    if (expected->kind == HIR_TYPE_STRUCT) {
+                        if (positional >= expected->structure.fields.len) {
+                            //! TODO: too many initialiser fields
+                            hir->kind = HIR_EXPR_ERROR;
+                            return hir;
+                        }
+
+                        hir_field = &((HirField *)expected->structure.fields.data)[positional++];
+                    } else {
+                        if (positional != 0) {
+                            //! TODO: too many initialiser fields
+                            hir->kind = HIR_EXPR_ERROR;
+                            return hir;
+                        }
+
+                        if (expected->union_.fields.len == 0) {
+                            //! TODO: empty union initialiser
+                            hir->kind = HIR_EXPR_ERROR;
+                            return hir;
+                        }
+
+                        hir_field = &((HirField *)expected->union_.fields.data)[0];
+                        positional++;
+                    }
+                }
 
                 if (hir_field == NULL) {
-                    //! TODO: unknown field diagnostic
+                    //! TODO: unknown/invalid initialiser field diagnostic
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }
@@ -1482,7 +1533,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (expected != NULL) {
-                if (expected->kind != HIR_TYPE_FUNCTION || !sema_type_equal(type, expected)) {
+                if (expected->kind != HIR_TYPE_FUNCTION || !type_equal(type, expected)) {
                     error_type_mismatch(sema->diags, expected, type, ast->span);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
@@ -1505,7 +1556,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 AstParam *param = (AstParam *)array_at(&ast->lambda.params, i);
                 HirType *param_type = *(HirType **)array_at(&type->function.params, i);
 
-                sema_insert_parameter(sema, param, param_type);
+                insert_parameter(sema, param, param_type);
             }
 
             fn->body = sema_stmt(sema, ast->lambda.body);
@@ -1534,7 +1585,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     return hir;
 }
 
-static bool sema_local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
+static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
 
     Symbol *s = scope_lookup(scope, ast->name);
@@ -1612,7 +1663,7 @@ static bool sema_local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     return true;
 }
 
-static HirStmt *sema_hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
+static HirStmt *hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
     HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
 
     stmt->span = span;
@@ -1621,7 +1672,7 @@ static HirStmt *sema_hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
     return stmt;
 }
 
-static HirExpr *sema_hir_bool(Sema *sema, bool value) {
+static HirExpr *hir_bool(Sema *sema, bool value) {
     HirExpr *expr = arena_alloc(sema->arena, sizeof(HirExpr));
 
     expr->span = (Span) { 0 };
@@ -1635,7 +1686,7 @@ static HirExpr *sema_hir_bool(Sema *sema, bool value) {
     return expr;
 }
 
-static HirStmt *sema_lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
+static HirStmt *lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
     size_t count = 0;
 
     for (size_t i = sema->scopes.len; i > scope; i--) {
@@ -1646,7 +1697,7 @@ static HirStmt *sema_lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
     if (count == 0)
         return exit;
 
-    HirStmt *block = sema_hir_stmt(sema, HIR_STMT_BLOCK, exit->span);
+    HirStmt *block = hir_stmt(sema, HIR_STMT_BLOCK, exit->span);
     block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
 
     for (size_t i = sema->scopes.len; i > scope; i--) {
@@ -1689,7 +1740,7 @@ static bool hir_stmt_terminates(HirStmt *stmt) {
 }
 
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
-static bool sema_block(Sema *sema, AstStmt *ast, HirStmt *hir) {
+static bool block(Sema *sema, AstStmt *ast, HirStmt *hir) {
     hir->kind = HIR_STMT_BLOCK;
     hir->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
 
@@ -1701,7 +1752,7 @@ static bool sema_block(Sema *sema, AstStmt *ast, HirStmt *hir) {
         if (stmt->kind == AST_STMT_VAR) {
             HirStmt *init = NULL;
 
-            if (!sema_local_decl(sema, stmt->var, &init)) {
+            if (!local_decl(sema, stmt->var, &init)) {
                 sema_pop_scope(sema);
                 return false;
             }
@@ -1752,7 +1803,7 @@ static bool sema_block(Sema *sema, AstStmt *ast, HirStmt *hir) {
     return true;
 }
 
-static bool sema_expr_uint(HirExpr *expr, size_t *value) {
+static bool expr_uint(HirExpr *expr, size_t *value) {
     if (expr == NULL || expr->kind != HIR_EXPR_LITERAL)
         return false;
 
@@ -1772,7 +1823,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         case AST_STMT_VAR: {
             HirStmt *init = NULL;
 
-            if (!sema_local_decl(sema, ast->var, &init)) {
+            if (!local_decl(sema, ast->var, &init)) {
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1818,7 +1869,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         }
 
         case AST_STMT_BLOCK:
-            if (!sema_block(sema, ast, hir)) {
+            if (!block(sema, ast, hir)) {
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
             }
@@ -1851,7 +1902,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 return hir;
             }
 
-            HirExpr *value = sema_expr(sema, ast->_return.value, NULL);
+            HirExpr *value = sema_expr(sema, ast->_return.value, return_type);
 
             if (value == NULL || value->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_STMT_ERROR;
@@ -1953,9 +2004,9 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 }
             }
 
-            size_t loop_scope = sema_loop_scope(sema, level);
+            size_t loopscope = loop_scope(sema, level);
 
-            if (loop_scope == SIZE_MAX) {
+            if (loopscope == SIZE_MAX) {
                 error_invalid_break(sema->diags, level, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
@@ -1964,7 +2015,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             hir->kind = HIR_STMT_BREAK;
             hir->_break.level = level;
 
-            return sema_lower_defer_exit(sema, hir, loop_scope);
+            return lower_defer_exit(sema, hir, loopscope);
         }
 
         case AST_STMT_CONTINUE: {
@@ -1989,9 +2040,9 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 }
             }
 
-            size_t loop_scope = sema_loop_scope(sema, level);
+            size_t loopscope = loop_scope(sema, level);
 
-            if (loop_scope == SIZE_MAX) {
+            if (loopscope == SIZE_MAX) {
                 error_invalid_continue(sema->diags, level, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;
@@ -2000,11 +2051,11 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             hir->kind = HIR_STMT_CONTINUE;
             hir->_continue.level = level;
 
-            return sema_lower_defer_exit(sema, hir, loop_scope);
+            return lower_defer_exit(sema, hir, loopscope);
         }
 
         case AST_STMT_FOR: {
-            HirStmt *block = sema_hir_stmt(sema, HIR_STMT_BLOCK, ast->span);
+            HirStmt *block = hir_stmt(sema, HIR_STMT_BLOCK, ast->span);
             block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
 
             sema_push_scope(sema)->loop = true;
@@ -2022,12 +2073,12 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 }
             }
 
-            HirStmt *loop = sema_hir_stmt(sema, HIR_STMT_WHILE, ast->span);
+            HirStmt *loop = hir_stmt(sema, HIR_STMT_WHILE, ast->span);
 
             if (ast->_for.cond != NULL)
                 loop->_while.cond = sema_expr(sema, ast->_for.cond, NULL);
             else
-                loop->_while.cond = sema_hir_bool(sema, true);
+                loop->_while.cond = hir_bool(sema, true);
 
             if (loop->_while.cond == NULL ||
                 loop->_while.cond->kind == HIR_EXPR_ERROR) {
@@ -2044,13 +2095,13 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 return loop;
             }
 
-            HirStmt *loop_body = sema_hir_stmt(sema, HIR_STMT_BLOCK, ast->_for.body->span);
+            HirStmt *loop_body = hir_stmt(sema, HIR_STMT_BLOCK, ast->_for.body->span);
             loop_body->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
 
             array_push(&loop_body->block.stmts, &body);
 
             if (ast->_for.post != NULL) {
-                HirStmt *post = sema_hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
+                HirStmt *post = hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
                 post->expr = sema_expr(sema, ast->_for.post, NULL);
 
                 if (post->expr == NULL || post->expr->kind == HIR_EXPR_ERROR) {
@@ -2149,7 +2200,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     for (size_t i = 0; i < ast->params.len; i++) {
         AstParam *param = (AstParam *)array_at(&ast->params, i);
         HirType *param_type = *(HirType **)array_at(&type->function.params, i);
-        Symbol *parameter = sema_insert_parameter(sema, param, param_type);
+        Symbol *parameter = insert_parameter(sema, param, param_type);
 
         HirParam hir_param = {
             .symbol = parameter,
@@ -2287,7 +2338,7 @@ void sema_decl(Sema *sema, AstDecl *ast) {
     }
 }
 
-static void sema_builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
+static void builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
     switch (builtin) {
         case BUILTIN_UINT8:
         case BUILTIN_INT8:
@@ -2318,7 +2369,7 @@ static void sema_builtin_layout(BuiltinType builtin, size_t *size, size_t *align
     assert(!"unhandled builtin type");
 }
 
-static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
+static void insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
     Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
     HirType *type = arena_alloc(sema->arena, sizeof(*type));
     *type = (HirType) {
@@ -2326,7 +2377,7 @@ static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builti
         .mutable = false,
         .builtin = builtin,
     };
-    sema_builtin_layout(builtin, &type->size, &type->align);
+    builtin_layout(builtin, &type->size, &type->align);
     *symbol = (Symbol) {
         .kind = SYMBOL_TYPE,
         .name = (AstName) {
@@ -2340,17 +2391,17 @@ static void sema_insert_builtin_type(Sema *sema, String name, BuiltinType builti
 }
 
 void sema_insert_builtin_types(Sema *sema) {
-    sema_insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
-    sema_insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
-    sema_insert_builtin_type(sema, STRING("int32"), BUILTIN_INT32);
-    sema_insert_builtin_type(sema, STRING("int64"), BUILTIN_INT64);
+    insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
+    insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
+    insert_builtin_type(sema, STRING("int32"), BUILTIN_INT32);
+    insert_builtin_type(sema, STRING("int64"), BUILTIN_INT64);
 
-    sema_insert_builtin_type(sema, STRING("uint8"), BUILTIN_UINT8);
-    sema_insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
-    sema_insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
-    sema_insert_builtin_type(sema, STRING("uint64"), BUILTIN_UINT64);
+    insert_builtin_type(sema, STRING("uint8"), BUILTIN_UINT8);
+    insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
+    insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
+    insert_builtin_type(sema, STRING("uint64"), BUILTIN_UINT64);
 
-    sema_insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
+    insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
 
-    sema_insert_builtin_type(sema, STRING("none"), BUILTIN_NONE);
+    insert_builtin_type(sema, STRING("none"), BUILTIN_NONE);
 }

@@ -281,6 +281,7 @@ const char *lir_opcode_name(LirOpcode opcode) {
         case LIR_OP_INSERT: return "insert";
         case LIR_OP_EXTRACT_DYNAMIC: return "extract_dynamic";
         case LIR_OP_INSERT_DYNAMIC: return "insert_dynamic";
+        case LIR_OP_ZERO: return "zero";
     }
 
     return "<invalid>";

@@ -1,0 +1,60 @@
+name: comparisons
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn bool equal(int64 *a, int64 *b) {
+    return a == b;
+}
+
+fn bool not_equal(int64 *a, int64 *b) {
+    return a != b;
+}
+
+fn bool less(int64 *a, int64 *b) {
+    return a < b;
+}
+
+fn bool less_equal(int64 *a, int64 *b) {
+    return a <= b;
+}
+
+fn bool greater(int64 *a, int64 *b) {
+    return a > b;
+}
+
+fn bool greater_equal(int64 *a, int64 *b) {
+    return a >= b;
+}
+
+[lir]
+equal:
+    block0(%0, %1):
+        %2 = eq %0, %1
+        return %2
+
+not_equal:
+    block0(%0, %1):
+        %2 = ne %0, %1
+        return %2
+
+less:
+    block0(%0, %1):
+        %2 = lt %0, %1
+        return %2
+
+less_equal:
+    block0(%0, %1):
+        %2 = le %0, %1
+        return %2
+
+greater:
+    block0(%0, %1):
+        %2 = gt %0, %1
+        return %2
+
+greater_equal:
+    block0(%0, %1):
+        %2 = ge %0, %1
+        return %2

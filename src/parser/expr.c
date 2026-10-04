@@ -384,10 +384,7 @@ AstExpr *parse_init_expression(Parser *p) {
 
     expr->span = start.span;
     expr->kind = AST_EXPR_INIT;
-    expr->init.fields = array_create(
-        p->arena,
-        sizeof(AstInitField)
-    );
+    expr->init.fields = array_create(p->arena, sizeof(AstInitField));
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
         AstInitField field = {
@@ -397,23 +394,17 @@ AstExpr *parse_init_expression(Parser *p) {
 
         if (match(p, TK_DOT)) {
             field.name = parse_name(p);
-
             expect(p, TK_EQ);
         }
 
         field.value = parse_expression(p);
-
         array_push(&expr->init.fields, &field);
 
-        if (match(p, TK_COMMA))
-            continue;
-
-        if (!expect(p, TK_RBRACE))
-            error_expected_token(p->diags, TK_COMMA, p->current.span);
+        if (!match(p, TK_COMMA))
+            break;
     }
 
     expect(p, TK_RBRACE);
-
     return expr;
 }
 

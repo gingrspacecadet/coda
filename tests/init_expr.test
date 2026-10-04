@@ -1,0 +1,63 @@
+name: struct initialisers
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Foo = struct {
+    uint8 x;
+    uint8 y;
+};
+
+fn Foo all() {
+    return {1, 2};
+}
+
+fn Foo partial() {
+    return {.y = 2};
+}
+
+fn Foo empty() {
+    return {};
+}
+
+type Inner = struct {
+    uint16 x;
+};
+
+type Outer = struct {
+    Inner inner;
+    uint8 y;
+};
+
+fn Outer nested() {
+    return {{42}, 7};
+}
+
+[lir]
+all:
+    block0:
+        %0 = zero
+        %1 = insert %0, $0, 1
+        %2 = insert %1, $1, 2
+        return %2
+
+partial:
+    block0:
+        %0 = zero
+        %1 = insert %0, $1, 2
+        return %1
+
+empty:
+    block0:
+        %0 = zero
+        return %0
+
+nested:
+    block0:
+        %0 = zero
+        %1 = zero
+        %2 = insert %1, $0, 42
+        %3 = insert %0, $0, %2
+        %4 = insert %3, $2, 7
+        return %4

@@ -262,6 +262,30 @@ static bool hir_type_is_pointer(HirType *type) {
     return type && type->kind == HIR_TYPE_POINTER;
 }
 
+static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr);
+
+static LirOperand lir_lower_init(LirLower *lower, HirExpr *expr) {
+    HirType *type = expr->type;
+
+    LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, type, (Array){0});
+    LirOperand aggregate = lir_operand_value(zero, type);
+
+    for (size_t i = 0; i < expr->init.fields.len; i++) {
+        HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+        LirOperand value = lir_lower_expr(lower, field->value);
+        LirOperand operands[3] = {
+            aggregate,
+            lir_operand_offset(field->field->offset),
+            value,
+        };
+
+        LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, type, (Array){.data = operands, .len = 3});
+        aggregate = lir_operand_value(result, type);
+    }
+
+    return aggregate;
+}
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -439,6 +463,8 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_INIT:
+            return lir_lower_init(lower, expr);
+
         case HIR_EXPR_LAMBDA:
             assert(!"HIR expression not yet lowered");
 
