@@ -1107,15 +1107,88 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
     }
 }
 
+static void lir_collect_static_data(Array(LirData) *data, HirExpr *expr, size_t base_offset) {
+    if (expr == NULL)
+        return;
+
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL: {
+            LirData value = {
+                .offset = base_offset,
+                .type = expr->type,
+            };
+
+            switch (expr->literal.kind) {
+                case HIR_LITERAL_INTEGER:
+                    if (expr->literal.integer == 0)
+                        return;
+
+                    value.kind = LIR_DATA_INTEGER;
+                    value.integer = expr->literal.integer;
+                    break;
+
+                case HIR_LITERAL_FLOAT:
+                    if (expr->literal.floating == 0.0)
+                        return;
+
+                    value.kind = LIR_DATA_FLOAT;
+                    value.floating = expr->literal.floating;
+                    break;
+
+                case HIR_LITERAL_BOOL:
+                    if (!expr->literal.boolean)
+                        return;
+
+                    value.kind = LIR_DATA_BOOL;
+                    value.boolean = true;
+                    break;
+
+                case HIR_LITERAL_NULL:
+                    return;
+
+                case HIR_LITERAL_STRING:
+                    if (expr->literal.string.length == 0)
+                        return;
+
+                    value.kind = LIR_DATA_BYTES;
+                    value.bytes = expr->literal.string;
+                    break;
+
+                case HIR_LITERAL_ERROR:
+                    assert(!"error literal reached LIR");
+            }
+
+            array_push(data, &value);
+            return;
+        }
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+
+                lir_collect_static_data(data, field->value, base_offset + field->offset);
+            }
+
+            return;
+
+        case HIR_EXPR_CAST:
+            assert(!"static casts should be evaluated before LIR");
+
+        default:
+            assert(!"non-static expression reached global data lowering");
+    }
+}
+
 static void lir_lower_global(LirModule *module, HirGlobal *hir) {
     LirGlobal global = {
         .symbol = hir->symbol,
         .type = hir->type,
-        .init = hir->init,
+        .data = array_create(module->arena, sizeof(LirData)),
         .is_mutable = hir->type->mutable,
         .is_export = hir->is_export,
     };
 
+    lir_collect_static_data(&global.data, hir->init, 0);
     array_push(&module->globals, &global);
 }
 

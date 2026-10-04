@@ -502,7 +502,7 @@ static void lir_print_static_init(FILE *out, HirExpr *expr) {
 static void lir_print_global(FILE *out, const LirGlobal global) {
     fprintf(out, "global ");
 
-    if (global.type->mutable)
+    if (global.is_mutable)
         fprintf(out, "mut ");
 
     fprintf(out, "@%.*s", string_fmt(global.symbol->name.ident));
@@ -510,9 +510,36 @@ static void lir_print_global(FILE *out, const LirGlobal global) {
     if (global.is_export)
         fprintf(out, " [export]");
 
-    fprintf(out, " = ");
-    lir_print_static_init(out, global.init);
-    fprintf(out, "\n");
+    fprintf(out, ":\n");
+
+    for (size_t i = 0; i < global.data.len; i++) {
+        const LirData *data = &((LirData *)global.data.data)[i];
+
+        fprintf(out, "    $%zu = ", data->offset);
+
+        switch (data->kind) {
+            case LIR_DATA_INTEGER:
+                fprintf(out, "%" PRIu64, data->integer);
+                break;
+
+            case LIR_DATA_FLOAT:
+                fprintf(out, "%g", data->floating);
+                break;
+
+            case LIR_DATA_BOOL:
+                fprintf(out, "%s", data->boolean ? "true" : "false");
+                break;
+
+            case LIR_DATA_BYTES:
+                fprintf(out, "<%zu bytes>", data->bytes.length);
+                break;
+        }
+
+        fprintf(out, "\n");
+    }
+
+    if (global.data.len == 0)
+        fprintf(out, "    zero\n");
 }
 
 void lir_print(FILE *out, const LirModule *module) {

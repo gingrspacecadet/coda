@@ -158,10 +158,30 @@ typedef struct {
     LirValueId next_value;
 } LirFunction;
 
+typedef enum {
+    LIR_DATA_INTEGER,
+    LIR_DATA_FLOAT,
+    LIR_DATA_BOOL,
+    LIR_DATA_BYTES,
+} LirDataKind;
+
+typedef struct {
+    size_t offset;
+    HirType *type;
+    LirDataKind kind;
+
+    union {
+        uint64_t integer;
+        double floating;
+        bool boolean;
+        String bytes;
+    };
+} LirData;
+
 typedef struct {
     Symbol *symbol;
     HirType *type;
-    HirExpr *init;
+    Array(LirData) data;
     bool is_mutable;
     bool is_export;
 } LirGlobal;
