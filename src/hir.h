@@ -283,12 +283,20 @@ struct HirFunction {
     bool is_export;
 };
 
+typedef enum {
+    COMP_GLOBAL_UNVISITED,
+    COMP_GLOBAL_EVALUATING,
+    COMP_GLOBAL_EVALUATED,
+    COMP_GLOBAL_FAILED,
+} CompGlobalState;
+
 struct HirGlobal {
     Symbol *symbol;
     HirType *type;
     HirExpr *init;
 
     bool is_export;
+    CompGlobalState comp_state;
 };
 
 struct HirModule {

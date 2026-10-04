@@ -402,6 +402,61 @@ static HirGlobal *comp_find_global(Sema *sema, Symbol *symbol) {
     return NULL;
 }
 
+static bool comp_expr_is_evaluable(HirExpr *expr) {
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            return true;
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+
+                if (!comp_expr_is_evaluable(field->value))
+                    return false;
+            }
+
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static HirExpr *comp_eval_global(Sema *sema, HirGlobal *global) {
+    switch (global->comp_state) {
+        case COMP_GLOBAL_EVALUATED:
+            return global->init;
+
+        case COMP_GLOBAL_EVALUATING:
+            //! TODO: report comptime dependency cycle
+            return global->init;
+
+        case COMP_GLOBAL_FAILED:
+            return global->init;
+
+        case COMP_GLOBAL_UNVISITED:
+            break;
+    }
+
+    global->comp_state = COMP_GLOBAL_EVALUATING;
+
+    if (global->init == NULL) {
+        global->comp_state = COMP_GLOBAL_FAILED;
+        return global->init;
+    }
+
+    HirExpr *result = comp_eval_expr(sema, global->init);
+
+    if (!comp_expr_is_evaluable(result)) {
+        global->comp_state = COMP_GLOBAL_FAILED;
+        return global->init;
+    }
+
+    global->init = result;
+    global->comp_state = COMP_GLOBAL_EVALUATED;
+    return result;
+}
+
 HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -415,13 +470,10 @@ HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
 
             HirGlobal *global = comp_find_global(sema, symbol);
 
-            if (global == NULL || global->init == NULL)
+            if (global == NULL || global->type->mutable)
                 return expr;
 
-            if (global->type->mutable)
-                return expr;
-
-            return comp_eval_expr(sema, global->init);
+            return comp_eval_global(sema, global);
         }
 
         case HIR_EXPR_UNARY:
@@ -465,26 +517,6 @@ HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
 
         default:
             return expr;
-    }
-}
-
-static bool comp_expr_is_evaluable(HirExpr *expr) {
-    switch (expr->kind) {
-        case HIR_EXPR_LITERAL:
-            return true;
-
-        case HIR_EXPR_INIT:
-            for (size_t i = 0; i < expr->init.fields.len; i++) {
-                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
-
-                if (!comp_expr_is_evaluable(field->value))
-                    return false;
-            }
-
-            return true;
-
-        default:
-            return false;
     }
 }
 
