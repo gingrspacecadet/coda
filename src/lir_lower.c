@@ -163,6 +163,30 @@ static bool hir_type_is_signed_integer(HirType *type) {
     return false;
 }
 
+static bool hir_type_is_integer(HirType *type) {
+    if (!type || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    switch (type->builtin) {
+        case BUILTIN_INT8:
+        case BUILTIN_INT16:
+        case BUILTIN_INT32:
+        case BUILTIN_INT64:
+        case BUILTIN_UINT8:
+        case BUILTIN_UINT16:
+        case BUILTIN_UINT32:
+        case BUILTIN_UINT64:
+            return true;
+
+        case BUILTIN_BOOL:
+        case BUILTIN_NONE:
+            return false;
+    }
+
+    assert(!"unhandled builtin type");
+    return false;
+}
+
 static LirOperand lir_lower_literal(HirExpr *expr) {
     HirLiteral literal = expr->literal;
 
@@ -224,6 +248,20 @@ static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
     return true;
 }
 
+static LirOperand lir_lower_scaled_index(LirLower *lower, LirOperand index, size_t element_size) {
+    LirOperand scale = hir_type_is_signed_integer(index.type)
+        ? lir_operand_int((int64_t)element_size, index.type)
+        : lir_operand_uint((uint64_t)element_size, index.type);
+
+    LirOperand operands[2] = {index, scale};
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_MUL, index.type, (Array){.data = operands, .len = 2});
+    return lir_operand_value(result, index.type);
+}
+
+static bool hir_type_is_pointer(HirType *type) {
+    return type && type->kind == HIR_TYPE_POINTER;
+}
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -273,14 +311,55 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 }
             }
 
-        case HIR_EXPR_BINARY:
-            if (expr->binary.op == AST_BINARY_LOGICAL_AND) {
-                return lir_lower_logical_and(lower, expr);
+        case HIR_EXPR_BINARY: {
+            HirType *left_type = expr->binary.left->type;
+            HirType *right_type = expr->binary.right->type;
+
+            if ((expr->binary.op == AST_BINARY_ADD || expr->binary.op == AST_BINARY_SUB) && hir_type_is_pointer(left_type) && hir_type_is_integer(right_type)) {
+                LirOperand pointer = lir_lower_expr(lower, expr->binary.left);
+                LirOperand index = lir_lower_expr(lower, expr->binary.right);
+                LirOperand offset = lir_lower_scaled_index(lower, index, left_type->pointer.pointee->size);
+
+                if (expr->binary.op == AST_BINARY_SUB) {
+                    LirOperand zero = hir_type_is_signed_integer(offset.type)
+                        ? lir_operand_int(0, offset.type)
+                        : lir_operand_uint(0, offset.type);
+
+                    LirOperand operands[2] = {zero, offset};
+                    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_SUB, offset.type, (Array){.data = operands, .len = 2});
+                    offset = lir_operand_value(result, offset.type);
+                }
+
+                LirOperand operands[2] = {pointer, offset};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, pointer.type, (Array){.data = operands, .len = 2});
+                return lir_operand_value(result, expr->type);
             }
 
-            if (expr->binary.op == AST_BINARY_LOGICAL_OR) {
-                return lir_lower_logical_or(lower, expr);
+            if (expr->binary.op == AST_BINARY_ADD && hir_type_is_integer(left_type) && hir_type_is_pointer(right_type)) {
+                LirOperand index = lir_lower_expr(lower, expr->binary.left);
+                LirOperand pointer = lir_lower_expr(lower, expr->binary.right);
+                LirOperand offset = lir_lower_scaled_index(lower, index, right_type->pointer.pointee->size);
+
+                LirOperand operands[2] = {pointer, offset};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, pointer.type, (Array){.data = operands, .len = 2});
+                return lir_operand_value(result, expr->type);
             }
+
+            if (expr->binary.op == AST_BINARY_SUB && hir_type_is_pointer(left_type) && hir_type_is_pointer(right_type)) {
+                LirOperand left = lir_lower_expr(lower, expr->binary.left);
+                LirOperand right = lir_lower_expr(lower, expr->binary.right);
+                LirOperand element_size = lir_operand_offset(left_type->pointer.pointee->size);
+
+                LirOperand operands[3] = {left, right, element_size};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_DIFF, expr->type, (Array){.data = operands, .len = 3});
+                return lir_operand_value(result, expr->type);
+            }
+
+            if (expr->binary.op == AST_BINARY_LOGICAL_AND)
+                return lir_lower_logical_and(lower, expr);
+
+            if (expr->binary.op == AST_BINARY_LOGICAL_OR)
+                return lir_lower_logical_or(lower, expr);
 
             LirOperand operands[2] = {
                 lir_lower_expr(lower, expr->binary.left),
@@ -288,8 +367,8 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             };
 
             LirValueId result = lir_emit(lower->function, lower->block, lir_lower_binary_op(expr->binary.op), expr->type, (Array){.data = operands, .len = 2});
-
             return lir_operand_value(result, expr->type);
+        }
 
         case HIR_EXPR_CALL: {
             size_t operand_count = expr->call.args.len + 1;
@@ -347,14 +426,9 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
 
                 LirOperand aggregate = lir_lower_expr(lower, object);
                 LirOperand index_operand = lir_lower_expr(lower, index);
-                LirOperand scale = hir_type_is_signed_integer(index_operand.type)
-                    ? lir_operand_int((int64_t)object->type->array.element->size, index_operand.type)
-                    : lir_operand_uint((uint64_t)object->type->array.element->size, index_operand.type);
+                LirOperand lir_offset = lir_lower_scaled_index(lower, index_operand, object->type->array.element->size);
 
-                LirOperand mul_operands[2] = {index_operand, scale};
-                LirValueId lir_offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_operand.type, (Array){.data = mul_operands, .len = 2});
-
-                LirOperand extract_operands[2] = {aggregate, lir_operand_value(lir_offset, index_operand.type)};
+                LirOperand extract_operands[2] = {aggregate, lir_offset};
                 LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT_DYNAMIC, expr->type, (Array){.data = extract_operands, .len = 2});
 
                 return lir_operand_value(result, expr->type);
@@ -837,15 +911,7 @@ static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr) {
     LirOperand index_operand = lir_lower_expr(lower, index);
     HirType *element_type = expr->type;
 
-    LirOperand scale = hir_type_is_signed_integer(index_operand.type)
-        ? lir_operand_int((int64_t)element_type->size, index_operand.type)
-        : lir_operand_uint((uint64_t)element_type->size, index_operand.type);
-
-    LirOperand operands[2] = {index_operand, scale};
-
-    LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index_operand.type, (Array){.data = operands, .len = 2});
-
-    return lir_operand_value(offset, index_operand.type);
+    return lir_lower_scaled_index(lower, index_operand, element_type->size);
 }
 
 static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *target, LirOperand value) {

@@ -610,8 +610,42 @@ static HirExpr *sema_expr_coerce(Sema *sema, HirExpr *expr, HirType *expected) {
     return sema_coerce(sema, expr, expected);
 }
 
+static bool is_integer(HirType *type) {
+    if (!type || type->kind != HIR_TYPE_BUILTIN || (
+        type->builtin != BUILTIN_INT8 &&
+        type->builtin != BUILTIN_INT16 &&
+        type->builtin != BUILTIN_INT32 &&
+        type->builtin != BUILTIN_INT64 &&
+        type->builtin != BUILTIN_UINT8 &&
+        type->builtin != BUILTIN_UINT16 &&
+        type->builtin != BUILTIN_UINT32 &&
+        type->builtin != BUILTIN_UINT64)
+    )
+        return false;
+    return true;
+}
+
+static bool is_pointer(HirType *type) {
+    return type && type->kind == HIR_TYPE_POINTER && !type->pointer.optional;
+}
+
 static HirType *sema_binary_operand_type(Sema *sema, AstBinaryOp op, HirExpr *left, HirExpr *right, HirType *expected) {
     if (left->type != NULL && right->type != NULL) {
+        if (op == AST_BINARY_ADD || op == AST_BINARY_SUB) {
+            if (is_pointer(left->type) && is_integer(right->type))
+                return left->type;
+
+            if (op == AST_BINARY_ADD && is_integer(left->type) && is_pointer(right->type))
+                return right->type;
+
+            if (op == AST_BINARY_SUB && is_pointer(left->type) && is_pointer(right->type)) {
+                if (!sema_type_equal(left->type->pointer.pointee, right->type->pointer.pointee))
+                    return NULL;
+
+                return sema_builtin_type(sema, BUILTIN_INT64);
+            }
+        }
+
         if (!sema_type_equal(left->type, right->type)) {
             //! TODO: implicit conversion
             return NULL;
@@ -629,7 +663,10 @@ static HirType *sema_binary_operand_type(Sema *sema, AstBinaryOp op, HirExpr *le
     return expected;
 }
 
-static HirType *sema_binary_result_type(Sema *sema, AstBinaryOp op, HirType *operand) {
+static HirType *sema_binary_result_type(Sema *sema, AstBinaryOp op, HirType *left, HirType *right, HirType *operand) {
+    if (op == AST_BINARY_SUB && is_pointer(left) && is_pointer(right))
+        return sema_builtin_type(sema, BUILTIN_INT64);
+
     switch (op) {
         case AST_BINARY_LT:
         case AST_BINARY_LTE:
@@ -987,21 +1024,6 @@ static HirLiteral sema_literal(Sema *sema, AstLiteral literal) {
     return (HirLiteral){0};
 }
 
-static bool is_integer(HirType *type) {
-    if (!type || type->kind != HIR_TYPE_BUILTIN || (
-        type->builtin != BUILTIN_INT8 &&
-        type->builtin != BUILTIN_INT16 &&
-        type->builtin != BUILTIN_INT32 &&
-        type->builtin != BUILTIN_INT64 &&
-        type->builtin != BUILTIN_UINT8 &&
-        type->builtin != BUILTIN_UINT16 &&
-        type->builtin != BUILTIN_UINT32 &&
-        type->builtin != BUILTIN_UINT64)
-    )
-        return false;
-    return true;
-}
-
 static HirType *sema_type_with_mutability(Sema *sema, HirType *type, bool mutable) {
     HirType *copy = arena_alloc(sema->arena, sizeof(HirType));
     *copy = *type;
@@ -1142,7 +1164,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             hir->binary.left = left;
             hir->binary.right = right;
-            hir->type = sema_binary_result_type(sema, ast->binary.op, operand_type);
+            hir->type = sema_binary_result_type(sema, ast->binary.op, left->type, right->type, operand_type);
 
             if (hir->type == NULL) {
                 error_invalid_binary_operation(sema->diags, binary_op_name(ast->binary.op), left->type, right->type, ast->span);

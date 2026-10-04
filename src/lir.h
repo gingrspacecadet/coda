@@ -73,6 +73,7 @@ typedef enum {
 
     LIR_OP_ADDR,
     LIR_OP_ADDR_ADD,
+    LIR_OP_ADDR_DIFF,
 
     LIR_OP_CALL,
 
