@@ -39,6 +39,7 @@ typedef enum {
     E_EXPECTED_INTEGER,
     E_INDEX_OOB,
     E_GINIT_NOT_STATIC,
+    E_COMP_CANT_EVAL,
 } DiagCode;
 
 typedef struct {

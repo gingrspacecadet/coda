@@ -502,4 +502,18 @@ void error_global_initialiser_not_static(Diags *diags, Span span) {
     diag_help(&b, STRING("Try adding a '$' beforehand to evaluate at compile-time"));
 
     diag_finish(&b);
-}   
+}
+
+void error_comptime_not_evaluable(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_COMP_CANT_EVAL,
+        span,
+        STRING("Cannot currently evaluate this expression")
+    );
+
+    diag_note(&b, STRING("This feature is coming soon!"));
+
+    diag_finish(&b);
+}

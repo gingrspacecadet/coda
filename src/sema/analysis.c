@@ -71,8 +71,393 @@ Symbol *sema_lookup_path(Sema *sema, Path path) {
 }
 
 //! TODO: comptime stuff!
-HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
+static HirExpr *comp_literal(Sema *sema, HirExpr *expr, HirLiteral literal, HirType *type) {
+    HirExpr *result = arena_alloc(sema->arena, sizeof(*result));
+    *result = *expr;
+
+    result->kind = HIR_EXPR_LITERAL;
+    result->type = type;
+    result->literal = literal;
+
+    return result;
+}
+
+static bool comp_is_signed(HirType *type) {
+    switch (type->builtin) {
+        case BUILTIN_INT8:
+        case BUILTIN_INT16:
+        case BUILTIN_INT32:
+        case BUILTIN_INT64:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static unsigned comp_integer_bits(HirType *type) {
+    return (unsigned)(type->size * 8);
+}
+
+static uint64_t comp_integer_mask(HirType *type) {
+    unsigned bits = comp_integer_bits(type);
+
+    if (bits >= 64)
+        return UINT64_MAX;
+
+    return (UINT64_C(1) << bits) - 1;
+}
+
+static uint64_t comp_integer_wrap(HirType *type, uint64_t value) {
+    return value & comp_integer_mask(type);
+}
+
+static int64_t comp_integer_signed(HirType *type, uint64_t value) {
+    unsigned bits = comp_integer_bits(type);
+    uint64_t mask = comp_integer_mask(type);
+
+    value &= mask;
+
+    if (bits == 64)
+        return (int64_t)value;
+
+    uint64_t sign = UINT64_C(1) << (bits - 1);
+
+    if (value & sign)
+        value |= ~mask;
+
+    return (int64_t)value;
+}
+
+static bool is_integer(HirType *type) {
+    if (!type || type->kind != HIR_TYPE_BUILTIN || (
+        type->builtin != BUILTIN_INT8 &&
+        type->builtin != BUILTIN_INT16 &&
+        type->builtin != BUILTIN_INT32 &&
+        type->builtin != BUILTIN_INT64 &&
+        type->builtin != BUILTIN_UINT8 &&
+        type->builtin != BUILTIN_UINT16 &&
+        type->builtin != BUILTIN_UINT32 &&
+        type->builtin != BUILTIN_UINT64)
+    )
+        return false;
+    return true;
+}
+
+static bool is_pointer(HirType *type) {
+    return type && type->kind == HIR_TYPE_POINTER && !type->pointer.optional;
+}
+
+HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr);
+
+static HirExpr *comp_eval_binary(Sema *sema, HirExpr *expr) {
+    AstBinaryOp op = expr->binary.op;
+
+    if (op == AST_BINARY_LOGICAL_AND || op == AST_BINARY_LOGICAL_OR) {
+        HirExpr *left = comp_eval_expr(sema, expr->binary.left);
+
+        if (left->kind != HIR_EXPR_LITERAL || left->literal.kind != HIR_LITERAL_BOOL)
+            return expr;
+
+        bool lhs = left->literal.boolean;
+
+        if (op == AST_BINARY_LOGICAL_AND && !lhs)
+            return comp_literal(sema, expr, (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = false}, expr->type);
+
+        if (op == AST_BINARY_LOGICAL_OR && lhs)
+            return comp_literal(sema, expr, (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = true}, expr->type);
+
+        HirExpr *right = comp_eval_expr(sema, expr->binary.right);
+
+        if (right->kind != HIR_EXPR_LITERAL || right->literal.kind != HIR_LITERAL_BOOL)
+            return expr;
+
+        return comp_literal(sema, expr, (HirLiteral){
+            .kind = HIR_LITERAL_BOOL,
+            .boolean = right->literal.boolean,
+        }, expr->type);
+    }
+
+    HirExpr *left = comp_eval_expr(sema, expr->binary.left);
+    HirExpr *right = comp_eval_expr(sema, expr->binary.right);
+
+    if (left->kind != HIR_EXPR_LITERAL || right->kind != HIR_EXPR_LITERAL)
+        return expr;
+
+    if (left->literal.kind == HIR_LITERAL_BOOL &&
+        right->literal.kind == HIR_LITERAL_BOOL) {
+        bool a = left->literal.boolean;
+        bool b = right->literal.boolean;
+        bool result;
+
+        switch (op) {
+            case AST_BINARY_EQUAL: result = a == b; break;
+            case AST_BINARY_NOT_EQUAL: result = a != b; break;
+            default: return expr;
+        }
+
+        return comp_literal(sema, expr, (HirLiteral){
+            .kind = HIR_LITERAL_BOOL,
+            .boolean = result,
+        }, expr->type);
+    }
+
+    if (!is_integer(expr->type) && !is_integer(left->type))
+        return expr;
+
+    uint64_t a = left->literal.integer;
+    uint64_t b = right->literal.integer;
+    uint64_t result;
+
+    switch (op) {
+        case AST_BINARY_ADD:
+            result = a + b;
+            break;
+
+        case AST_BINARY_SUB:
+            result = a - b;
+            break;
+
+        case AST_BINARY_MUL:
+            result = a * b;
+            break;
+
+        case AST_BINARY_DIV:
+            if (b == 0) {
+                //! TODO: division by zero diagnostic
+                return expr;
+            }
+
+            if (comp_is_signed(expr->type)) {
+                int64_t sa = comp_integer_signed(expr->type, a);
+                int64_t sb = comp_integer_signed(expr->type, b);
+                result = (uint64_t)((__int128)sa / (__int128)sb);
+            } else {
+                result = a / b;
+            }
+            break;
+
+        case AST_BINARY_MOD:
+            if (b == 0) {
+                //! TODO: division by zero diagnostic
+                return expr;
+            }
+
+            if (comp_is_signed(expr->type)) {
+                int64_t sa = comp_integer_signed(expr->type, a);
+                int64_t sb = comp_integer_signed(expr->type, b);
+                result = (uint64_t)((__int128)sa % (__int128)sb);
+            } else {
+                result = a % b;
+            }
+            break;
+
+        case AST_BINARY_BIT_AND:
+            result = a & b;
+            break;
+
+        case AST_BINARY_BIT_XOR:
+            result = a ^ b;
+            break;
+
+        case AST_BINARY_BIT_OR:
+            result = a | b;
+            break;
+
+        case AST_BINARY_NAND:
+            result = ~(a & b);
+            break;
+
+        case AST_BINARY_NOR:
+            result = ~(a | b);
+            break;
+
+        case AST_BINARY_SHL:
+            result = a << (b & 63);
+            break;
+
+        case AST_BINARY_SHR:
+            if (comp_is_signed(expr->type))
+                result = (uint64_t)(comp_integer_signed(expr->type, a) >> (b & 63));
+            else
+                result = a >> (b & 63);
+            break;
+
+        case AST_BINARY_EQUAL:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) == comp_integer_signed(expr->type, b)
+                    : a == b,
+            }, expr->type);
+
+        case AST_BINARY_NOT_EQUAL:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) != comp_integer_signed(expr->type, b)
+                    : a != b,
+            }, expr->type);
+
+        case AST_BINARY_LT:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) < comp_integer_signed(expr->type, b)
+                    : a < b,
+            }, expr->type);
+
+        case AST_BINARY_LTE:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) <= comp_integer_signed(expr->type, b)
+                    : a <= b,
+            }, expr->type);
+
+        case AST_BINARY_GT:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) > comp_integer_signed(expr->type, b)
+                    : a > b,
+            }, expr->type);
+
+        case AST_BINARY_GTE:
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = comp_is_signed(expr->type)
+                    ? comp_integer_signed(expr->type, a) >= comp_integer_signed(expr->type, b)
+                    : a >= b,
+            }, expr->type);
+
+        default:
+            return expr;
+    }
+
+    result = comp_integer_wrap(expr->type, result);
+
+    return comp_literal(sema, expr, (HirLiteral){
+        .kind = HIR_LITERAL_INTEGER,
+        .integer = result,
+    }, expr->type);
+}
+
+static HirExpr *comp_eval_unary(Sema *sema, HirExpr *expr) {
+    HirExpr *operand = comp_eval_expr(sema, expr->unary.operand);
+
+    if (operand->kind != HIR_EXPR_LITERAL)
+        return expr;
+
+    switch (expr->unary.op) {
+        case AST_UNARY_POS:
+            if (!is_integer(operand->type))
+                return expr;
+
+            return operand;
+
+        case AST_UNARY_NEG:
+            if (!is_integer(operand->type))
+                return expr;
+
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_INTEGER,
+                .integer = comp_integer_wrap(expr->type, 0 - operand->literal.integer),
+            }, expr->type);
+
+        case AST_UNARY_BIT_NOT:
+            if (!is_integer(operand->type))
+                return expr;
+
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_INTEGER,
+                .integer = comp_integer_wrap(expr->type, ~operand->literal.integer),
+            }, expr->type);
+
+        case AST_UNARY_NOT:
+            if (operand->literal.kind != HIR_LITERAL_BOOL)
+                return expr;
+
+            return comp_literal(sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_BOOL,
+                .boolean = !operand->literal.boolean,
+            }, expr->type);
+
+        case AST_UNARY_DEREF:
+        case AST_UNARY_ADDRESS:
+            return expr;
+    }
+
     return expr;
+}
+
+HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr) {
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            return expr;
+
+        case HIR_EXPR_UNARY:
+            return comp_eval_unary(sema, expr);
+
+        case HIR_EXPR_BINARY:
+            return comp_eval_binary(sema, expr);
+
+        case HIR_EXPR_CAST: {
+            HirExpr *operand = comp_eval_expr(sema, expr->cast.operand);
+
+            if (operand->kind != HIR_EXPR_LITERAL)
+                return expr;
+
+            if (operand->literal.kind == HIR_LITERAL_INTEGER &&
+                expr->type->kind == HIR_TYPE_BUILTIN &&
+                is_integer(expr->type)) {
+                return comp_literal(sema, expr, (HirLiteral){
+                    .kind = HIR_LITERAL_INTEGER,
+                    .integer = comp_integer_wrap(expr->type, operand->literal.integer),
+                }, expr->type);
+            }
+
+            return expr;
+        }
+
+        case HIR_EXPR_INIT: {
+            HirExpr *result = arena_alloc(sema->arena, sizeof(*result));
+            *result = *expr;
+
+            result->init.fields = array_create(sema->arena, sizeof(HirInitField));
+
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField field = ((HirInitField *)expr->init.fields.data)[i];
+                field.value = comp_eval_expr(sema, field.value);
+                array_push(&result->init.fields, &field);
+            }
+
+            return result;
+        }
+
+        default:
+            return expr;
+    }
+}
+
+static bool comp_expr_is_evaluable(HirExpr *expr) {
+    switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            return true;
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+
+                if (!comp_expr_is_evaluable(field->value))
+                    return false;
+            }
+
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 void collect_decls(Sema *sema, Array(AstDecl *) decls) {
@@ -610,25 +995,6 @@ static HirExpr *expr_coerce(Sema *sema, HirExpr *expr, HirType *expected) {
     return sema_coerce(sema, expr, expected);
 }
 
-static bool is_integer(HirType *type) {
-    if (!type || type->kind != HIR_TYPE_BUILTIN || (
-        type->builtin != BUILTIN_INT8 &&
-        type->builtin != BUILTIN_INT16 &&
-        type->builtin != BUILTIN_INT32 &&
-        type->builtin != BUILTIN_INT64 &&
-        type->builtin != BUILTIN_UINT8 &&
-        type->builtin != BUILTIN_UINT16 &&
-        type->builtin != BUILTIN_UINT32 &&
-        type->builtin != BUILTIN_UINT64)
-    )
-        return false;
-    return true;
-}
-
-static bool is_pointer(HirType *type) {
-    return type && type->kind == HIR_TYPE_POINTER && !type->pointer.optional;
-}
-
 static bool binop_is_comparison(AstBinaryOp op) {
     switch (op) {
         case AST_BINARY_EQUAL:
@@ -1052,6 +1418,42 @@ static HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
 }
 
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
+    if (ast->comptime) {
+        AstExpr copy = *ast;
+        copy.comptime = false;
+
+        HirExpr *hir = sema_expr(sema, &copy, expected);
+
+        if (hir == NULL || hir->kind == HIR_EXPR_ERROR)
+            return hir;
+
+        HirExpr *result = comp_eval_expr(sema, hir);
+
+        if (!comp_expr_is_evaluable(result)) {
+            error_comptime_not_evaluable(sema->diags, ast->span);
+
+            HirExpr *error = arena_alloc(sema->arena, sizeof(*error));
+            error->span = ast->span;
+            error->kind = HIR_EXPR_ERROR;
+            return error;
+        }
+
+        if (expected != NULL && result->kind == HIR_EXPR_LITERAL) {
+            if (!literal_fits(sema, &result->literal, expected)) {
+                error_type_mismatch(sema->diags, expected, result->type, ast->span);
+
+                HirExpr *error = arena_alloc(sema->arena, sizeof(*error));
+                error->span = ast->span;
+                error->kind = HIR_EXPR_ERROR;
+                return error;
+            }
+
+            result->type = expected;
+        }
+
+        return result;
+    }
+
     HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
 
     hir->span = ast->span;

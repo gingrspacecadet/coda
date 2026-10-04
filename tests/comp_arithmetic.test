@@ -1,0 +1,9 @@
+name: compile-time arithmetic
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+int64 answer = $(1 + 2);
+int64 answer2 = $((10 * 4) - 2);
+bool yes = $(3 < 4);
