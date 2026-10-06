@@ -1,0 +1,90 @@
+module core::cbindgen;
+
+type Tokens = enum {
+    LBRACE,
+    RBRACE,
+    LPAREN,
+    RPAREN,
+    SEMICOLON,
+    KW_INT,
+    KW_RETURN,
+    IDENT,
+    INT_LITERAL,
+};
+
+type Token = struct {
+    Tokens kind;
+    string value;
+};
+
+type Source = struct {
+    string data;
+    string filename;
+    usize pos;
+};
+
+type Lexer = struct {
+    mut Source *source;
+};
+
+fn string Lexer.read_identifier(mut Lexer *this) {
+    usize start = this.source.pos;
+
+    while (this.source.pos < this.source.data.len && this.source.data[this.source.pos].is_alpha()) {
+        this.source.pos += 1;
+    }
+
+    return this.source.data[start..this.source.pos];
+}
+
+fn string Lexer.read_int_literal(mut Lexer *this) {
+    usize start = this.source.pos;
+
+    while (this.source.pos < this.source.data.len && this.source.data[this.source.pos].is_digit()) {
+        this.source.pos += 1;
+    }
+
+    return this.source.data[start..this.source.pos];
+}
+
+fn Token Lexer.next(mut Lexer *this) {
+    Token t;
+
+    char *c = &this.source.data[this.source.pos];
+
+    match (this.source.data[this.source.pos]) {
+        '{': t.kind = Tokens::LBRACE;
+        '}': t.kind = Tokens::RBRACE;
+        '(': t.kind = Tokens::LPAREN;
+        ')': t.kind = Tokens::RPAREN;
+        ';': t.kind = Tokens::SEMICOLON;
+        _: {
+            if (c.is_digit()) {
+                t.kind = Tokens::INT_LITERAL;
+                t.value = this.read_int_literal();
+            } else if (c.is_alpha()) {
+                t.kind = Tokens::IDENT;
+                t.value = this.read_identifier();
+            } else {
+                panic(format(global_heap, "Unexpected character: {}", c));
+            }
+        }
+    }
+
+    return t;
+}
+
+fn none Lexer.expect_token(mut Lexer *this, Tokens kind) {
+    Token t = this.next();
+
+    if (t.kind != kind) {
+        panic(format(global_heap, "Expected token of kind {}, but got {}", kind, t.kind));
+    }
+}
+
+fn Token Lexer.peek_token(mut Lexer *this) {
+    usize saved_pos = this.source.pos;
+    Token t = this.next();
+    this.source.pos = saved_pos;
+    return t;
+}

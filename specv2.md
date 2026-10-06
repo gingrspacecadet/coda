@@ -1968,3 +1968,5 @@ Example:
 BigInt a = BigInt.create(420_000_000_000_000_000_000);
 BigInt a = .create(420_000_000_000_000_000_000);
 ```
+
+PROPOSAL: `..` "range" operator?
