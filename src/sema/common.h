@@ -107,7 +107,7 @@ void scope_insert(Scope *scope, Symbol *sym);
 Symbol *scope_lookup(Scope *scope, AstName name);
 Symbol *sema_lookup(Sema *sema, AstName name);
 Symbol *sema_lookup_path(Sema *sema, Path path);
-HirExpr *comp_eval_expr(Sema *sema, HirExpr *expr);
+// HirExpr *comp_eval_expr(CompContext *sema, HirExpr *expr);
 void collect_decls(Sema *sema, Array(AstDecl *) decls);
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected);
 HirType *sema_type(Sema *sema, AstType *ast);
