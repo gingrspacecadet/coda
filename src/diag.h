@@ -11,6 +11,9 @@ typedef enum {
 } DiagSeverity;
 
 typedef enum {
+    E_UNEXPECTED_CHAR = 0,
+    E_UNTERMINATED_COMMENT,
+
     E_EXPECTED_TOKEN = 1000,
     E_EXPECTED_IDENTIFIER,
     E_EXPECTED_TYPE,
@@ -40,6 +43,7 @@ typedef enum {
     E_INDEX_OOB,
     E_GINIT_NOT_STATIC,
     E_COMP_CANT_EVAL,
+    E_CANT_CALL_COMPTIME,
 } DiagCode;
 
 typedef struct {

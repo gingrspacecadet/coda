@@ -348,7 +348,23 @@ static bool can_start_var_stmt(Parser *p) {
     return at(p, TK_IDENT) || at(p, TK_KW_MUT) || at(p, TK_KW_FN);
 }
 
+AstStmt *parse_comptime_stmt(Parser *p) {
+    Token start = p->current;
+    advance(p);
+
+    AstStmt *stmt = parse_statement(p);
+    if (stmt == NULL)
+        return NULL;
+
+    stmt->comptime = true;
+    stmt->span = start.span;
+    return stmt;
+}
+
 AstStmt *parse_statement(Parser *p) {
+    if (at(p, TK_DOLLAR))
+        return parse_comptime_stmt(p);
+
     if (at(p, TK_KW_IF))
         return parse_if_stmt(p);
 
@@ -369,6 +385,9 @@ AstStmt *parse_statement(Parser *p) {
 
     if (at(p, TK_LBRACE))
         return parse_block(p);
+
+    if (at(p, TK_KW_DEFER))
+        return parse_defer_stmt(p);
 
     AstStmt *stmt = NULL;
 

@@ -20,6 +20,8 @@ typedef struct {
     //! TODO: a nicer system for this!
     size_t pointer_size;
 
+    bool comptime;
+
     Diags *diags;
     Arena *arena;
 } Sema;

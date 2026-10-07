@@ -193,6 +193,41 @@ static HirExpr *implicit_deref(Sema *sema, HirExpr *expr) {
     return deref;
 }
 
+static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional) {
+    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+
+    type->kind = HIR_TYPE_POINTER;
+    type->size = sizeof(void *);
+    type->align = __alignof(void *);
+    type->pointer.pointee = pointee;
+    type->pointer.optional = optional;
+
+    return type;
+}
+
+static inline bool is_place(HirExpr *expr) {
+    if (expr == NULL)
+        return false;
+
+    switch (expr->kind) {
+        case HIR_EXPR_VALUE:
+            return expr->value.symbol != NULL &&
+                   (expr->value.symbol->kind == SYMBOL_LOCAL ||
+                    expr->value.symbol->kind == SYMBOL_PARAMETER ||
+                    expr->value.symbol->kind == SYMBOL_GLOBAL);
+
+        case HIR_EXPR_FIELD:
+        case HIR_EXPR_INDEX:
+            return true;
+
+        case HIR_EXPR_UNARY:
+            return expr->unary.op == AST_UNARY_DEREF;
+
+        default:
+            return false;
+    }
+}
+
 static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     if (operand == NULL || operand->type == NULL)
         return NULL;
@@ -217,8 +252,10 @@ static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
             return operand->type->pointer.pointee;
 
         case AST_UNARY_ADDRESS:
-            //! TODO: construct pointer type
-            return NULL;
+            if (!is_place(operand))
+                return NULL;
+
+            return pointer_type(sema, operand->type, false);
     }
 
     return NULL;
@@ -480,7 +517,12 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         AstExpr copy = *ast;
         copy.comptime = false;
 
+        bool previous_comptime = sema->comptime;
+        sema->comptime = true;
+
         HirExpr *hir = sema_expr(sema, &copy, expected);
+
+        sema->comptime = previous_comptime;
 
         if (hir == NULL || hir->kind == HIR_EXPR_ERROR)
             return hir;
@@ -491,6 +533,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         };
 
         HirExpr *result = comp_eval_expr(&context, hir);
+
 
         if (!comp_expr_is_evaluable(result)) {
             error_comptime_not_evaluable(sema->diags, ast->span);
@@ -693,6 +736,12 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             hir->call.function = callee->value.symbol;
+
+            if (callee->value.symbol->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
+                error_cant_call_comptime(sema->diags, callee->span);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
 
             for (size_t i = 0; i < ast->call.args.len; i++) {
                 AstExpr *arg = ((AstExpr **)ast->call.args.data)[i];

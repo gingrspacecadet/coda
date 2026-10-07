@@ -1080,6 +1080,9 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
 }
 
 static void lir_lower_function(LirModule *module, HirFunction *hir) {
+    if (hir->is_comptime)
+        return;
+
     LirFunction *function = lir_function_create(module, hir->symbol, hir->return_type, hir->is_extern, hir->is_export);
 
     if (hir->is_extern) {

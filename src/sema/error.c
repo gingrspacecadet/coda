@@ -517,3 +517,17 @@ void error_comptime_not_evaluable(Diags *diags, Span span) {
 
     diag_finish(&b);
 }
+
+void error_cant_call_comptime(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_CANT_CALL_COMPTIME,
+        span,
+        STRING("Cannot call compile-time function at runtime")
+    );
+
+    diag_help(&b, STRING("Try adding a '$' beforehand to evaluate at compile-time"));
+
+    diag_finish(&b);
+}

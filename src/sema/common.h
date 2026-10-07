@@ -148,5 +148,6 @@ void error_expected_integer(Diags *diags, Span span);
 void error_index_out_of_bounds(Diags *diags, Span span, size_t index, size_t bounds);
 void error_global_initialiser_not_static(Diags *diags, Span span);
 void error_comptime_not_evaluable(Diags *diags, Span span);
+void error_cant_call_comptime(Diags *diags, Span span);
 
 #endif

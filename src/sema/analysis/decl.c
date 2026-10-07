@@ -48,6 +48,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         .return_type = symbol->type->function.ret,
         .params = array_create(sema->arena, sizeof(HirParam)),
         .locals = array_create(sema->arena, sizeof(HirLocal)),
+        .is_comptime = ast->comptime,
     };
 
     sema_push_scope(sema);

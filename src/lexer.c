@@ -174,8 +174,69 @@ static Token lex_char(Lexer *ctx, size_t start) {
 }
 
 Token lexer_next(Lexer *ctx) {
-    while (is_space(peek(ctx))) {
-        consume(ctx);
+    for (;;) {
+        while (is_space(peek(ctx))) {
+            consume(ctx);
+        }
+
+        if (peek(ctx) == '/' && peek_ahead(ctx, 1) == '/') {
+            consume(ctx);
+            consume(ctx);
+
+            while (!eof(ctx) && peek(ctx) != '\n') {
+                consume(ctx);
+            }
+
+            continue;
+        }
+
+        if (peek(ctx) == '/' && peek_ahead(ctx, 1) == '*') {
+            size_t start = ctx->index;
+            size_t depth = 0;
+
+            consume(ctx);
+            consume(ctx);
+            depth++;
+
+            while (!eof(ctx)) {
+                if (peek(ctx) == '/' && peek_ahead(ctx, 1) == '*') {
+                    consume(ctx);
+                    consume(ctx);
+                    depth++;
+                    continue;
+                }
+
+                if (peek(ctx) == '*' && peek_ahead(ctx, 1) == '/') {
+                    consume(ctx);
+                    consume(ctx);
+                    depth--;
+
+                    if (depth == 0)
+                        break;
+
+                    continue;
+                }
+
+                consume(ctx);
+            }
+
+            if (depth != 0) {
+                DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, E_UNTERMINATED_COMMENT,
+                    (Span){
+                        .source = ctx->source,
+                        .offset = start,
+                        .length = ctx->index - start,
+                    },
+                    STRING("Unterminated block comment"));
+                diag_finish(&b);
+
+                return token_make(ctx, TK_ERROR, start, ctx->index - start);
+            }
+
+            continue;
+        }
+
+        break;
     }
 
     if (eof(ctx)) {
@@ -194,27 +255,42 @@ Token lexer_next(Lexer *ctx) {
     }
 
     switch (c) {
-        case '(': return token_make(ctx, TK_LPAREN, start, 1);
-        case ')': return token_make(ctx, TK_RPAREN, start, 1);
-        case '{': return token_make(ctx, TK_LBRACE, start, 1);
-        case '}': return token_make(ctx, TK_RBRACE, start, 1);
-        case '[': return token_make(ctx, TK_LBRACK, start, 1);
-        case ']': return token_make(ctx, TK_RBRACK, start, 1);
-        case ';': return token_make(ctx, TK_SEMICOLON, start, 1);
-        case '.': return token_make(ctx, TK_DOT, start, 1);
-        case ',': return token_make(ctx, TK_COMMA, start, 1);
-        case '#': return token_make(ctx, TK_POUND, start, 1);
-        case '$': return token_make(ctx, TK_DOLLAR, start, 1);
-        case '@': return token_make(ctx, TK_AT, start, 1);
-        case '?': return token_make(ctx, TK_QUERY, start, 1);
+        case '(':
+            return token_make(ctx, TK_LPAREN, start, 1);
+        case ')':
+            return token_make(ctx, TK_RPAREN, start, 1);
+        case '{':
+            return token_make(ctx, TK_LBRACE, start, 1);
+        case '}':
+            return token_make(ctx, TK_RBRACE, start, 1);
+        case '[':
+            return token_make(ctx, TK_LBRACK, start, 1);
+        case ']':
+            return token_make(ctx, TK_RBRACK, start, 1);
+        case ';':
+            return token_make(ctx, TK_SEMICOLON, start, 1);
+        case '.':
+            return token_make(ctx, TK_DOT, start, 1);
+        case ',':
+            return token_make(ctx, TK_COMMA, start, 1);
+        case '#':
+            return token_make(ctx, TK_POUND, start, 1);
+        case '$':
+            return token_make(ctx, TK_DOLLAR, start, 1);
+        case '@':
+            return token_make(ctx, TK_AT, start, 1);
+        case '?':
+            return token_make(ctx, TK_QUERY, start, 1);
 
-        case '\'': return lex_char(ctx, start);
-        case '\"': return lex_string(ctx, start);
+        case '\'':
+            return lex_char(ctx, start);
+        case '"':
+            return lex_string(ctx, start);
 
         case ':':
             if (match(ctx, ':')) return token_make(ctx, TK_COLON_COLON, start, 2);
             return token_make(ctx, TK_COLON, start, 1);
-        
+
         case '<':
             if (match(ctx, '=')) return token_make(ctx, TK_LT_EQ, start, 2);
             if (match(ctx, '<')) {
@@ -308,9 +384,13 @@ Token lexer_next(Lexer *ctx) {
             return token_make(ctx, TK_EQ, start, 1);
     }
 
-    DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, 6767, (Span){.source = ctx->source, .offset = ctx->index}, STRING("Unexpected character"));
+    DiagBuilder b = diag_begin(ctx->diags, DIAG_ERROR, E_UNEXPECTED_CHAR,
+        (Span){
+            .source = ctx->source,
+            .offset = ctx->index,
+        },
+        STRING("Unexpected character"));
     diag_finish(&b);
 
-    consume(ctx);
     return token_make(ctx, TK_ERROR, ctx->index - 1, 1);
 }

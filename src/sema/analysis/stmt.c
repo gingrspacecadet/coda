@@ -194,6 +194,24 @@ static HirStmt *lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
 }
 
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
+    if (ast->comptime) {
+        AstStmt copy = *ast;
+        copy.comptime = false;
+
+        HirStmt *hir = sema_stmt(sema, &copy);
+
+        if (hir == NULL || hir->kind == HIR_STMT_ERROR)
+            return hir;
+
+        if (!comp_exec_stmt(sema, hir)) {
+            error_comptime_not_evaluable(sema->diags, ast->span);
+            hir->kind = HIR_STMT_ERROR;
+            return hir;
+        }
+
+        return NULL;
+    }
+
     HirStmt *hir = arena_alloc(sema->arena, sizeof(HirStmt));
 
     hir->span = ast->span;

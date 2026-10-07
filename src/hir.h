@@ -281,6 +281,7 @@ struct HirFunction {
 
     bool is_extern;
     bool is_export;
+    bool is_comptime;
 };
 
 typedef enum {

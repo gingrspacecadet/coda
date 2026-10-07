@@ -18,6 +18,7 @@ typedef struct {
 } CompContext;
 
 HirExpr *comp_eval_expr(CompContext *sema, HirExpr *expr);
+bool comp_exec_stmt(Sema *sema, HirStmt *stmt);
 bool comp_expr_is_evaluable(HirExpr *expr);
 
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type);
