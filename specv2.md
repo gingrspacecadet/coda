@@ -1970,3 +1970,9 @@ BigInt a = .create(420_000_000_000_000_000_000);
 ```
 
 PROPOSAL: `..` "range" operator?
+
+PROPOSAL: struct inheritance
+```
+type T = struct: Foo {...};
+```
+`T` inherits all methods on `Foo`, overridable, and all of `Foo`'s members. 
