@@ -517,23 +517,22 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         AstExpr copy = *ast;
         copy.comptime = false;
 
-        bool previous_comptime = sema->comptime;
+        bool previous = sema->comptime;
         sema->comptime = true;
 
         HirExpr *hir = sema_expr(sema, &copy, expected);
 
-        sema->comptime = previous_comptime;
+        sema->comptime = previous;
 
         if (hir == NULL || hir->kind == HIR_EXPR_ERROR)
             return hir;
 
         CompContext context = {
             .sema = sema,
-            .frame = NULL
+            .frame = NULL,
         };
 
         HirExpr *result = comp_eval_expr(&context, hir);
-
 
         if (!comp_expr_is_evaluable(result)) {
             error_comptime_not_evaluable(sema->diags, ast->span);

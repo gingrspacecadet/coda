@@ -198,7 +198,12 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         AstStmt copy = *ast;
         copy.comptime = false;
 
+        bool previous = sema->comptime;
+        sema->comptime = true;
+
         HirStmt *hir = sema_stmt(sema, &copy);
+
+        sema->comptime = previous;
 
         if (hir == NULL || hir->kind == HIR_STMT_ERROR)
             return hir;
