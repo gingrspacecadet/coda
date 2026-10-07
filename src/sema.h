@@ -5,6 +5,7 @@
 #include "hir.h"
 #include "diag.h"
 #include "arena.h"
+#include "target.h"
 
 typedef struct {
     AstModule *module;
@@ -17,8 +18,7 @@ typedef struct {
 
     ModuleIndex modules;
 
-    //! TODO: a nicer system for this!
-    size_t pointer_size;
+    const TargetInfo *target;
 
     bool comptime;
 
@@ -41,6 +41,7 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         },
         .diags = diags,
         .arena = arena,
+        .target = target_native(),
     };
 }
 

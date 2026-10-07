@@ -265,15 +265,36 @@ int main(int argc, char **argv) {
     Diags diags = {.arena = arena, .diags = array_create(arena, sizeof(Diag))};
 
     Source source;
-    load_source(argv[1], &source);
+
+    if (!load_source(argv[1], &source))
+        return 1;
+
+    const TargetInfo *target = target_native();
+
+    if (target == NULL) {
+        fprintf(stderr, "native target is unsupported\n");
+        return 1;
+    }
+
+    FILE *output = fopen("a.s", "w");
+
+    if (output == NULL) {
+        perror("a.s");
+        return 1;
+    }
+
     CodaCompiler compiler;
 
-    coda_compiler_init(&compiler, arena, &diags);
+    coda_compiler_init(&compiler, arena, &diags, target);
+    compiler.output = output;
 
-    if (!coda_compile(&compiler, &source, CODA_STAGE_LIR)) {
+    if (!coda_compile(&compiler, &source, CODA_STAGE_CODEGEN)) {
+        fclose(output);
         print_diags(&diags);
         return 1;
     }
+
+    fclose(output);
 
     print_ast_module(stdout, compiler.compilation.ast);
     print_hir_module(stdout, compiler.compilation.hir);

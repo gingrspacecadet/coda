@@ -45,15 +45,17 @@ LirModule *lir_module_create(Arena *arena) {
 LirFunction *lir_function_create(LirModule *module, Symbol *symbol, HirType *return_type, bool is_extern, bool is_export) {
     LirFunction *function = arena_calloc(module->arena, sizeof(*function));
 
-    function->arena = module->arena;
-    function->symbol = symbol;
-    function->return_type = return_type;
-    function->is_extern = is_extern;
-    function->is_export = is_export;
-    function->entry = LIR_INVALID_BLOCK;
-    function->next_value = 0;
-    function->blocks = array_create(module->arena, sizeof(LirBlock *));
-    function->params = array_create(module->arena, sizeof(LirFunctionParam));
+    *function = (LirFunction){
+        .arena = module->arena,
+        .symbol = symbol,
+        .return_type = return_type,
+        .is_extern = is_extern,
+        .is_export = is_export,
+        .entry = LIR_INVALID_BLOCK,
+        .next_value = 0,
+        .blocks = array_create(module->arena, sizeof(LirBlock *)),
+        .params = array_create(module->arena, sizeof(LirFunctionParam)),
+    };
 
     array_push(&module->functions, &function);
 

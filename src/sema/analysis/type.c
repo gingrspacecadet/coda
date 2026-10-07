@@ -187,8 +187,8 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             hir->kind = HIR_TYPE_POINTER;
             hir->pointer.pointee = sema_type(sema, ast->pointer.pointee);
             hir->pointer.optional = ast->pointer.optional;
-            hir->size = sema->pointer_size;
-            hir->align = sema->pointer_size;
+            hir->size = sema->target->pointer.size;
+            hir->align = sema->target->pointer.align;
             break;
 
         case AST_TYPE_ARRAY: {
@@ -197,8 +197,8 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             if (!ast->array.sized) {
                 hir->kind = HIR_TYPE_SLICE;
                 hir->slice.element = element;
-                hir->size = sema->pointer_size * 2;
-                hir->align = sema->pointer_size;
+                hir->size = sema->target->pointer.size * 2;
+                hir->align = sema->target->pointer.align;
                 break;
             }
 

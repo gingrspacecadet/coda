@@ -1,10 +1,27 @@
+#include <assert.h>
+#include "backends/x86_64/x86_64.h"
 #include "coda.h"
 
-void coda_compiler_init(CodaCompiler *compiler, Arena *arena, Diags *diags) {
+static const BackendApi *select_backend(const TargetInfo *target) {
+    switch (target->arch) {
+        case TARGET_ARCH_X86_64:
+            return x86_64_backend();
+
+        default:
+            return NULL;
+    }
+}
+
+void coda_compiler_init(CodaCompiler *compiler, Arena *arena, Diags *diags, const TargetInfo *target) {
     *compiler = (CodaCompiler) {
         .arena = arena,
         .diags = diags,
+        .target = target,
+        .backend = select_backend(target),
     };
+
+    if (compiler->backend != NULL)
+        compiler->backend_instance = (Backend){.api = compiler->backend};
 }
 
 bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage) {
@@ -19,24 +36,33 @@ bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage) {
 
     AstModule *m = parser_parse_module(&p);
 
-    if (compiler->diags->diags.len != 0) 
+    if (compiler->diags->diags.len != 0)
         return false;
 
     compiler->compilation.ast = m;
 
     Sema sema = sema_create(compiler->arena, compiler->diags);
+    sema.target = compiler->target;
+
     Array(String) includes = array_create(compiler->arena, sizeof(String));
     array_push(&includes, &STRING("."));
 
     HirModule *hm = sema_analyse(&sema, m, includes);
 
-    if (compiler->diags->diags.len != 0) 
+    if (compiler->diags->diags.len != 0)
         return false;
 
     compiler->compilation.hir = hm;
 
     LirModule *lir = lir_lower_module(compiler->arena, hm);
     compiler->compilation.lir = lir;
+
+    if (stage >= CODA_STAGE_CODEGEN) {
+        assert(compiler->backend != NULL);
+        assert(compiler->output != NULL);
+
+        return compiler->backend->emit(&compiler->backend_instance, compiler->target, lir, compiler->output);
+    }
 
     return true;
 }

@@ -71,7 +71,9 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     HirFunction *previous_fn = sema->current_fn;
     sema->current_fn = fn;
 
-    //! TODO: analyse attributes
+    //! TODO: analyse attributes properly
+    if (string_eq(((AstAttribute *)array_at(&ast->attrs, 0))->name, STRING("export")))
+        fn->is_export = true;
 
     fn->body = sema_stmt(sema, ast->body);
 

@@ -13,8 +13,9 @@ TARGET = codac
 
 BACKEND_DIRS = $(shell find $(SRC)/backends -mindepth 1 -maxdepth 1 -type d | sed 's|.*/||')
 BACKEND_SRCS = $(shell find $(SRC)/backends -type f -name "*.c" 2>/dev/null)
-BACKEND_OBJS = $(patsubst $(SRC)/%.c,build/%.o,$(BACKEND_SRCS))
-BACKENDS_SO  = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
+BACKEND_OBJS = $(patsubst $(SRC)/%.c,build/backends/%.o,$(BACKEND_SRCS))
+BACKEND_PIC_OBJS = $(patsubst $(SRC)/backends/%.c,build/backends-pic/%.o,$(BACKEND_SRCS))
+BACKENDS_SO = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
 
 ifeq ($(OS),Windows_NT)
     SOEXT = dll
@@ -57,6 +58,14 @@ else
     endif
 endif
 
+ifeq ($(HOST_OS),linux)
+    LDLIBS += -ldl
+endif
+
+NATIVE_BACKEND_DIR = $(HOST_ARCH)
+NATIVE_BACKEND_SRCS = $(wildcard $(SRC)/backends/$(NATIVE_BACKEND_DIR)/*.c)
+NATIVE_BACKEND_OBJS = $(patsubst $(SRC)/backends/%.c,build/backends/%.o,$(NATIVE_BACKEND_SRCS))
+
 STDLIB_CODA_SRCS = $(shell find lib -type f -name "*.coda" 2>/dev/null)
 STDLIB_ASM_SRCS  = $(shell find lib -type f -name "*.s" 2>/dev/null)
 
@@ -77,8 +86,8 @@ $(LIB): $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	ar rcs $@ $^
 
-$(TARGET): $(CLI_OBJ) $(LIB)
-	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) -rdynamic
+$(TARGET): $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS) -rdynamic $(LDLIBS)
 
 build/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
@@ -86,18 +95,19 @@ build/%.o: $(SRC)/%.c
 
 build/backends/%.o: $(SRC)/backends/%.c
 	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+build/backends-pic/%.o: $(SRC)/backends/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(SHARED_FLAGS) -c -o $@ $<
 
 $(foreach d,$(BACKEND_DIRS), \
   $(eval BACKEND_SRCS_$(d) := $(wildcard $(SRC)/backends/$(d)/*.c)) \
-  $(eval BACKEND_OBJS_$(d) := $(patsubst $(SRC)/%.c,build/%.o,$(BACKEND_SRCS_$(d)))) \
-  $(eval build/backends/$(d).$(SOEXT): $$(BACKEND_OBJS_$(d))) \
+  $(eval BACKEND_PIC_OBJS_$(d) := $(patsubst $(SRC)/backends/%.c,build/backends-pic/%.o,$(BACKEND_SRCS_$(d)))) \
+  $(eval build/backends/$(d).$(SOEXT): $$(BACKEND_PIC_OBJS_$(d))) \
   $(eval build/backends/$(d).$(SOEXT): ; \
-    @mkdir -p build/backends/$(d) ; \
-    if [ -n "$$^" ]; then \
-        echo "$(CC) $(DLL_LINK) -o $$@ $$^"; \
-        $(CC) $(DLL_LINK) -o $$@ $$^; \
-    fi ) \
+    @mkdir -p $$(dir $$@); \
+    $(CC) $(DLL_LINK) -o $$@ $$^ ) \
 )
 
 backends: $(BACKENDS_SO)

@@ -4,17 +4,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "lir_lower.h"
+#include "backend.h"
+#include "parser.h"
+#include "source.h"
 #include "arena.h"
 #include "diag.h"
-#include "lir_lower.h"
-#include "parser.h"
 #include "sema.h"
-#include "source.h"
 
 typedef enum {
     CODA_STAGE_AST,
     CODA_STAGE_HIR,
     CODA_STAGE_LIR,
+    CODA_STAGE_CODEGEN,
 } CodaStage;
 
 typedef struct {
@@ -26,10 +28,16 @@ typedef struct {
 typedef struct {
     Arena *arena;
     Diags *diags;
+
+    const TargetInfo *target;
+    const BackendApi *backend;
+    Backend backend_instance;
+    FILE *output;
+
     CodaCompilation compilation;
 } CodaCompiler;
 
-void coda_compiler_init(CodaCompiler *compiler, Arena *arena, Diags *diags);
+void coda_compiler_init(CodaCompiler *compiler, Arena *arena, Diags *diags, const TargetInfo *target);
 bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage);
 
 #endif
