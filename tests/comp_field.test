@@ -1,0 +1,60 @@
+name: compile-time field access
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Point = struct {
+    int64 x;
+    int64 y;
+};
+
+fn int64 test() {
+    mut Point p = {
+        .x = 10,
+        .y = 20,
+    };
+
+    p.x = 30;
+    return p.x + p.y;
+}
+
+fn int64 test2() {
+    mut int64[3] values = {10, 20, 30};
+
+    values[1] = 42;
+    return values[0] + values[1] + values[2];
+}
+
+int64 x = $test();
+int64 x2 = $test2();
+
+[lir]
+global @x:
+    $0 = 50
+global @x2:
+    $0 = 82
+test:
+    block0:
+        %0 = zero
+        %1 = insert %0, $0, 10
+        %2 = insert %1, $8, 20
+        %3 = insert %2, $0, 30
+        %4 = extract %3, $0
+        %5 = extract %3, $8
+        %6 = add %4, %5
+        return %6
+
+test2:
+    block0:
+        %0 = zero
+        %1 = insert %0, $0, 10
+        %2 = insert %1, $8, 20
+        %3 = insert %2, $16, 30
+        %4 = insert %3, $8, 42
+        %5 = extract %4, $0
+        %6 = extract %4, $8
+        %7 = add %5, %6
+        %8 = extract %4, $16
+        %9 = add %7, %8
+        return %9

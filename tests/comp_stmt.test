@@ -1,0 +1,61 @@
+name: compile-time statements
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 test_if(int64 x) {
+    if (x > 10)
+        return 40;
+
+    return 20;
+}
+
+fn int64 sum(mut int64 n) {
+    mut int64 result = 0;
+
+    while (n > 0) {
+        result = result + n;
+        n = n - 1;
+    }
+
+    return result;
+}
+
+int64 a = $(test_if(20));
+int64 b = $(test_if(5));
+int64 x = $(sum(5));
+
+[lir]
+global @a:
+    $0 = 40
+global @b:
+    $0 = 20
+global @x:
+    $0 = 15
+test_if:
+    block0(%0):
+        %1 = gt %0, 10
+        branch %1, block1, block2(%0)
+
+    block1:
+        return 40
+
+    block2(%2):
+        return 20
+
+sum:
+    block0(%0):
+        jump block1(%0, 0)
+
+    block1(%1, %2):
+        %5 = gt %1, 0
+        branch %5, block2, block3(%1, %2)
+
+    block2:
+        %6 = add 0, %0
+        %7 = sub %0, 1
+        jump block1(%7, %6)
+
+    block3(%3, %4):
+        return %4

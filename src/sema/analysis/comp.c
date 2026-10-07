@@ -426,11 +426,207 @@ static HirFunction *find_function(CompContext *context, Symbol *symbol) {
     return NULL;
 }
 
+typedef enum {
+    COMP_EXEC_NORMAL,
+    COMP_EXEC_RETURN,
+    COMP_EXEC_BREAK,
+    COMP_EXEC_CONTINUE,
+    COMP_EXEC_ERROR,
+} CompExecKind;
+
 typedef struct {
-    bool ok;
-    bool returned;
+    CompExecKind kind;
     HirExpr *value;
 } CompExecResult;
+
+static HirInitField *find_field(HirExpr *object, HirField *field) {
+    for (size_t i = 0; i < object->init.fields.len; i++) {
+        HirInitField *init_field = &((HirInitField *)object->init.fields.data)[i];
+
+        if (init_field->field == field)
+            return init_field;
+
+        if (init_field->field != NULL &&
+            comp_same_symbol(init_field->field->symbol, field->symbol))
+            return init_field;
+    }
+
+    return NULL;
+}
+
+static HirInitField *find_index(HirExpr *object, size_t index) {
+    HirType *type = object->type;
+
+    if (type == NULL || type->kind != HIR_TYPE_ARRAY)
+        return NULL;
+
+    size_t offset = index * type->array.element->size;
+
+    for (size_t i = 0; i < object->init.fields.len; i++) {
+        HirInitField *field = &((HirInitField *)object->init.fields.data)[i];
+
+        if (field->offset == offset)
+            return field;
+    }
+
+    return NULL;
+}
+
+static HirExpr *eval_field(CompContext *context, HirExpr *expr) {
+    HirExpr *object = comp_eval_expr(context, expr->field.object);
+
+    if (object->kind != HIR_EXPR_INIT)
+        return expr;
+
+    HirInitField *field = find_field(object, expr->field.field);
+
+    if (field == NULL)
+        return expr;
+
+    return comp_eval_expr(context, field->value);
+}
+
+static HirExpr *eval_index(CompContext *context, HirExpr *expr) {
+    HirExpr *object = comp_eval_expr(context, expr->index.object);
+    HirExpr *index = comp_eval_expr(context, expr->index.index);
+
+    if (object->kind != HIR_EXPR_INIT ||
+        index->kind != HIR_EXPR_LITERAL ||
+        index->literal.kind != HIR_LITERAL_INTEGER)
+        return expr;
+
+    if (object->type == NULL || object->type->kind != HIR_TYPE_ARRAY)
+        return expr;
+
+    size_t value = (size_t)index->literal.integer;
+
+    if (value >= object->type->array.length)
+        return expr;
+
+    HirInitField *field = find_index(object, value);
+
+    if (field == NULL)
+        return expr;
+
+    return comp_eval_expr(context, field->value);
+}
+
+static HirExpr *comp_update_field(CompContext *context, HirExpr *object, HirField *field, HirExpr *value) {
+    HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+    *result = *object;
+
+    result->init.fields = array_create(context->sema->arena, sizeof(HirInitField));
+
+    bool found = false;
+
+    for (size_t i = 0; i < object->init.fields.len; i++) {
+        HirInitField current = ((HirInitField *)object->init.fields.data)[i];
+
+        if (current.field == field ||
+            (current.field != NULL && comp_same_symbol(current.field->symbol, field->symbol))) {
+            current.value = value;
+            found = true;
+        }
+
+        array_push(&result->init.fields, &current);
+    }
+
+    if (!found) {
+        HirInitField current = {
+            .field = field,
+            .offset = field->offset,
+            .value = value,
+        };
+
+        array_push(&result->init.fields, &current);
+    }
+
+    return result;
+}
+
+static HirExpr *comp_update_index(CompContext *context, HirExpr *object, size_t index, HirExpr *value) {
+    HirType *type = object->type;
+
+    if (type == NULL || type->kind != HIR_TYPE_ARRAY || index >= type->array.length)
+        return NULL;
+
+    size_t offset = index * type->array.element->size;
+
+    HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+    *result = *object;
+
+    result->init.fields = array_create(context->sema->arena, sizeof(HirInitField));
+
+    bool found = false;
+
+    for (size_t i = 0; i < object->init.fields.len; i++) {
+        HirInitField current = ((HirInitField *)object->init.fields.data)[i];
+
+        if (current.offset == offset) {
+            current.value = value;
+            found = true;
+        }
+
+        array_push(&result->init.fields, &current);
+    }
+
+    if (!found) {
+        HirInitField current = {
+            .field = NULL,
+            .offset = offset,
+            .value = value,
+        };
+
+        array_push(&result->init.fields, &current);
+    }
+
+    return result;
+}
+
+static bool comp_store_place(CompContext *context, HirExpr *place, HirExpr *value) {
+    switch (place->kind) {
+        case HIR_EXPR_VALUE: {
+            Symbol *symbol = place->value.symbol;
+
+            if (symbol == NULL ||
+                (symbol->kind != SYMBOL_LOCAL && symbol->kind != SYMBOL_PARAMETER))
+                return false;
+
+            return comp_store(context, symbol, value);
+        }
+
+        case HIR_EXPR_FIELD: {
+            HirExpr *object = comp_eval_expr(context, place->field.object);
+
+            if (object->kind != HIR_EXPR_INIT)
+                return false;
+
+            HirExpr *updated = comp_update_field(context, object, place->field.field, value);
+
+            return updated != NULL &&
+                   comp_store_place(context, place->field.object, updated);
+        }
+
+        case HIR_EXPR_INDEX: {
+            HirExpr *object = comp_eval_expr(context, place->index.object);
+            HirExpr *index = comp_eval_expr(context, place->index.index);
+
+            if (object->kind != HIR_EXPR_INIT ||
+                index->kind != HIR_EXPR_LITERAL ||
+                index->literal.kind != HIR_LITERAL_INTEGER)
+                return false;
+
+            size_t value_index = (size_t)index->literal.integer;
+            HirExpr *updated = comp_update_index(context, object, value_index, value);
+
+            return updated != NULL &&
+                   comp_store_place(context, place->index.object, updated);
+        }
+
+        default:
+            return false;
+    }
+}
 
 static CompExecResult exec_stmt(CompContext *context, HirStmt *stmt) {
     switch (stmt->kind) {
@@ -439,11 +635,11 @@ static CompExecResult exec_stmt(CompContext *context, HirStmt *stmt) {
                 HirStmt *child = ((HirStmt **)stmt->block.stmts.data)[i];
                 CompExecResult result = exec_stmt(context, child);
 
-                if (!result.ok || result.returned)
+                if (result.kind != COMP_EXEC_NORMAL)
                     return result;
             }
 
-            return (CompExecResult){.ok = true};
+            return (CompExecResult){.kind = COMP_EXEC_NORMAL};
 
         case HIR_STMT_RETURN: {
             HirExpr *value = NULL;
@@ -452,46 +648,86 @@ static CompExecResult exec_stmt(CompContext *context, HirStmt *stmt) {
                 value = comp_eval_expr(context, stmt->_return.value);
 
                 if (value == NULL || !comp_expr_is_evaluable(value))
-                    return (CompExecResult){.ok = false};
+                    return (CompExecResult){.kind = COMP_EXEC_ERROR};
             }
 
             return (CompExecResult){
-                .ok = true,
-                .returned = true,
+                .kind = COMP_EXEC_RETURN,
                 .value = value,
             };
         }
 
         case HIR_STMT_ASSIGN: {
-            HirExpr *target = stmt->assign.target;
             HirExpr *value = comp_eval_expr(context, stmt->assign.value);
 
             if (value == NULL || !comp_expr_is_evaluable(value))
-                return (CompExecResult){.ok = false};
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
 
-            if (target->kind != HIR_EXPR_VALUE)
-                return (CompExecResult){.ok = false};
+            if (!comp_store_place(context, stmt->assign.target, value))
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
 
-            Symbol *symbol = target->value.symbol;
-
-            if (symbol == NULL ||
-                (symbol->kind != SYMBOL_LOCAL && symbol->kind != SYMBOL_PARAMETER))
-                return (CompExecResult){.ok = false};
-
-            if (!comp_store(context, symbol, value))
-                return (CompExecResult){.ok = false};
-
-            return (CompExecResult){.ok = true};
+            return (CompExecResult){.kind = COMP_EXEC_NORMAL};
         }
 
         case HIR_STMT_EXPR:
             if (comp_eval_expr(context, stmt->expr) == NULL)
-                return (CompExecResult){.ok = false};
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
 
-            return (CompExecResult){.ok = true};
+            return (CompExecResult){.kind = COMP_EXEC_NORMAL};
+
+        case HIR_STMT_IF: {
+            HirExpr *condition = comp_eval_expr(context, stmt->_if.cond);
+
+            if (condition == NULL ||
+                condition->kind != HIR_EXPR_LITERAL ||
+                condition->literal.kind != HIR_LITERAL_BOOL)
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
+
+            HirStmt *branch = condition->literal.boolean ? stmt->_if.then : stmt->_if._else;
+
+            if (branch == NULL)
+                return (CompExecResult){.kind = COMP_EXEC_NORMAL};
+
+            return exec_stmt(context, branch);
+        }
+
+        case HIR_STMT_WHILE:
+            for (;;) {
+                HirExpr *condition = comp_eval_expr(context, stmt->_while.cond);
+
+                if (condition == NULL ||
+                    condition->kind != HIR_EXPR_LITERAL ||
+                    condition->literal.kind != HIR_LITERAL_BOOL)
+                    return (CompExecResult){.kind = COMP_EXEC_ERROR};
+
+                if (!condition->literal.boolean)
+                    return (CompExecResult){.kind = COMP_EXEC_NORMAL};
+
+                CompExecResult result = exec_stmt(context, stmt->_while.body);
+
+                switch (result.kind) {
+                    case COMP_EXEC_NORMAL:
+                        continue;
+
+                    case COMP_EXEC_BREAK:
+                        return (CompExecResult){.kind = COMP_EXEC_NORMAL};
+
+                    case COMP_EXEC_CONTINUE:
+                        continue;
+
+                    default:
+                        return result;
+                }
+            }
+
+        case HIR_STMT_BREAK:
+            return (CompExecResult){.kind = COMP_EXEC_BREAK};
+
+        case HIR_STMT_CONTINUE:
+            return (CompExecResult){.kind = COMP_EXEC_CONTINUE};
 
         default:
-            return (CompExecResult){.ok = false};
+            return (CompExecResult){.kind = COMP_EXEC_ERROR};
     }
 }
 
@@ -566,6 +802,12 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
         case HIR_EXPR_BINARY:
             return eval_binary(context, expr);
 
+        case HIR_EXPR_FIELD:
+            return eval_field(context, expr);
+
+        case HIR_EXPR_INDEX:
+            return eval_index(context, expr);
+
         case HIR_EXPR_CAST: {
             HirExpr *operand = comp_eval_expr(context, expr->cast.operand);
 
@@ -620,7 +862,7 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
 
             CompExecResult result = eval_function(context, function, args);
 
-            if (!result.ok || !result.returned)
+            if (result.kind != COMP_EXEC_RETURN)
                 return expr;
 
             return result.value != NULL ? comp_eval_expr(context, result.value) : expr;
