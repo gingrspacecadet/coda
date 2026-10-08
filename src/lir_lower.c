@@ -302,7 +302,11 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                     return binding->operand;
                 }
 
-                case SYMBOL_GLOBAL:
+                case SYMBOL_GLOBAL: {
+                    LirPlace place = lir_lower_place(lower, expr);
+                    return lir_lower_load(lower, place);
+                }
+
                 case SYMBOL_FN:
                     return lir_operand_symbol(symbol, expr->type);
 
@@ -650,6 +654,38 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 .address = lir_operand_value(address, base.type),
                 .type = expr->field.field->type,
             };
+        }
+
+        case HIR_EXPR_VALUE: {
+            Symbol *symbol = expr->value.symbol;
+
+            if (symbol->kind == SYMBOL_GLOBAL) {
+                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
+
+                *pointer_type = (HirType) {
+                    .kind = HIR_TYPE_POINTER,
+                    .mutable = false,
+                    .size = sizeof(void *),
+                    .align = _Alignof(void *),
+                    .pointer = {
+                        .pointee = expr->type,
+                        .optional = false,
+                    },
+                };
+
+                LirOperand symbol_operand = lir_operand_symbol(symbol, pointer_type);
+                LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_type, (Array) {
+                    .data = &symbol_operand,
+                    .len = 1,
+                });
+
+                return (LirPlace) {
+                    .address = lir_operand_value(address, pointer_type),
+                    .type = expr->type,
+                };
+            }
+
+            break;
         }
     }
     fprintf(stderr, "lir_lower_place: kind=%d type=%p\n", expr->kind, (void *)expr->type);
@@ -1027,10 +1063,18 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
             if (target->kind == HIR_EXPR_VALUE) {
                 Symbol *symbol = target->value.symbol;
 
-                assert(symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER);
+                if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
+                    lir_bind(lower, symbol, value);
+                    return;
+                }
 
-                lir_bind(lower, symbol, value);
-                return;
+                if (symbol->kind == SYMBOL_GLOBAL) {
+                    LirPlace place = lir_lower_place(lower, target);
+                    lir_lower_store(lower, place, value);
+                    return;
+                }
+
+                assert(!"unexpected assignment target symbol");
             }
 
             if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(target)) {

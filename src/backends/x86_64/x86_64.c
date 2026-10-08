@@ -363,7 +363,7 @@ static void emit_store(X86Function *function, const LirInstruction *instruction)
     load_operand(function, &operands[0], X86_RAX);
     load_operand(function, &operands[1], X86_RCX);
 
-    fprintf(function->out, "    mov %s ptr [rax], %s\n", size_name(size), reg_name(X86_RCX, size));
+    fprintf(function->out, "    mov %s [rax], %s\n", size_name(size), reg_name(X86_RCX, size));
 }
 
 static void emit_addr_add(X86Function *function, const LirInstruction *instruction) {
@@ -373,6 +373,16 @@ static void emit_addr_add(X86Function *function, const LirInstruction *instructi
     load_operand(function, &operands[1], X86_RCX);
 
     fprintf(function->out, "    add rax, rcx\n");
+
+    store_register(function, X86_RAX, instruction->result, 8);
+}
+
+static void emit_addr(X86Function *function, const LirInstruction *instruction) {
+    const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
+
+    assert(operand->kind == LIR_OPERAND_SYMBOL);
+
+    fprintf(function->out, "    lea rax, %.*s[rip]\n", (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
 
     store_register(function, X86_RAX, instruction->result, 8);
 }
@@ -497,7 +507,7 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
             break;
 
         case LIR_OP_ADDR:
-            assert(!"ADDR should not reach x86 backend yet");
+            emit_addr(function, instruction);
             break;
 
         case LIR_OP_ADDR_ADD:
@@ -590,6 +600,8 @@ static void emit_function(X86Function *function) {
     const LirFunction *lir = function->function;
     String name = lir->symbol->name.ident;
 
+    fprintf(function->out, "\n.section .text\n");
+
     if (lir->is_export)
         fprintf(function->out, ".globl %.*s\n", (int)name.length, name.data);
 
@@ -620,6 +632,70 @@ static bool supports(const TargetInfo *target) {
            target->endian == TARGET_ENDIAN_LITTLE;
 }
 
+static bool global_is_zero(const LirGlobal *global) {
+    return global->data.len == 0;
+}
+
+static void emit_global(FILE *out, const LirGlobal *global) {
+    String name = global->symbol->name.ident;
+    const char *section = global->is_mutable ? ".data" : ".rodata";
+
+    if (global_is_zero(global))
+        section = ".bss";
+
+    fprintf(out, "\n.section %s\n", section);
+    fprintf(out, ".balign %zu\n", type_align(global->type));
+
+    if (global->is_export)
+        fprintf(out, ".globl %.*s\n", (int)name.length, name.data);
+
+    fprintf(out, ".type %.*s, @object\n", (int)name.length, name.data);
+    fprintf(out, "%.*s:\n", (int)name.length, name.data);
+
+    size_t offset = 0;
+
+    for (size_t i = 0; i < global->data.len; i++) {
+        const LirData *data = &((LirData *)global->data.data)[i];
+
+        if (data->offset > offset)
+            fprintf(out, "    .zero %zu\n", data->offset - offset);
+
+        switch (data->kind) {
+            case LIR_DATA_INTEGER:
+                switch (type_size(data->type)) {
+                    case 1: fprintf(out, "    .byte %" PRIu64 "\n", data->integer); break;
+                    case 2: fprintf(out, "    .short %" PRIu64 "\n", data->integer); break;
+                    case 4: fprintf(out, "    .long %" PRIu64 "\n", data->integer); break;
+                    case 8: fprintf(out, "    .quad %" PRIu64 "\n", data->integer); break;
+                    default: assert(!"invalid global integer size");
+                }
+                offset = data->offset + type_size(data->type);
+                break;
+
+            case LIR_DATA_BOOL:
+                fprintf(out, "    .byte %d\n", data->boolean ? 1 : 0);
+                offset = data->offset + 1;
+                break;
+
+            case LIR_DATA_FLOAT:
+                assert(!"global floating-point emission not implemented yet");
+                break;
+
+            case LIR_DATA_BYTES:
+                for (size_t j = 0; j < data->bytes.length; j++)
+                    fprintf(out, "    .byte %u\n", data->bytes.data[j]);
+
+                offset = data->offset + data->bytes.length;
+                break;
+        }
+    }
+
+    if (offset < type_size(global->type))
+        fprintf(out, "    .zero %zu\n", type_size(global->type) - offset);
+
+    fprintf(out, ".size %.*s, %zu\n", (int)name.length, name.data, type_size(global->type));
+}
+
 static bool emit(Backend *backend, const TargetInfo *target, const LirModule *module, FILE *output) {
     (void)backend;
 
@@ -627,6 +703,9 @@ static bool emit(Backend *backend, const TargetInfo *target, const LirModule *mo
         return false;
 
     fprintf(output, ".intel_syntax noprefix\n");
+
+    for (size_t i = 0; i < module->globals.len; i++)
+        emit_global(output, &((LirGlobal *)module->globals.data)[i]);
 
     for (size_t i = 0; i < module->functions.len; i++) {
         const LirFunction *function = ((LirFunction **)module->functions.data)[i];
