@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "common.h"
 
 static bool comp_same_symbol(Symbol *a, Symbol *b) {
@@ -542,7 +543,7 @@ static HirInitField *find_index(HirExpr *object, size_t index) {
     if (type == NULL || type->kind != HIR_TYPE_ARRAY)
         return NULL;
 
-    size_t offset = index * type->array.element->size;
+    size_t offset = sizeof(uint64_t) + index * type->array.element->size;
 
     for (size_t i = 0; i < object->init.fields.len; i++) {
         HirInitField *field = &((HirInitField *)object->init.fields.data)[i];
@@ -636,9 +637,10 @@ static HirExpr *update_index(CompContext *context, HirExpr *object, size_t index
     if (type == NULL || type->kind != HIR_TYPE_ARRAY || index >= type->array.length)
         return NULL;
 
-    size_t offset = index * type->array.element->size;
+    size_t offset = sizeof(uint64_t) + index * type->array.element->size;
 
     HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+
     *result = *object;
 
     result->init.fields = array_create(context->sema->arena, sizeof(HirInitField));
@@ -697,18 +699,19 @@ static bool store_place(CompContext *context, HirExpr *place, HirExpr *value) {
             HirExpr *object = comp_eval_expr(context, place->index.object);
             HirExpr *index = comp_eval_expr(context, place->index.index);
 
-            if (object == NULL ||
-                index == NULL ||
-                object->kind != HIR_EXPR_INIT ||
-                index->kind != HIR_EXPR_LITERAL ||
-                index->literal.kind != HIR_LITERAL_INTEGER)
-                return false;
+            assert(object != NULL);
+            assert(index != NULL);
+            assert(object->kind == HIR_EXPR_INIT);
+            assert(index->kind == HIR_EXPR_LITERAL);
+            assert(index->literal.kind == HIR_LITERAL_INTEGER);
 
             size_t value_index = (size_t)index->literal.integer;
             HirExpr *updated = update_index(context, object, value_index, value);
 
-            return updated != NULL &&
-                   store_place(context, place->index.object, updated);
+            assert(updated != NULL);
+            assert(store_place(context, place->index.object, updated));
+
+            return true;
         }
 
         case HIR_EXPR_UNARY: {
@@ -759,17 +762,19 @@ static CompExecResult exec_stmt(CompContext *context, HirStmt *stmt) {
             };
         }
 
-        case HIR_STMT_ASSIGN: {
-            HirExpr *value = comp_eval_expr(context, stmt->assign.value);
+case HIR_STMT_ASSIGN: {
+    HirExpr *value = comp_eval_expr(context, stmt->assign.value);
 
-            if (value == NULL || !comp_expr_is_evaluable(value))
-                return (CompExecResult){.kind = COMP_EXEC_ERROR};
+    if (value == NULL || !comp_expr_is_evaluable(value))
+        return (CompExecResult){.kind = COMP_EXEC_ERROR};
 
-            if (!store_place(context, stmt->assign.target, value))
-                return (CompExecResult){.kind = COMP_EXEC_ERROR};
+    if (!store_place(context, stmt->assign.target, value)) {
+        assert(!"comptime assignment failed");
+        return (CompExecResult){.kind = COMP_EXEC_ERROR};
+    }
 
-            return (CompExecResult){.kind = COMP_EXEC_NORMAL};
-        }
+    return (CompExecResult){.kind = COMP_EXEC_NORMAL};
+}
 
         case HIR_STMT_EXPR:
             if (comp_eval_expr(context, stmt->expr) == NULL)

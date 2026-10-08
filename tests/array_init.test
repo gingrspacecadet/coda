@@ -24,33 +24,39 @@ fn int64[2][2] nested() {
 all:
     block0:
         %0 = zero
-        %1 = insert %0, $0, 1
-        %2 = insert %1, $8, 2
-        %3 = insert %2, $16, 3
-        %4 = insert %3, $24, 4
-        return %4
+        %1 = insert %0, $0, 4
+        %2 = insert %1, $8, 1
+        %3 = insert %2, $16, 2
+        %4 = insert %3, $24, 3
+        %5 = insert %4, $32, 4
+        return %5
 
 partial:
     block0:
         %0 = zero
-        %1 = insert %0, $0, 1
-        %2 = insert %1, $8, 2
-        return %2
+        %1 = insert %0, $0, 4
+        %2 = insert %1, $8, 1
+        %3 = insert %2, $16, 2
+        return %3
 
 empty:
     block0:
         %0 = zero
-        return %0
+        %1 = insert %0, $0, 4
+        return %1
 
 nested:
     block0:
         %0 = zero
-        %1 = zero
-        %2 = insert %1, $0, 1
-        %3 = insert %2, $8, 2
-        %4 = insert %0, $0, %3
-        %5 = zero
-        %6 = insert %5, $0, 3
-        %7 = insert %6, $8, 4
-        %8 = insert %4, $16, %7
-        return %8
+        %1 = insert %0, $0, 2
+        %2 = zero
+        %3 = insert %2, $0, 2
+        %4 = insert %3, $8, 1
+        %5 = insert %4, $16, 2
+        %6 = insert %1, $8, %5
+        %7 = zero
+        %8 = insert %7, $0, 2
+        %9 = insert %8, $8, 3
+        %10 = insert %9, $16, 4
+        %11 = insert %6, $32, %10
+        return %11

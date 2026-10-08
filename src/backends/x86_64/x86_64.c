@@ -556,7 +556,7 @@ static void emit_division(X86Function *function, const LirInstruction *instructi
         store_register(function, X86_RDX, instruction->result, type_size(instruction->result_type));
 }
 
-static X86Reg integer_argument_register(X86Function *function, size_t index) {
+static X86Reg integer_argument_register(size_t index) {
     static const X86Reg registers[] = {
         X86_RDI,
         X86_RSI,
@@ -566,10 +566,25 @@ static X86Reg integer_argument_register(X86Function *function, size_t index) {
         X86_R9,
     };
 
-    size_t register_index = index + (function_returns_indirect(function) ? 1 : 0);
-    assert(register_index < sizeof(registers) / sizeof(*registers));
+    assert(index < sizeof(registers) / sizeof(*registers));
+    return registers[index];
+}
 
-    return registers[register_index];
+static void emit_operand_address(X86Function *function, const LirOperand *operand, X86Reg reg) {
+    switch (operand->kind) {
+        case LIR_OPERAND_VALUE: {
+            X86Slot *source = slot(function, operand->value);
+            fprintf(function->out, "    lea %s, [rbp%ld]\n", reg_name(reg, 8), source->offset);
+            return;
+        }
+
+        case LIR_OPERAND_SYMBOL:
+            fprintf(function->out, "    lea %s, %.*s[rip]\n", reg_name(reg, 8), (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
+            return;
+
+        default:
+            assert(!"operand has no addressable aggregate storage");
+    }
 }
 
 static void emit_call(X86Function *function, const LirInstruction *instruction) {
@@ -577,14 +592,34 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
     Symbol *symbol = operands[0].symbol;
     size_t arg_count = instruction->operands.len - 1;
 
-    assert(arg_count <= 6);
+    HirType *callee_type = base_type(symbol->type);
+    assert(callee_type != NULL && callee_type->kind == HIR_TYPE_FUNCTION);
 
-    for (size_t i = 0; i < arg_count; i++)
-        load_operand(function, &operands[i + 1], integer_argument_register(function, i));
+    HirType *return_type = base_type(callee_type->function.ret);
+    bool indirect_return = return_type != NULL && return_type->size > 8;
+    size_t arg_shift = indirect_return ? 1 : 0;
+
+    assert(arg_count + arg_shift <= 6);
+
+    if (indirect_return) {
+        assert(instruction->result != LIR_INVALID_VALUE);
+        X86Slot *destination = slot(function, instruction->result);
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+    }
+
+    for (size_t i = 0; i < arg_count; i++) {
+        LirOperand *arg = &operands[i + 1];
+        X86Reg reg = integer_argument_register(i + arg_shift);
+
+        if (type_size(arg->type) > 8)
+            emit_operand_address(function, arg, reg);
+        else
+            load_operand(function, arg, reg);
+    }
 
     fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
 
-    if (instruction->result != LIR_INVALID_VALUE && type_size(instruction->result_type) != 0)
+    if (!indirect_return && instruction->result != LIR_INVALID_VALUE && type_size(instruction->result_type) != 0)
         store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
 }
 
@@ -690,14 +725,35 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
 
 static void emit_parameters(X86Function *function) {
     LirFunction *lir = (LirFunction *)function->function;
+    size_t arg_shift = function_returns_indirect(function) ? 1 : 0;
 
     for (size_t i = 0; i < lir->params.len; i++) {
         LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
         X86Slot *s = slot(function, param->value);
         size_t size = type_size(param->type);
-        X86Reg reg = integer_argument_register(function, i);
+        X86Reg reg = integer_argument_register(i + arg_shift);
 
-        fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
+        if (size == 0)
+            continue;
+
+        if (size > 8)
+            fprintf(function->out, "    mov qword ptr [rbp%ld], %s\n", s->offset, reg_name(reg, 8));
+        else
+            fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
+    }
+
+    for (size_t i = 0; i < lir->params.len; i++) {
+        LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
+        X86Slot *s = slot(function, param->value);
+        size_t size = type_size(param->type);
+
+        if (size <= 8)
+            continue;
+
+        fprintf(function->out, "    mov rsi, qword ptr [rbp%ld]\n", s->offset);
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", s->offset);
+        fprintf(function->out, "    mov rcx, %zu\n", size);
+        fprintf(function->out, "    rep movsb\n");
     }
 }
 
