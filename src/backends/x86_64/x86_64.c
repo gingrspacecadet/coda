@@ -31,7 +31,13 @@ typedef struct {
     X86Slot *slots;
     size_t slot_count;
     size_t frame_size;
+    int64_t return_address_offset;
 } X86Function;
+
+static bool function_returns_indirect(X86Function *function) {
+    return function->function->return_type != NULL &&
+           function->function->return_type->size > 8;
+}
 
 static size_t type_size(HirType *type) {
     assert(type != NULL);
@@ -135,14 +141,16 @@ static void allocate_slots(X86Function *function) {
 
     if (function->slot_count == 0) {
         function->slots = NULL;
-        function->frame_size = 0;
+        function->frame_size = function_returns_indirect(function) ? 16 : 0;
+        function->return_address_offset = function_returns_indirect(function) ? -8 : 0;
         return;
     }
 
     function->slots = calloc(function->slot_count, sizeof(*function->slots));
     assert(function->slots != NULL);
 
-    size_t offset = 0;
+    size_t offset = function_returns_indirect(function) ? 8 : 0;
+    function->return_address_offset = function_returns_indirect(function) ? -8 : 0;
 
     for (size_t i = 0; i < function->function->blocks.len; i++) {
         LirBlock *block = ((LirBlock **)function->function->blocks.data)[i];
@@ -159,7 +167,7 @@ static void allocate_slots(X86Function *function) {
             offset = align_up(offset, align);
             offset += size;
 
-            function->slots[param->value] = (X86Slot){
+            function->slots[param->value] = (X86Slot) {
                 .offset = -(int64_t)offset,
                 .size = size,
             };
@@ -180,7 +188,7 @@ static void allocate_slots(X86Function *function) {
             offset = align_up(offset, align);
             offset += size;
 
-            function->slots[instruction->result] = (X86Slot){
+            function->slots[instruction->result] = (X86Slot) {
                 .offset = -(int64_t)offset,
                 .size = size,
             };
@@ -188,6 +196,125 @@ static void allocate_slots(X86Function *function) {
     }
 
     function->frame_size = align_up(offset, 16);
+}
+
+static void emit_memory_load(X86Function *function, X86Reg address, X86Reg reg, size_t size, bool signed_) {
+    const char *address_name = reg_name(address, 8);
+
+    if (size == 1)
+        fprintf(function->out, signed_ ? "    movsx %s, byte ptr [%s]\n" : "    movzx %s, byte ptr [%s]\n", reg_name(reg, 8), address_name);
+    else if (size == 2)
+        fprintf(function->out, signed_ ? "    movsx %s, word ptr [%s]\n" : "    movzx %s, word ptr [%s]\n", reg_name(reg, 8), address_name);
+    else if (size == 4)
+        fprintf(function->out, signed_ ? "    movsxd %s, dword ptr [%s]\n" : "    mov %s, dword ptr [%s]\n", reg_name(reg, signed_ ? 8 : 4), address_name);
+    else if (size == 8)
+        fprintf(function->out, "    mov %s, qword ptr [%s]\n", reg_name(reg, 8), address_name);
+    else
+        assert(!"invalid scalar size");
+}
+
+static void emit_memory_store(X86Function *function, X86Reg address, X86Reg reg, size_t size) {
+    assert(size <= 8);
+    fprintf(function->out, "    mov %s [%s], %s\n", size_name(size), reg_name(address, 8), reg_name(reg, size));
+}
+
+
+static void emit_copy_memory(X86Function *function, X86Reg destination, X86Reg source, size_t size) {
+    if (size == 0)
+        return;
+
+    fprintf(function->out, "    mov rcx, %zu\n", size);
+    fprintf(function->out, "    rep movsb\n");
+}
+
+static void emit_copy_stack(X86Function *function, X86Slot *destination, X86Slot *source, size_t size) {
+    if (size == 0)
+        return;
+
+    fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+    fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset);
+    emit_copy_memory(function, X86_RDI, X86_RSI, size);
+}
+
+static void emit_zero(X86Function *function, const LirInstruction *instruction) {
+    X86Slot *destination = slot(function, instruction->result);
+    size_t size = type_size(instruction->result_type);
+
+    if (size == 0)
+        return;
+
+    fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+    fprintf(function->out, "    xor eax, eax\n");
+    fprintf(function->out, "    mov rcx, %zu\n", size);
+    fprintf(function->out, "    rep stosb\n");
+}
+
+static void load_operand(X86Function *function, const LirOperand *operand, X86Reg reg);
+
+static void emit_insert(X86Function *function, const LirInstruction *instruction, bool dynamic) {
+    LirOperand *operands = instruction->operands.data;
+    LirOperand *aggregate = &operands[0];
+    LirOperand *offset = &operands[1];
+    LirOperand *value = &operands[2];
+
+    assert(aggregate->kind == LIR_OPERAND_VALUE);
+    X86Slot *destination = slot(function, instruction->result);
+    X86Slot *source = slot(function, aggregate->value);
+    size_t aggregate_size = type_size(aggregate->type);
+    size_t value_size = type_size(value->type);
+
+    emit_copy_stack(function, destination, source, aggregate_size);
+
+    if (dynamic) {
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+        load_operand(function, offset, X86_RCX);
+        fprintf(function->out, "    add rdi, rcx\n");
+    } else {
+        assert(offset->kind == LIR_OPERAND_OFFSET);
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset + (int64_t)offset->offset);
+    }
+
+    if (value_size > 8) {
+        assert(value->kind == LIR_OPERAND_VALUE);
+
+        X86Slot *value_slot = slot(function, value->value);
+        fprintf(function->out, "    lea rsi, [rbp%ld]\n", value_slot->offset);
+        emit_copy_memory(function, X86_RDI, X86_RSI, value_size);
+    } else {
+        load_operand(function, value, X86_RAX);
+        emit_memory_store(function, X86_RDI, X86_RAX, value_size);
+    }
+}
+
+static void store_register(X86Function *function, X86Reg reg, LirValueId value, size_t size);
+
+static void emit_extract(X86Function *function, const LirInstruction *instruction, bool dynamic) {
+    LirOperand *operands = instruction->operands.data;
+    LirOperand *aggregate = &operands[0];
+    LirOperand *offset = &operands[1];
+
+    assert(aggregate->kind == LIR_OPERAND_VALUE);
+
+    X86Slot *source = slot(function, aggregate->value);
+    X86Slot *destination = slot(function, instruction->result);
+    size_t result_size = type_size(instruction->result_type);
+
+    if (dynamic) {
+        fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset);
+        load_operand(function, offset, X86_RCX);
+        fprintf(function->out, "    add rsi, rcx\n");
+    } else {
+        assert(offset->kind == LIR_OPERAND_OFFSET);
+        fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset + (int64_t)offset->offset);
+    }
+
+    if (result_size > 8) {
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+        emit_copy_memory(function, X86_RDI, X86_RSI, result_size);
+    } else {
+        emit_memory_load(function, X86_RSI, X86_RAX, result_size, type_is_signed(instruction->result_type));
+        store_register(function, X86_RAX, instruction->result, result_size);
+    }
 }
 
 static void load_operand(X86Function *function, const LirOperand *operand, X86Reg reg) {
@@ -387,6 +514,21 @@ static void emit_addr(X86Function *function, const LirInstruction *instruction) 
     store_register(function, X86_RAX, instruction->result, 8);
 }
 
+static void emit_aggregate_return(X86Function *function, const LirOperand *operand) {
+    assert(operand->kind == LIR_OPERAND_VALUE);
+
+    X86Slot *source = slot(function, operand->value);
+    size_t size = type_size(operand->type);
+
+    assert(size > 8);
+
+    fprintf(function->out, "    mov rdi, qword ptr [rbp%ld]\n", function->return_address_offset);
+    fprintf(function->out, "    mov rax, rdi\n");
+    fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset);
+    fprintf(function->out, "    mov rcx, %zu\n", size);
+    fprintf(function->out, "    rep movsb\n");
+}
+
 static void emit_cast(X86Function *function, const LirInstruction *instruction) {
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
 
@@ -414,7 +556,7 @@ static void emit_division(X86Function *function, const LirInstruction *instructi
         store_register(function, X86_RDX, instruction->result, type_size(instruction->result_type));
 }
 
-static X86Reg integer_argument_register(size_t index) {
+static X86Reg integer_argument_register(X86Function *function, size_t index) {
     static const X86Reg registers[] = {
         X86_RDI,
         X86_RSI,
@@ -424,8 +566,10 @@ static X86Reg integer_argument_register(size_t index) {
         X86_R9,
     };
 
-    assert(index < sizeof(registers) / sizeof(*registers));
-    return registers[index];
+    size_t register_index = index + (function_returns_indirect(function) ? 1 : 0);
+    assert(register_index < sizeof(registers) / sizeof(*registers));
+
+    return registers[register_index];
 }
 
 static void emit_call(X86Function *function, const LirInstruction *instruction) {
@@ -436,7 +580,7 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
     assert(arg_count <= 6);
 
     for (size_t i = 0; i < arg_count; i++)
-        load_operand(function, &operands[i + 1], integer_argument_register(i));
+        load_operand(function, &operands[i + 1], integer_argument_register(function, i));
 
     fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
 
@@ -517,6 +661,30 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
         case LIR_OP_CALL:
             emit_call(function, instruction);
             break;
+
+        case LIR_OP_ZERO:
+            emit_zero(function, instruction);
+            break;
+
+        case LIR_OP_EXTRACT:
+            emit_extract(function, instruction, false);
+            break;
+
+        case LIR_OP_EXTRACT_DYNAMIC:
+            emit_extract(function, instruction, true);
+            break;
+
+        case LIR_OP_INSERT:
+            emit_insert(function, instruction, false);
+            break;
+
+        case LIR_OP_INSERT_DYNAMIC:
+            emit_insert(function, instruction, true);
+            break;
+        
+        default:
+            assert(!"Unimplemented instruction");
+            break;
     }
 }
 
@@ -527,7 +695,7 @@ static void emit_parameters(X86Function *function) {
         LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
         X86Slot *s = slot(function, param->value);
         size_t size = type_size(param->type);
-        X86Reg reg = integer_argument_register(i);
+        X86Reg reg = integer_argument_register(function, i);
 
         fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
     }
@@ -539,6 +707,9 @@ static void emit_prologue(X86Function *function) {
 
     if (function->frame_size != 0)
         fprintf(function->out, "    sub rsp, %zu\n", function->frame_size);
+
+    if (function_returns_indirect(function))
+        fprintf(function->out, "    mov qword ptr [rbp%ld], rdi\n", function->return_address_offset);
 
     emit_parameters(function);
 }
@@ -585,8 +756,12 @@ static void emit_terminator(X86Function *function, const LirTerminator *terminat
             break;
 
         case LIR_TERM_RETURN:
-            if (terminator->_return.has_value)
-                load_operand(function, &terminator->_return.value, X86_RAX);
+            if (terminator->_return.has_value) {
+                if (function_returns_indirect(function))
+                    emit_aggregate_return(function, &terminator->_return.value);
+                else
+                    load_operand(function, &terminator->_return.value, X86_RAX);
+            }
 
             emit_epilogue(function);
             break;

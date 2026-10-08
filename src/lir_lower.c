@@ -225,6 +225,18 @@ static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
 static HirExpr *lir_field_root(HirExpr *expr);
 static bool lir_expr_is_ssa(HirExpr *expr);
 
+static size_t array_data_offset(HirType *type) {
+    assert(type->kind == HIR_TYPE_ARRAY);
+    assert(type->array.fields.len > 0);
+
+    HirField *length_field = &((HirField *)type->array.fields.data)[0];
+    size_t size = length_field->offset + length_field->type->size;
+    size_t align = type->array.element->align;
+    size_t remainder = size % align;
+
+    return remainder == 0 ? size : size + align - remainder;
+}
+
 static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
     HirType *type = expr->index.object->type;
 
@@ -242,9 +254,11 @@ static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
     assert(value <= SIZE_MAX);
 
     HirType *element = type->array.element;
-    assert(element->size == 0 || value <= SIZE_MAX / element->size);
+    size_t data_offset = array_data_offset(type);
 
-    *offset = (size_t)value * element->size;
+    assert(element->size == 0 || value <= (uint64_t)(SIZE_MAX - data_offset) / element->size);
+
+    *offset = data_offset + (size_t)value * element->size;
     return true;
 }
 
@@ -553,6 +567,8 @@ static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value) {
     lir_emit(lower->function, lower->block, LIR_OP_STORE, NULL, (Array){.data = operands, .len = 2});
 }
 
+static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr);
+
 static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_UNARY:
@@ -600,30 +616,18 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 base = object.address;
             }
 
-            LirOperand index = lir_lower_expr(lower, expr->index.index);
-            HirType *element_type = expr->type;
-
-            LirOperand scale = hir_type_is_signed_integer(index.type)
-                ? lir_operand_int((int64_t)element_type->size, index.type)
-                : lir_operand_uint((uint64_t)element_type->size, index.type);
-
-            LirOperand mul_operands[2] = {
-                index,
-                scale,
-            };
-
-            LirValueId offset = lir_emit(lower->function, lower->block, LIR_OP_MUL, index.type, (Array){.data = mul_operands, .len = 2});
+            LirOperand offset = lir_lower_array_offset(lower, expr);
 
             LirOperand add_operands[2] = {
                 base,
-                lir_operand_value(offset, index.type),
+                offset,
             };
 
             LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = add_operands, .len = 2});
 
             return (LirPlace){
                 .address = lir_operand_value(address, base.type),
-                .type = element_type,
+                .type = expr->type,
             };
         }
 

@@ -656,7 +656,13 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
     diags_init(&diags, arena);
 
     CodaCompiler compiler;
-    coda_compiler_init(&compiler, arena, &diags);
+    const TargetInfo *target = target_native();
+
+    if (target == NULL) {
+        fprintf(stderr, "native target is unsupported\n");
+        return 1;
+    }
+    coda_compiler_init(&compiler, arena, &diags, target);
 
     bool compiled = test_compile(path, test, &compiler, &failure->actual_errors, &failure->diagnostics_data, &failure->diagnostics_length);
 

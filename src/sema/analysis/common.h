@@ -123,6 +123,18 @@ static inline size_t loop_scope(Sema *sema, size_t level) {
     return SIZE_MAX;
 }
 
+static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional) {
+    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+
+    type->kind = HIR_TYPE_POINTER;
+    type->size = sizeof(void *);
+    type->align = __alignof(void *);
+    type->pointer.pointee = pointee;
+    type->pointer.optional = optional;
+
+    return type;
+}
+
 void scope_insert(Scope *scope, Symbol *sym);
 Symbol *scope_lookup(Scope *scope, AstName name);
 Symbol *sema_lookup(Sema *sema, AstName name);

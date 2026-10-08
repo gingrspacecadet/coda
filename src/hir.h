@@ -67,12 +67,14 @@ struct HirType {
 
         struct {
             HirType *element;
-        } slice;
+            uint64_t length;
+            Array(HirField) fields;
+        } array;
 
         struct {
             HirType *element;
-            size_t length;
-        } array;
+            Array(HirField) fields;
+        } slice;
 
         struct {
             HirType *ret;

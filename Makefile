@@ -153,7 +153,7 @@ TEST_OBJS = $(patsubst test/%.c,build/test/%.o,$(TEST_SRC))
 TEST_TARGET = build/codac-test
 
 $(TEST_TARGET): $(TEST_OBJS) $(LIB)
-	$(CC) $(CFLAGS) -o $@ $(TEST_OBJS) $(LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_OBJS) $(NATIVE_BACKEND_OBJS) $(LIB)
 
 build/test/%.o: test/%.c
 	@mkdir -p $(dir $@)

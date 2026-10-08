@@ -151,6 +151,26 @@ static size_t align_up(size_t value, size_t align) {
     return remainder == 0 ? value : value + align - remainder;
 }
 
+static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t offset, Span span) {
+    Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
+    *symbol = (Symbol) {
+        .kind = SYMBOL_FIELD,
+        .name = (AstName) {
+            .kind = AST_NAME_IDENT,
+            .ident = name,
+        },
+        .decl = NULL,
+        .type = type,
+        .span = span,
+    };
+
+    return (HirField) {
+        .symbol = symbol,
+        .type = type,
+        .offset = offset,
+    };
+}
+
 HirType *sema_type(Sema *sema, AstType *ast) {
     HirType *hir = arena_alloc(sema->arena, sizeof(HirType));
 
@@ -193,12 +213,56 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
         case AST_TYPE_ARRAY: {
             HirType *element = sema_type(sema, ast->array.element);
+            HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
+            assert(length_type != NULL);
 
             if (!ast->array.sized) {
+                HirType *pointer = pointer_type(sema, element, false);
+
                 hir->kind = HIR_TYPE_SLICE;
                 hir->slice.element = element;
-                hir->size = sema->target->pointer.size * 2;
-                hir->align = sema->target->pointer.align;
+                hir->slice.fields = array_create(sema->arena, sizeof(HirField));
+
+                Symbol *length_symbol = arena_alloc(sema->arena, sizeof(*length_symbol));
+                *length_symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = (AstName) {
+                        .kind = AST_NAME_IDENT,
+                        .ident = STRING("len"),
+                    },
+                    .type = length_type,
+                    .span = ast->span,
+                };
+
+                HirField length_field = {
+                    .symbol = length_symbol,
+                    .type = length_type,
+                    .offset = 0,
+                };
+                array_push(&hir->slice.fields, &length_field);
+
+                size_t pointer_offset = align_up(length_type->size, pointer->align);
+
+                Symbol *pointer_symbol = arena_alloc(sema->arena, sizeof(*pointer_symbol));
+                *pointer_symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = (AstName) {
+                        .kind = AST_NAME_IDENT,
+                        .ident = STRING("ptr"),
+                    },
+                    .type = pointer,
+                    .span = ast->span,
+                };
+
+                HirField pointer_field = {
+                    .symbol = pointer_symbol,
+                    .type = pointer,
+                    .offset = pointer_offset,
+                };
+                array_push(&hir->slice.fields, &pointer_field);
+
+                hir->align = length_type->align > pointer->align ? length_type->align : pointer->align;
+                hir->size = align_up(pointer_offset + pointer->size, hir->align);
                 break;
             }
 
@@ -217,10 +281,38 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             hir->kind = HIR_TYPE_ARRAY;
             hir->array.element = element;
-            hir->array.length = (size_t)length->literal.integer;
-            assert(element->size == 0 || hir->array.length <= SIZE_MAX / element->size);
-            hir->size = element->size * hir->array.length;
-            hir->align = element->align;
+            hir->array.length = length->literal.integer;
+            hir->array.fields = array_create(sema->arena, sizeof(HirField));
+
+            Symbol *length_symbol = arena_alloc(sema->arena, sizeof(*length_symbol));
+            *length_symbol = (Symbol) {
+                .kind = SYMBOL_FIELD,
+                .name = (AstName) {
+                    .kind = AST_NAME_IDENT,
+                    .ident = STRING("len"),
+                },
+                .type = length_type,
+                .span = ast->span,
+            };
+
+            HirField length_field = {
+                .symbol = length_symbol,
+                .type = length_type,
+                .offset = 0,
+            };
+            array_push(&hir->array.fields, &length_field);
+
+            size_t data_offset = align_up(length_type->size, element->align);
+
+            if (element->size != 0 && hir->array.length > (uint64_t)(SIZE_MAX - data_offset) / element->size) {
+                //! TODO: array is too large
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            size_t data_size = (size_t)hir->array.length * element->size;
+            hir->align = length_type->align > element->align ? length_type->align : element->align;
+            hir->size = align_up(data_offset + data_size, hir->align);
             break;
         }
 

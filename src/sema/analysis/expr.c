@@ -193,18 +193,6 @@ static HirExpr *implicit_deref(Sema *sema, HirExpr *expr) {
     return deref;
 }
 
-static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional) {
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
-
-    type->kind = HIR_TYPE_POINTER;
-    type->size = sizeof(void *);
-    type->align = __alignof(void *);
-    type->pointer.pointee = pointee;
-    type->pointer.optional = optional;
-
-    return type;
-}
-
 static inline bool is_place(HirExpr *expr) {
     if (expr == NULL)
         return false;
@@ -510,6 +498,12 @@ static HirLiteral literal(Sema *sema, AstLiteral literal) {
 
     assert(!"unhandled AST literal");
     return (HirLiteral){0};
+}
+
+static size_t align_up(size_t value, size_t align) {
+    assert(align != 0);
+    size_t remainder = value % align;
+    return remainder == 0 ? value : value + align - remainder;
 }
 
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
@@ -892,12 +886,55 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     field = field_lookup(object_type->union_.fields, ast->member.member);
                     break;
 
+                case HIR_TYPE_SLICE:
+                    field = field_lookup(object_type->slice.fields, ast->member.member);
+                    break;
+
+                case HIR_TYPE_ARRAY:
+                    if (ast->member.member.kind == AST_NAME_IDENT &&
+                        string_eq(ast->member.member.ident, STRING("ptr"))) {
+                        HirType *element_type = type_with_mutability(sema, object_type->array.element, object_type->mutable);
+                        HirType *pointertype = pointer_type(sema, element_type, false);
+
+                        HirExpr *index = arena_alloc(sema->arena, sizeof(*index));
+                        *index = (HirExpr) {
+                            .span = ast->span,
+                            .kind = HIR_EXPR_LITERAL,
+                            .type = builtin_type(sema, BUILTIN_UINT64),
+                            .literal = {
+                                .kind = HIR_LITERAL_INTEGER,
+                                .integer = 0,
+                            },
+                        };
+
+                        HirExpr *element = arena_alloc(sema->arena, sizeof(*element));
+                        *element = (HirExpr) {
+                            .span = ast->span,
+                            .kind = HIR_EXPR_INDEX,
+                            .type = element_type,
+                            .index = {
+                                .object = object,
+                                .index = index,
+                            },
+                        };
+
+                        hir->kind = HIR_EXPR_UNARY;
+                        hir->type = pointertype;
+                        hir->unary.op = AST_UNARY_ADDRESS;
+                        hir->unary.operand = element;
+
+                        return hir;
+                    }
+
+                    field = field_lookup(object_type->array.fields, ast->member.member);
+                    break;
+
                 default:
                     error_expected_member(sema->diags, ast->member.member.ident, object->type, ast->span);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
             }
-
+            
             if (field == NULL) {
                 error_unknown_field(sema->diags, ast->member.member.ident, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
@@ -950,6 +987,29 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            if (expected->kind == HIR_TYPE_ARRAY) {
+                HirField *length_field = &((HirField *)expected->array.fields.data)[0];
+
+                HirExpr *length = arena_alloc(sema->arena, sizeof(*length));
+                *length = (HirExpr) {
+                    .span = ast->span,
+                    .kind = HIR_EXPR_LITERAL,
+                    .type = length_field->type,
+                    .literal = {
+                        .kind = HIR_LITERAL_INTEGER,
+                        .integer = expected->array.length,
+                    },
+                };
+
+                HirInitField init_field = {
+                    .field = length_field,
+                    .offset = length_field->offset,
+                    .value = length,
+                };
+
+                array_push(&hir->init.fields, &init_field);
+            }
+
             size_t field_count = 0;
 
             switch (expected->kind) {
@@ -995,7 +1055,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                     field_index = positional++;
                     value_type = expected->array.element;
-                    offset = field_index * value_type->size;
+                    HirField *length_field = &((HirField *)expected->array.fields.data)[0];
+                    size_t data_offset = align_up(length_field->offset + length_field->type->size, value_type->align);
+
+                    offset = data_offset + field_index * value_type->size;
                 } else {
                     if (named) {
                         hir_field = init_field_lookup(expected, field->name);
