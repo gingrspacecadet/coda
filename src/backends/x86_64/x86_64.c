@@ -213,11 +213,17 @@ static void load_operand(X86Function *function, const LirOperand *operand, X86Re
         }
 
         case LIR_OPERAND_INT:
-            fprintf(function->out, "    movabsq $%" PRId64 ", %%%s\n", operand->int_value, reg_name(reg, 8));
+            if (operand->int_value >= INT32_MIN && operand->int_value <= INT32_MAX)
+                fprintf(function->out, "    movq $%" PRId64 ", %%%s\n", operand->int_value, reg_name(reg, 8));
+            else
+                fprintf(function->out, "    movabsq $%" PRId64 ", %%%s\n", operand->int_value, reg_name(reg, 8));
             break;
 
         case LIR_OPERAND_UINT:
-            fprintf(function->out, "    movabsq $%" PRIu64 ", %%%s\n", operand->uint_value, reg_name(reg, 8));
+            if (operand->uint_value <= UINT32_MAX)
+                fprintf(function->out, "    movq $%" PRIu64 ", %%%s\n", operand->uint_value, reg_name(reg, 8));
+            else
+                fprintf(function->out, "    movabsq $%" PRIu64 ", %%%s\n", operand->uint_value, reg_name(reg, 8));
             break;
 
         case LIR_OPERAND_BOOL:
@@ -391,6 +397,56 @@ static void emit_cast(X86Function *function, const LirInstruction *instruction) 
     store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
 }
 
+static void emit_division(X86Function *function, const LirInstruction *instruction) {
+    LirOperand *operands = instruction->operands.data;
+    bool signed_ = type_is_signed(operands[0].type);
+
+    load_operand(function, &operands[0], X86_RAX);
+    load_operand(function, &operands[1], X86_RCX);
+
+    if (signed_)
+        fprintf(function->out, "    cqo\n");
+    else
+        fprintf(function->out, "    xorq %%rdx, %%rdx\n");
+
+    fprintf(function->out, signed_ ? "    idivq %%rcx\n" : "    divq %%rcx\n");
+
+    if (instruction->opcode == LIR_OP_DIV)
+        store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
+    else
+        store_register(function, X86_RDX, instruction->result, type_size(instruction->result_type));
+}
+
+static X86Reg integer_argument_register(size_t index) {
+    static const X86Reg registers[] = {
+        X86_RDI,
+        X86_RSI,
+        X86_RDX,
+        X86_RCX,
+        X86_R8,
+        X86_R9,
+    };
+
+    assert(index < sizeof(registers) / sizeof(*registers));
+    return registers[index];
+}
+
+static void emit_call(X86Function *function, const LirInstruction *instruction) {
+    LirOperand *operands = instruction->operands.data;
+    Symbol *symbol = operands[0].symbol;
+    size_t arg_count = instruction->operands.len - 1;
+
+    assert(arg_count <= 6);
+
+    for (size_t i = 0; i < arg_count; i++)
+        load_operand(function, &operands[i + 1], integer_argument_register(i));
+
+    fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
+
+    if (instruction->result != LIR_INVALID_VALUE && type_size(instruction->result_type) != 0)
+        store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
+}
+
 static void emit_instruction(X86Function *function, const LirInstruction *instruction) {
     switch (instruction->opcode) {
         case LIR_OP_NEG:
@@ -429,7 +485,8 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
 
         case LIR_OP_DIV:
         case LIR_OP_MOD:
-            assert(!"division not implemented yet");
+            emit_division(function, instruction);
+            break;
 
         case LIR_OP_LT:
         case LIR_OP_LE:
@@ -461,8 +518,24 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
             break;
 
         case LIR_OP_CALL:
-            assert(!"CALL not implemented yet");
+            emit_call(function, instruction);
             break;
+    }
+}
+
+static void emit_parameters(X86Function *function) {
+    LirFunction *lir = (LirFunction *)function->function;
+
+    for (size_t i = 0; i < lir->params.len; i++) {
+        LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
+        X86Slot *s = slot(function, param->value);
+        size_t size = type_size(param->type);
+
+        assert(size == 1 || size == 2 || size == 4 || size == 8);
+
+        X86Reg reg = integer_argument_register(i);
+
+        fprintf(function->out, "    mov%c %%%s, %ld(%%rbp)\n", suffix(size), reg_name(reg, size), s->offset);
     }
 }
 
@@ -472,6 +545,8 @@ static void emit_prologue(X86Function *function) {
 
     if (function->frame_size != 0)
         fprintf(function->out, "    subq $%zu, %%rsp\n", function->frame_size);
+
+    emit_parameters(function);
 }
 
 static void emit_epilogue(X86Function *function) {
@@ -479,8 +554,41 @@ static void emit_epilogue(X86Function *function) {
     fprintf(function->out, "    ret\n");
 }
 
+
+static void emit_block_args(X86Function *function, LirBlockId block_id, Array(LirOperand) args) {
+    LirBlock *block = ((LirBlock **)function->function->blocks.data)[block_id];
+
+    assert(block->params.len == args.len);
+
+    for (size_t i = 0; i < args.len; i++) {
+        LirBlockParam *param = &((LirBlockParam *)block->params.data)[i];
+        LirOperand *operand = &((LirOperand *)args.data)[i];
+
+        load_operand(function, operand, X86_RAX);
+        store_register(function, X86_RAX, param->value, type_size(param->type));
+    }
+}
+
 static void emit_terminator(X86Function *function, const LirTerminator *terminator) {
     switch (terminator->kind) {
+        case LIR_TERM_JUMP:
+            emit_block_args(function, terminator->jump.target, terminator->jump.args);
+            fprintf(function->out, "    jmp .L%u\n", terminator->jump.target);
+            break;
+
+        case LIR_TERM_BRANCH:
+            load_operand(function, &terminator->branch.condition, X86_RAX);
+            fprintf(function->out, "    cmpq $0, %%rax\n");
+            fprintf(function->out, "    je .L%u_else\n", terminator->branch.else_block);
+
+            emit_block_args(function, terminator->branch.then_block, terminator->branch.then_args);
+            fprintf(function->out, "    jmp .L%u\n", terminator->branch.then_block);
+
+            fprintf(function->out, ".L%u_else:\n", terminator->branch.else_block);
+            emit_block_args(function, terminator->branch.else_block, terminator->branch.else_args);
+            fprintf(function->out, "    jmp .L%u\n", terminator->branch.else_block);
+            break;
+
         case LIR_TERM_RETURN:
             if (terminator->_return.has_value)
                 load_operand(function, &terminator->_return.value, X86_RAX);
@@ -498,17 +606,17 @@ static void emit_function(X86Function *function) {
     String name = lir->symbol->name.ident;
 
     if (lir->is_export)
-        fprintf(function->out, ".globl %.*s\n", string_fmt(name));
-    
-    fprintf(function->out, ".type %.*s, @function\n", string_fmt(name));
-    fprintf(function->out, "%.*s:\n", string_fmt(name));
+        fprintf(function->out, ".globl %.*s\n", (int)name.length, name.data);
+
+    fprintf(function->out, ".type %.*s, @function\n", (int)name.length, name.data);
+    fprintf(function->out, "%.*s:\n", (int)name.length, name.data);
 
     emit_prologue(function);
 
     for (size_t i = 0; i < lir->blocks.len; i++) {
         LirBlock *block = ((LirBlock **)lir->blocks.data)[i];
 
-        fprintf(function->out, ".L%u:\n", block->id);
+        fprintf(function->out, ".L%.*s_%u:\n", (int)name.length, name.data, block->id);
 
         for (size_t j = 0; j < block->instructions.len; j++)
             emit_instruction(function, &((LirInstruction *)block->instructions.data)[j]);
@@ -516,9 +624,7 @@ static void emit_function(X86Function *function) {
         emit_terminator(function, &block->terminator);
     }
 
-    emit_epilogue(function);
-
-    fprintf(function->out, ".size %.*s, .-%.*s\n", string_fmt(name), string_fmt(name));
+    fprintf(function->out, ".size %.*s, .-%.*s\n", (int)name.length, name.data, (int)name.length, name.data);
 }
 
 static bool supports(const TargetInfo *target) {

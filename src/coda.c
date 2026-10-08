@@ -56,6 +56,7 @@ bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage) {
 
     LirModule *lir = lir_lower_module(compiler->arena, hm);
     compiler->compilation.lir = lir;
+    // lir_print(stderr, lir);
 
     if (stage >= CODA_STAGE_CODEGEN) {
         assert(compiler->backend != NULL);
