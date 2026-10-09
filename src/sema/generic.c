@@ -307,12 +307,6 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
 HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic) {
     AstFnDecl *template = &generic->decl->fn;
 
-    for (size_t i = 0; i < template->generics.len; i++) {
-        AstGenericParam *param = array_at(&template->generics, i);
-        if (param->constraints.len != 0)
-            return generic_error(sema, ast, E_GENERIC_CONSTRAINT_UNSUPPORTED, STRING("generic constraints are not implemented yet"), STRING("remove the constraints until constraint checking is implemented"));
-    }
-
     if (template->params.len != ast->call.args.len) {
         error_wrong_argument_count(sema->diags, template->params.len, ast->call.args.len, ast->span);
         return generic_error_expr(sema, ast);
@@ -366,6 +360,9 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
                 return generic_error(sema, ast, E_CANNOT_INFER_GENERIC, STRING("could not infer all generic type arguments"), STRING("supply explicit type arguments at the call site"));
         }
     }
+
+    if (!sema_check_generic_constraints(sema, template->generics, arguments, ast->span))
+        return generic_error_expr(sema, ast);
 
     Symbol *instance = generic_find_instance(sema, generic, arguments);
     if (instance == NULL)

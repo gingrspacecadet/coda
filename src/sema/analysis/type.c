@@ -193,6 +193,18 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 return hir;
             }
 
+            if (symbol->decl != NULL && symbol->decl->kind == AST_DECL_TYPE && symbol->decl->type.generics.len != 0)
+                return sema_generic_type(sema, ast, symbol);
+
+            if (ast->named.args.len != 0) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("type arguments supplied to a non-generic type"));
+                diag_note(&diagnostic, STRING("remove the type arguments from this type"));
+                diag_finish(&diagnostic);
+                hir->kind = HIR_TYPE_ERROR;
+                hir->align = 1;
+                return hir;
+            }
+
             if (symbol->type == NULL) {
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
@@ -205,14 +217,20 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
         case AST_TYPE_POINTER:
             hir->kind = HIR_TYPE_POINTER;
+            sema->type_indirection_depth++;
             hir->pointer.pointee = sema_type(sema, ast->pointer.pointee);
+            sema->type_indirection_depth--;
             hir->pointer.optional = ast->pointer.optional;
             hir->size = sema->target->pointer.size;
             hir->align = sema->target->pointer.align;
             break;
 
         case AST_TYPE_ARRAY: {
+            if (!ast->array.sized)
+                sema->type_indirection_depth++;
             HirType *element = sema_type(sema, ast->array.element);
+            if (!ast->array.sized)
+                sema->type_indirection_depth--;
             HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
             assert(length_type != NULL);
 

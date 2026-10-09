@@ -1,0 +1,26 @@
+name: generic method constraint rejects missing method
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type File = struct {
+    uint64 size;
+};
+
+type Memory = struct {
+    uint64 size;
+};
+
+fn uint64 File.read(File* self, uint8[] buffer) {
+    return self.size;
+}
+
+fn none require_read<T: { fn uint64 T.read(T* self, uint8[] buffer); }>(T* source) {
+    return;
+}
+
+fn none use(Memory* source) {
+    require_read(source);
+    return;
+}

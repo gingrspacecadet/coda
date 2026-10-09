@@ -103,6 +103,9 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 }
 
 void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
+    if (ast->generics.len != 0)
+        return;
+
     Symbol *symbol = sema_lookup(sema, ast->name);
 
     if (symbol == NULL) {

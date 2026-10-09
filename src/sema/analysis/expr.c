@@ -506,6 +506,123 @@ static size_t align_up(size_t value, size_t align) {
     return remainder == 0 ? value : value + align - remainder;
 }
 
+static HirExpr *sema_method_error(Sema *sema, Span span) {
+    HirExpr *expr = arena_alloc(sema->arena, sizeof(*expr));
+    *expr = (HirExpr){.span = span, .kind = HIR_EXPR_ERROR};
+    return expr;
+}
+
+static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bool *handled) {
+    *handled = false;
+    if (ast->call.callee == NULL || ast->call.callee->kind != AST_EXPR_MEMBER)
+        return NULL;
+
+    AstExpr *callee = ast->call.callee;
+    if (sema->module == NULL)
+        return NULL;
+
+    HirExpr *receiver = sema_expr(sema, callee->member.object, NULL);
+    if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR) {
+        *handled = true;
+        return sema_method_error(sema, ast->span);
+    }
+
+    HirType *receiver_type = receiver->type;
+    if (receiver_type == NULL) {
+        *handled = true;
+        return sema_method_error(sema, ast->span);
+    }
+
+    HirType *dispatch_type = receiver_type;
+    if (dispatch_type->kind == HIR_TYPE_POINTER)
+        dispatch_type = dispatch_type->pointer.pointee;
+    if (dispatch_type == NULL)
+        return NULL;
+
+    Symbol *method = NULL;
+    for (size_t i = 0; i < sema->module->decls.len; i++) {
+        AstDecl *decl = ((AstDecl **)sema->module->decls.data)[i];
+        if (decl == NULL || decl->kind != AST_DECL_FN)
+            continue;
+
+        AstFnDecl *candidate = &decl->fn;
+        if (candidate->receiver == NULL || candidate->generics.len != 0 ||
+            !ast_name_equal(&candidate->name, &callee->member.member))
+            continue;
+
+        Symbol *symbol = scope_lookup(&sema->global_scope, candidate->name);
+        if (symbol == NULL || symbol->kind != SYMBOL_FN || symbol->decl != decl)
+            continue;
+
+        HirType *candidate_receiver = sema_type(sema, candidate->receiver);
+        if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
+            continue;
+        if (candidate_receiver->kind == HIR_TYPE_POINTER)
+            candidate_receiver = candidate_receiver->pointer.pointee;
+        if (type_equal(candidate_receiver, dispatch_type)) {
+            method = symbol;
+            break;
+        }
+    }
+
+    if (method == NULL)
+        return NULL;
+
+    *handled = true;
+    HirType *function_type = sema_symbol_type(sema, method);
+    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION || function_type->function.params.len == 0)
+        return sema_method_error(sema, ast->span);
+
+    if (ast->call.generic_args.len != 0) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("type arguments supplied to a non-generic method"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    size_t expected_arguments = function_type->function.params.len - 1;
+    if (expected_arguments != ast->call.args.len) {
+        error_wrong_argument_count(sema->diags, expected_arguments, ast->call.args.len, ast->span);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (method->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
+        error_cant_call_comptime(sema->diags, ast->span);
+        return sema_method_error(sema, ast->span);
+    }
+
+    HirType *receiver_param = ((HirType **)function_type->function.params.data)[0];
+    receiver = sema_coerce(sema, receiver, receiver_param);
+    if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
+        return sema_method_error(sema, ast->span);
+
+    HirExpr *call = arena_alloc(sema->arena, sizeof(*call));
+    *call = (HirExpr){
+        .span = ast->span,
+        .kind = HIR_EXPR_CALL,
+        .type = function_type->function.ret,
+        .call = {
+            .function = method,
+            .args = array_create(sema->arena, sizeof(HirExpr *)),
+        },
+    };
+    array_push(&call->call.args, &receiver);
+
+    for (size_t i = 0; i < ast->call.args.len; i++) {
+        HirType *param_type = ((HirType **)function_type->function.params.data)[i + 1];
+        HirExpr *value = sema_expr(sema, ((AstExpr **)ast->call.args.data)[i], param_type);
+        if (value == NULL || value->kind == HIR_EXPR_ERROR)
+            return sema_method_error(sema, ast->span);
+        array_push(&call->call.args, &value);
+    }
+
+    if (expected != NULL) {
+        HirExpr *coerced = sema_coerce(sema, call, expected);
+        return coerced != NULL ? coerced : sema_method_error(sema, ast->span);
+    }
+
+    return call;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     if (ast->comptime) {
         AstExpr copy = *ast;
@@ -697,6 +814,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         }
 
         case AST_EXPR_CALL: {
+            bool method_handled = false;
+            HirExpr *method_call = sema_method_call(sema, ast, expected, &method_handled);
+            if (method_handled)
+                return method_call;
+
             Symbol *generic = NULL;
 
             if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_IDENT)

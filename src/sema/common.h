@@ -111,6 +111,8 @@ Symbol *sema_lookup_path(Sema *sema, Path path);
 void collect_decls(Sema *sema, Array(AstDecl *) decls);
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected);
 HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic);
+HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic);
+bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments, Span span);
 bool type_equal(HirType *a, HirType *b);
 HirType *sema_type(Sema *sema, AstType *ast);
 HirType *sema_symbol_type(Sema *sema, Symbol *symbol);

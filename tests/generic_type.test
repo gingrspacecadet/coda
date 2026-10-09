@@ -1,0 +1,42 @@
+name: generic type monomorphisation
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Box<T> = struct {
+    T value;
+};
+
+type Wrapper<T> = struct {
+    Box<T> box;
+};
+
+type Node<T> = struct {
+    T value;
+    Node<T> *next;
+};
+
+fn int64 read_box(Box<int64> box) {
+    return box.value;
+}
+
+fn uint64 read_unsigned(Box<uint64> box) {
+    return box.value;
+}
+
+fn int64 read_nested(Wrapper<int64> value) {
+    return value.box.value;
+}
+
+fn Box<int64> make_box() {
+    return {42};
+}
+
+fn int64 read_node(Node<int64>* node) {
+    return node.value;
+}
+
+fn int64 call_read(Box<int64> box) {
+    return read_box(box);
+}

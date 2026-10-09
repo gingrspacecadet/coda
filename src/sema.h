@@ -14,6 +14,14 @@ typedef struct {
 } GenericInstance;
 
 typedef struct {
+    Symbol *generic;
+    Symbol *instance;
+    Array(HirType *) arguments;
+    size_t pointer_depth;
+    bool complete;
+} GenericTypeInstance;
+
+typedef struct {
     AstModule *module;
 
     Array(Scope) scopes;
@@ -26,6 +34,8 @@ typedef struct {
 
     Array(GenericInstance) generic_instances;
     size_t next_generic_instance;
+    Array(GenericTypeInstance) generic_type_instances;
+    size_t type_indirection_depth;
 
     const TargetInfo *target;
 
@@ -42,6 +52,8 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .current_fn = NULL,
         .generic_instances = array_create(arena, sizeof(GenericInstance)),
         .next_generic_instance = 0,
+        .generic_type_instances = array_create(arena, sizeof(GenericTypeInstance)),
+        .type_indirection_depth = 0,
         .global_scope = (Scope){
             .syms = array_create(arena, sizeof(Symbol)),
             .defers = array_create(arena, sizeof(HirStmt *)),

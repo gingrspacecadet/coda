@@ -1,0 +1,21 @@
+name: generic type constraint
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+constraint HasSize = {
+    uint64 size;
+}
+
+type Blob = struct {
+    uint64 size;
+};
+
+type Box<T: HasSize> = struct {
+    T value;
+};
+
+fn uint64 get_size(Box<Blob> box) {
+    return box.value.size;
+}

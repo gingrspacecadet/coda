@@ -1,0 +1,17 @@
+name: distinct generic type arguments preserve nominal identity
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type Marker<T> = struct {
+    uint8 value;
+};
+
+fn int64 accept(Marker<int64> value) {
+    return 0;
+}
+
+fn int64 reject(Marker<uint64> value) {
+    return accept(value);
+}
