@@ -507,9 +507,14 @@ static void emit_addr_add(X86Function *function, const LirInstruction *instructi
 static void emit_addr(X86Function *function, const LirInstruction *instruction) {
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
 
-    assert(operand->kind == LIR_OPERAND_SYMBOL);
-
-    fprintf(function->out, "    lea rax, %.*s[rip]\n", (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
+    if (operand->kind == LIR_OPERAND_SYMBOL) {
+        fprintf(function->out, "    lea rax, %.*s[rip]\n", (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
+    } else if (operand->kind == LIR_OPERAND_VALUE) {
+        X86Slot *source = slot(function, operand->value);
+        fprintf(function->out, "    lea rax, [rbp%ld]\n", source->offset);
+    } else {
+        assert(!"address operand must be a symbol or stack value");
+    }
 
     store_register(function, X86_RAX, instruction->result, 8);
 }

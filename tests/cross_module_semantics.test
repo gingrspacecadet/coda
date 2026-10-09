@@ -1,0 +1,34 @@
+name: cross-module semantic analysis
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+include crossmod::math;
+
+fn int64 imported_function() {
+    return crossmod::math::add(20, 22);
+}
+
+fn int64 imported_generic_function() {
+    return crossmod::math::identity<int64>(42);
+}
+
+fn int64 imported_generic_type() {
+    crossmod::math::Box<int64> box = {.value = 42};
+    return box.value;
+}
+
+fn int64 constrained_imported_method<T: crossmod::math::Readable>(T* value) {
+    return value.read();
+}
+
+fn int64 imported_method() {
+    crossmod::math::Reader reader = {.value = 7};
+    return constrained_imported_method(&reader);
+}
+
+fn int64 direct_imported_method() {
+    crossmod::math::Reader reader = {.value = 7};
+    return reader.read();
+}

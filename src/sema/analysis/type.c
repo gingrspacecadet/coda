@@ -9,8 +9,8 @@ HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
 }
 
 HirType *builtin_type(Sema *sema, BuiltinType builtin) {
-    for (size_t i = 0; i < sema->global_scope.syms.len; i++) {
-        Symbol *symbol = (Symbol *)array_at(&sema->global_scope.syms, i);
+    for (size_t i = 0; i < sema->builtin_scope.syms.len; i++) {
+        Symbol *symbol = (Symbol *)array_at(&sema->builtin_scope.syms, i);
 
         if (symbol->kind == SYMBOL_TYPE &&
             symbol->type != NULL &&
@@ -567,7 +567,7 @@ static void insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
         .decl = NULL,
         .type = type,
     };
-    scope_insert(&sema->global_scope, symbol);
+    scope_insert(&sema->builtin_scope, symbol);
 }
 
 void sema_insert_builtin_types(Sema *sema) {

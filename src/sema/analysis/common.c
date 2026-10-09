@@ -26,7 +26,11 @@ Symbol *sema_lookup(Sema *sema, AstName name) {
             return symbol;
     }
 
-    return scope_lookup(&sema->global_scope, name);
+    Symbol *symbol = scope_lookup(&sema->global_scope, name);
+    if (symbol != NULL)
+        return symbol;
+
+    return scope_lookup(&sema->builtin_scope, name);
 }
 
 Symbol *sema_lookup_path(Sema *sema, Path path) {

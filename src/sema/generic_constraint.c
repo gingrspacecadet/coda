@@ -30,64 +30,61 @@ static HirField *generic_constraint_find_field(HirType *type, AstName name) {
     return NULL;
 }
 
-static HirType *generic_constraint_resolve_outside_scope(Sema *sema, AstType *ast) {
+static HirType *generic_constraint_resolve_in_symbol_scope(Sema *sema, Symbol *symbol, AstType *ast) {
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
     Array previous_scopes = sema->scopes;
+
+    if (symbol->owner_module != NULL)
+        sema->module = symbol->owner_module;
+    if (symbol->owner_scope != NULL && symbol->owner_scope != &sema->global_scope) {
+        sema->global_scope = *symbol->owner_scope;
+        sema->module_scope = symbol->owner_scope;
+    }
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     HirType *type = sema_type(sema, ast);
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
     sema->scopes = previous_scopes;
     return type;
 }
 
 static bool generic_constraint_method_matches(Sema *sema, AstFnDecl *required, HirType *concrete) {
-    if (sema->module == NULL)
+    Symbol *symbol = sema_find_method(sema, concrete, required->name);
+    if (symbol == NULL || symbol->decl == NULL || symbol->decl->kind != AST_DECL_FN)
         return false;
 
-    for (size_t i = 0; i < sema->module->decls.len; i++) {
-        AstDecl *decl = ((AstDecl **)sema->module->decls.data)[i];
-        if (decl == NULL || decl->kind != AST_DECL_FN)
-            continue;
+    AstFnDecl *candidate = &symbol->decl->fn;
+    if (candidate->params.len != required->params.len)
+        return false;
 
-        AstFnDecl *candidate = &decl->fn;
-        if (candidate->receiver == NULL || candidate->generics.len != 0 ||
-            !ast_name_equal(&candidate->name, &required->name) ||
-            candidate->params.len != required->params.len)
-            continue;
-
-        HirType *candidate_receiver = generic_constraint_resolve_outside_scope(sema, candidate->receiver);
-        if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR || !type_equal(candidate_receiver, concrete))
-            continue;
-
-        if (required->receiver != NULL) {
-            HirType *required_receiver = sema_type(sema, required->receiver);
-            if (required_receiver == NULL || required_receiver->kind == HIR_TYPE_ERROR || !type_equal(required_receiver, concrete))
-                continue;
-        }
-
-        HirType *required_return = sema_type(sema, required->ret);
-        HirType *candidate_return = generic_constraint_resolve_outside_scope(sema, candidate->ret);
-        if (required_return == NULL || candidate_return == NULL || required_return->kind == HIR_TYPE_ERROR ||
-            candidate_return->kind == HIR_TYPE_ERROR || !type_equal(required_return, candidate_return))
-            continue;
-
-        bool matches = true;
-        for (size_t j = 0; j < required->params.len; j++) {
-            AstParam *required_param = array_at(&required->params, j);
-            AstParam *candidate_param = array_at(&candidate->params, j);
-            HirType *required_type = sema_type(sema, required_param->type);
-            HirType *candidate_type = generic_constraint_resolve_outside_scope(sema, candidate_param->type);
-
-            if (required_type == NULL || candidate_type == NULL || required_type->kind == HIR_TYPE_ERROR ||
-                candidate_type->kind == HIR_TYPE_ERROR || !type_equal(required_type, candidate_type)) {
-                matches = false;
-                break;
-            }
-        }
-
-        if (matches)
-            return true;
+    if (required->receiver != NULL) {
+        HirType *required_receiver = sema_type(sema, required->receiver);
+        if (required_receiver == NULL || required_receiver->kind == HIR_TYPE_ERROR || !type_equal(required_receiver, concrete))
+            return false;
     }
 
-    return false;
+    HirType *required_return = sema_type(sema, required->ret);
+    HirType *candidate_return = generic_constraint_resolve_in_symbol_scope(sema, symbol, candidate->ret);
+    if (required_return == NULL || candidate_return == NULL || required_return->kind == HIR_TYPE_ERROR ||
+        candidate_return->kind == HIR_TYPE_ERROR || !type_equal(required_return, candidate_return))
+        return false;
+
+    for (size_t i = 0; i < required->params.len; i++) {
+        AstParam *required_param = array_at(&required->params, i);
+        AstParam *candidate_param = array_at(&candidate->params, i);
+        HirType *required_type = sema_type(sema, required_param->type);
+        HirType *candidate_type = generic_constraint_resolve_in_symbol_scope(sema, symbol, candidate_param->type);
+
+        if (required_type == NULL || candidate_type == NULL || required_type->kind == HIR_TYPE_ERROR ||
+            candidate_type->kind == HIR_TYPE_ERROR || !type_equal(required_type, candidate_type))
+            return false;
+    }
+
+    return true;
 }
 
 static bool generic_constraint_check_items(Sema *sema, AstConstraintDecl *constraint, HirType *concrete, Span use_span) {
@@ -191,4 +188,27 @@ bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments,
     }
 
     return true;
+}
+
+
+bool sema_check_symbol_generic_constraints(Sema *sema, Symbol *generic, Array generics, Array arguments, Span span) {
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    if (generic->owner_module != NULL)
+        sema->module = generic->owner_module;
+    if (generic->owner_scope != NULL && generic->owner_scope != &sema->global_scope) {
+        sema->global_scope = *generic->owner_scope;
+        sema->module_scope = generic->owner_scope;
+    }
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    bool valid = sema_check_generic_constraints(sema, generics, arguments, span);
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    return valid;
 }

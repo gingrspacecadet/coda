@@ -191,7 +191,7 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
         .symbol = symbol,
         .type = type,
         .init = init,
-        .is_export = false,
+        .is_export = symbol->is_exported,
     };
 
     array_push(&sema->hir_module->globals, &global);
@@ -288,7 +288,15 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
         }
 
         if (sym != NULL) {
-            Symbol *s = scope_lookup(&sema->global_scope, sym->name);
+            sym->owner_module = sema->module;
+            sym->owner_scope = sema->module_scope;
+            sym->canonical = sym;
+            for (size_t j = 0; j < d->attrs.len; j++) {
+                AstAttribute *attribute = array_at(&d->attrs, j);
+                if (string_eq(attribute->name, STRING("export")))
+                    sym->is_exported = true;
+            }
+            Symbol *s = sema_lookup(sema, sym->name);
             if (s != NULL) {
                 error_duplicate_symbol(sema->diags, sym->name.ident, d->span, s->span);
                 continue;

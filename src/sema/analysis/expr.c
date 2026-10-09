@@ -539,32 +539,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     if (dispatch_type == NULL)
         return NULL;
 
-    Symbol *method = NULL;
-    for (size_t i = 0; i < sema->module->decls.len; i++) {
-        AstDecl *decl = ((AstDecl **)sema->module->decls.data)[i];
-        if (decl == NULL || decl->kind != AST_DECL_FN)
-            continue;
-
-        AstFnDecl *candidate = &decl->fn;
-        if (candidate->receiver == NULL || candidate->generics.len != 0 ||
-            !ast_name_equal(&candidate->name, &callee->member.member))
-            continue;
-
-        Symbol *symbol = scope_lookup(&sema->global_scope, candidate->name);
-        if (symbol == NULL || symbol->kind != SYMBOL_FN || symbol->decl != decl)
-            continue;
-
-        HirType *candidate_receiver = sema_type(sema, candidate->receiver);
-        if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
-            continue;
-        if (candidate_receiver->kind == HIR_TYPE_POINTER)
-            candidate_receiver = candidate_receiver->pointer.pointee;
-        if (type_equal(candidate_receiver, dispatch_type)) {
-            method = symbol;
-            break;
-        }
-    }
-
+    Symbol *method = sema_find_method(sema, dispatch_type, callee->member.member);
     if (method == NULL)
         return NULL;
 
@@ -591,6 +566,23 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     }
 
     HirType *receiver_param = ((HirType **)function_type->function.params.data)[0];
+
+    if (receiver_param->kind == HIR_TYPE_POINTER &&
+        type_equal(receiver->type, receiver_param->pointer.pointee) &&
+        is_place(receiver)) {
+        HirExpr *address = arena_alloc(sema->arena, sizeof(*address));
+        *address = (HirExpr){
+            .span = receiver->span,
+            .kind = HIR_EXPR_UNARY,
+            .type = pointer_type(sema, receiver->type, false),
+            .unary = {
+                .op = AST_UNARY_ADDRESS,
+                .operand = receiver,
+            },
+        };
+        receiver = address;
+    }
+
     receiver = sema_coerce(sema, receiver, receiver_param);
     if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
         return sema_method_error(sema, ast->span);

@@ -86,7 +86,7 @@ static bool sema_install_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     if (existing != NULL)
         return false;
 
-    sema_make_namespace_symbol(sema, scope, *leaf, &entry->scope);
+    sema_make_namespace_symbol(sema, scope, *leaf, &entry->export_scope);
     return true;
 }
 
@@ -252,7 +252,12 @@ static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) 
             .filename = filename,
             .ast = NULL,
             .scope = module_make_scope(arena),
+            .export_scope = module_make_scope(arena),
             .parsed = false,
+            .included = false,
+            .analysing = false,
+            .analysed = false,
+            .analysis_failed = false,
         };
 
         if (module_index_lookup(index, module.path) != NULL) {
@@ -297,9 +302,64 @@ static bool module_entry_parse(ModuleEntry *entry, Arena *arena, Diags *diags) {
 
     entry->ast = module;
     entry->scope = module_make_scope(arena);
+    entry->export_scope = module_make_scope(arena);
     entry->parsed = true;
 
     return true;
+}
+
+static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
+    if (entry->analysed)
+        return !entry->analysis_failed;
+
+    if (entry->analysing)
+        return false;
+
+    size_t diagnostic_count = sema->diags->diags.len;
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+    HirFunction *previous_fn = sema->current_fn;
+
+    entry->analysing = true;
+    sema->module = entry->ast;
+    sema->global_scope = entry->scope;
+    sema->module_scope = &entry->scope;
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    sema->current_fn = NULL;
+
+    collect_decls(sema, entry->ast->decls);
+    entry->scope = sema->global_scope;
+
+    bool success = sema_resolve_includes(sema, entry->ast);
+    entry->scope = sema->global_scope;
+    if (success) {
+        for (size_t i = 0; i < entry->ast->decls.len; i++) {
+            AstDecl *decl = ((AstDecl **)entry->ast->decls.data)[i];
+            if (decl != NULL)
+                sema_decl(sema, decl);
+        }
+    }
+
+    entry->scope = sema->global_scope;
+    entry->export_scope = module_make_scope(sema->arena);
+    for (size_t i = 0; i < entry->scope.syms.len; i++) {
+        Symbol *symbol = array_at(&entry->scope.syms, i);
+        if (symbol->is_exported)
+            scope_insert(&entry->export_scope, symbol);
+    }
+    entry->analysing = false;
+    entry->analysed = true;
+    entry->analysis_failed = !success || sema->diags->diags.len != diagnostic_count;
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    sema->current_fn = previous_fn;
+
+    return !entry->analysis_failed;
 }
 
 static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *include) {
@@ -313,7 +373,82 @@ static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     if (!module_entry_parse(entry, sema->arena, sema->diags))
         return false;
 
+    if (entry->analysing) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_MODULE_CYCLE, include->span, STRING("cyclic module imports are not supported"));
+        diag_note(&diagnostic, STRING("break the import cycle by moving shared declarations into another module"));
+        diag_finish(&diagnostic);
+        return false;
+    }
+
+    entry->included = true;
+    if (!sema_analyse_module_entry(sema, entry))
+        return false;
+
     return sema_install_include(sema, owner, include, entry);
+}
+
+static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *scope, HirType *receiver, AstName name, bool require_export) {
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    sema->module = module;
+    sema->global_scope = *scope;
+    sema->module_scope = scope;
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+
+    Symbol *result = NULL;
+    for (size_t i = 0; i < module->decls.len; i++) {
+        AstDecl *decl = ((AstDecl **)module->decls.data)[i];
+        if (decl == NULL || decl->kind != AST_DECL_FN)
+            continue;
+
+        AstFnDecl *candidate = &decl->fn;
+        if (candidate->receiver == NULL || candidate->generics.len != 0 || !ast_name_equal(&candidate->name, &name))
+            continue;
+
+        Symbol *symbol = scope_lookup(scope, candidate->name);
+        if (symbol == NULL || symbol->kind != SYMBOL_FN || (require_export && !symbol->is_exported))
+            continue;
+
+        HirType *candidate_receiver = sema_type(sema, candidate->receiver);
+        if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
+            continue;
+        if (candidate_receiver->kind == HIR_TYPE_POINTER)
+            candidate_receiver = candidate_receiver->pointer.pointee;
+        if (candidate_receiver != NULL && type_equal(candidate_receiver, receiver)) {
+            result = symbol;
+            break;
+        }
+    }
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    return result;
+}
+
+Symbol *sema_find_method(Sema *sema, HirType *receiver, AstName name) {
+    if (sema->module != NULL) {
+        Scope *scope = sema->module_scope != NULL ? sema->module_scope : &sema->global_scope;
+        Symbol *symbol = sema_find_method_in_module(sema, sema->module, scope, receiver, name, false);
+        if (symbol != NULL)
+            return symbol;
+    }
+
+    for (size_t i = 0; i < sema->modules.entries.len; i++) {
+        ModuleEntry *entry = array_at(&sema->modules.entries, i);
+        if (!entry->included || !entry->analysed || entry->analysis_failed || entry->ast == NULL || entry->ast == sema->module)
+            continue;
+
+        Symbol *symbol = sema_find_method_in_module(sema, entry->ast, &entry->scope, receiver, name, true);
+        if (symbol != NULL)
+            return symbol;
+    }
+
+    return NULL;
 }
 
 bool sema_resolve_includes(Sema *sema, AstModule *module) {

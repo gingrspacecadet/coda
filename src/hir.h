@@ -334,14 +334,27 @@ struct Symbol {
     Span span;
 
     Scope *namespace_scope;
+    AstModule *owner_module;
+    Scope *owner_scope;
+    Symbol *canonical;
+    bool is_exported;
 };
+
+static inline Symbol *symbol_canonical(Symbol *symbol) {
+    return symbol != NULL && symbol->canonical != NULL ? symbol->canonical : symbol;
+}
 
 typedef struct {
     Path path;
     String filename;
     AstModule *ast;
     Scope scope;
+    Scope export_scope;
     bool parsed;
+    bool included;
+    bool analysing;
+    bool analysed;
+    bool analysis_failed;
 } ModuleEntry;
 
 typedef struct {

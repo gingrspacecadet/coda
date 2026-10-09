@@ -689,6 +689,35 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 };
             }
 
+            if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
+                LirBinding *binding = lir_find_binding(lower, symbol);
+                if (binding == NULL || binding->operand.kind != LIR_OPERAND_VALUE)
+                    break;
+
+                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
+                *pointer_type = (HirType) {
+                    .kind = HIR_TYPE_POINTER,
+                    .mutable = false,
+                    .size = sizeof(void *),
+                    .align = _Alignof(void *),
+                    .pointer = {
+                        .pointee = expr->type,
+                        .optional = false,
+                    },
+                };
+
+                LirOperand value_operand = binding->operand;
+                LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_type, (Array) {
+                    .data = &value_operand,
+                    .len = 1,
+                });
+
+                return (LirPlace) {
+                    .address = lir_operand_value(address, pointer_type),
+                    .type = expr->type,
+                };
+            }
+
             break;
         }
     }

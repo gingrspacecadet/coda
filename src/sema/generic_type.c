@@ -32,7 +32,7 @@ static bool generic_type_arguments_equal(Array left, Array right) {
 static GenericTypeInstance *generic_type_find_instance(Sema *sema, Symbol *generic, Array arguments) {
     for (size_t i = 0; i < sema->generic_type_instances.len; i++) {
         GenericTypeInstance *instance = array_at(&sema->generic_type_instances, i);
-        if (instance->generic == generic && generic_type_arguments_equal(instance->arguments, arguments))
+        if (symbol_canonical(instance->generic) == symbol_canonical(generic) && generic_type_arguments_equal(instance->arguments, arguments))
             return instance;
     }
 
@@ -60,6 +60,8 @@ static Symbol *generic_type_create_symbol(Sema *sema, Symbol *generic) {
         .decl = decl,
         .name = generic->name,
         .span = generic->span,
+        .owner_module = generic->owner_module,
+        .owner_scope = generic->owner_scope,
     };
 
     HirType *type = arena_alloc(sema->arena, sizeof(*type));
@@ -102,7 +104,7 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
         array_push(&arguments, &argument);
     }
 
-    if (!sema_check_generic_constraints(sema, template->generics, arguments, ast->span)) {
+    if (!sema_check_symbol_generic_constraints(sema, generic, template->generics, arguments, ast->span)) {
         HirType *error = arena_alloc(sema->arena, sizeof(*error));
         *error = (HirType){.kind = HIR_TYPE_ERROR, .align = 1, .mutable = ast->mutable};
         return error;
@@ -139,6 +141,16 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
     };
     array_push(&sema->generic_type_instances, &instance);
 
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    if (generic->owner_module != NULL)
+        sema->module = generic->owner_module;
+    if (generic->owner_scope != NULL && generic->owner_scope != &sema->global_scope) {
+        sema->global_scope = *generic->owner_scope;
+        sema->module_scope = generic->owner_scope;
+    }
+
     Array previous_scopes = sema->scopes;
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     Scope *scope = sema_push_scope(sema);
@@ -157,6 +169,9 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
 
     HirType *base = sema_type(sema, template->type);
     sema->scopes = previous_scopes;
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
 
     GenericTypeInstance *stored = array_at(&sema->generic_type_instances, cache_index);
     stored->complete = true;

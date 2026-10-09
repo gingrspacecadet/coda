@@ -1,0 +1,31 @@
+module crossmod::math;
+
+@export
+type Box<T> = struct {
+    T value;
+};
+
+@export
+fn T identity<T>(T value) {
+    return value;
+}
+
+@export
+fn int64 add(int64 left, int64 right) {
+    return left + right;
+}
+
+@export
+type Reader = struct {
+    int64 value;
+};
+
+@export
+constraint Readable = {
+    fn int64 Self.read(Self* self);
+}
+
+@export
+fn int64 Reader.read(Reader* self) {
+    return self.value;
+}

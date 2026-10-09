@@ -217,7 +217,7 @@ static bool generic_arguments_equal(Array left, Array right) {
 static Symbol *generic_find_instance(Sema *sema, Symbol *generic, Array arguments) {
     for (size_t i = 0; i < sema->generic_instances.len; i++) {
         GenericInstance *instance = array_at(&sema->generic_instances, i);
-        if (instance->generic == generic && generic_arguments_equal(instance->arguments, arguments))
+        if (symbol_canonical(instance->generic) == symbol_canonical(generic) && generic_arguments_equal(instance->arguments, arguments))
             return instance->instance;
     }
 
@@ -240,6 +240,15 @@ static AstName generic_instance_name(Sema *sema, Scope *scope) {
 
 static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array arguments) {
     AstFnDecl *template = &generic->decl->fn;
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    if (generic->owner_module != NULL)
+        sema->module = generic->owner_module;
+    if (generic->owner_scope != NULL && generic->owner_scope != &sema->global_scope) {
+        sema->global_scope = *generic->owner_scope;
+        sema->module_scope = generic->owner_scope;
+    }
     Array previous_scopes = sema->scopes;
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     Scope *scope = sema_push_scope(sema);
@@ -274,6 +283,8 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
         .decl = instance_decl,
         .name = instance_decl->fn.name,
         .span = instance_decl->fn.span,
+        .owner_module = generic->owner_module,
+        .owner_scope = generic->owner_scope,
     };
     scope_insert(scope, &instance_symbol);
 
@@ -282,6 +293,9 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
 
     if (instance->type == NULL || instance->type->kind != HIR_TYPE_FUNCTION) {
         sema->scopes = previous_scopes;
+        sema->module = previous_module;
+        sema->global_scope = previous_global_scope;
+        sema->module_scope = previous_module_scope;
         return NULL;
     }
 
@@ -301,6 +315,9 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
     /* Register the concrete signature before the body so recursive calls reuse it. */
     sema_fn_decl(sema, &instance_decl->fn);
     sema->scopes = previous_scopes;
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
     return instance;
 }
 
@@ -361,7 +378,7 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
         }
     }
 
-    if (!sema_check_generic_constraints(sema, template->generics, arguments, ast->span))
+    if (!sema_check_symbol_generic_constraints(sema, generic, template->generics, arguments, ast->span))
         return generic_error_expr(sema, ast);
 
     Symbol *instance = generic_find_instance(sema, generic, arguments);

@@ -26,6 +26,9 @@ typedef struct {
 
     Array(Scope) scopes;
     Scope global_scope;
+    Scope *root_scope;
+    Scope builtin_scope;
+    Scope *module_scope;
 
     HirModule *hir_module;
     HirFunction *current_fn;
@@ -59,6 +62,13 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
             .defers = array_create(arena, sizeof(HirStmt *)),
             .loop = false,
         },
+        .root_scope = NULL,
+        .builtin_scope = (Scope){
+            .syms = array_create(arena, sizeof(Symbol)),
+            .defers = array_create(arena, sizeof(HirStmt *)),
+            .loop = false,
+        },
+        .module_scope = NULL,
         .modules = {
             .entries = array_create(arena, sizeof(ModuleEntry)),
         },
