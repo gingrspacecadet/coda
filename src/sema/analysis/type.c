@@ -466,6 +466,9 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
 
         case SYMBOL_FN: {
             AstFnDecl *fn = &symbol->decl->fn;
+            if (fn->generics.len != 0)
+                return NULL;
+
             HirType *type = arena_alloc(sema->arena, sizeof(HirType));
 
             type->kind = HIR_TYPE_FUNCTION;

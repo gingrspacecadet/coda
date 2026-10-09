@@ -697,6 +697,24 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         }
 
         case AST_EXPR_CALL: {
+            Symbol *generic = NULL;
+
+            if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_IDENT)
+                generic = sema_lookup(sema, ast->call.callee->ident);
+            else if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_PATH)
+                generic = sema_lookup_path(sema, ast->call.callee->path);
+
+            if (generic != NULL && generic->kind == SYMBOL_FN && generic->decl != NULL &&
+                generic->decl->kind == AST_DECL_FN && generic->decl->fn.generics.len != 0)
+                return sema_generic_call(sema, ast, expected, generic);
+
+            if (ast->call.generic_args.len != 0) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("type arguments supplied to a non-generic function"));
+                diag_finish(&diagnostic);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->kind = HIR_EXPR_CALL;
             hir->call.function = NULL;
             hir->call.args = array_create(sema->arena, sizeof(HirExpr *));

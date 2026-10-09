@@ -1,0 +1,13 @@
+name: conflicting generic inference
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn T first<T>(T a, T b) {
+    return a;
+}
+
+fn int64 caller(int64 a, uint64 b) {
+    return first(a, b);
+}

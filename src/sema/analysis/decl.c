@@ -1,14 +1,18 @@
 #include "common.h"
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
+    if (ast->generics.len != 0)
+        return;
+
     Symbol *symbol = sema_lookup(sema, ast->name);
-    symbol->span = ast->span;
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
+
+    symbol->span = ast->span;
 
     if (symbol->kind != SYMBOL_FN) {
         //! TODO: internal compiler error

@@ -110,6 +110,8 @@ Symbol *sema_lookup_path(Sema *sema, Path path);
 // HirExpr *comp_eval_expr(CompContext *sema, HirExpr *expr);
 void collect_decls(Sema *sema, Array(AstDecl *) decls);
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected);
+HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic);
+bool type_equal(HirType *a, HirType *b);
 HirType *sema_type(Sema *sema, AstType *ast);
 HirType *sema_symbol_type(Sema *sema, Symbol *symbol);
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type);

@@ -1,0 +1,21 @@
+name: generic function monomorphisation
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn T identity<T>(T value) {
+    return value;
+}
+
+fn int64 inferred(int64 value) {
+    return identity(value);
+}
+
+fn uint32 explicit() {
+    return identity<uint32>(42);
+}
+
+fn int64 repeated(int64 value) {
+    return identity(identity(value));
+}

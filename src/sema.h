@@ -8,6 +8,12 @@
 #include "target.h"
 
 typedef struct {
+    Symbol *generic;
+    Symbol *instance;
+    Array(HirType *) arguments;
+} GenericInstance;
+
+typedef struct {
     AstModule *module;
 
     Array(Scope) scopes;
@@ -17,6 +23,9 @@ typedef struct {
     HirFunction *current_fn;
 
     ModuleIndex modules;
+
+    Array(GenericInstance) generic_instances;
+    size_t next_generic_instance;
 
     const TargetInfo *target;
 
@@ -31,6 +40,8 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .module = NULL,
         .scopes = array_create(arena, sizeof(Scope)),
         .current_fn = NULL,
+        .generic_instances = array_create(arena, sizeof(GenericInstance)),
+        .next_generic_instance = 0,
         .global_scope = (Scope){
             .syms = array_create(arena, sizeof(Symbol)),
             .defers = array_create(arena, sizeof(HirStmt *)),
