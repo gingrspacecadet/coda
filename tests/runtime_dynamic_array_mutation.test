@@ -1,0 +1,23 @@
+name: runtime dynamic array mutation
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    mut int64[3] values = {10, 20, 30};
+    mut uint64 index = 1;
+
+    values[index] = 99;
+    if (values[1] != 99) return 1;
+
+    index = 2;
+    values[index] = 42;
+    if (values[index] != 42) return 2;
+
+    index = 0;
+    values[index] = 7;
+    if (values[0] != 7) return 3;
+
+    return 0;
+}
