@@ -261,6 +261,9 @@ static HirField *init_field_lookup(HirType *type, AstName name) {
         case HIR_TYPE_UNION:
             return field_lookup(type->union_.fields, name);
 
+        case HIR_TYPE_SLICE:
+            return field_lookup(type->slice.fields, name);
+
         default:
             return NULL;
     }
@@ -1114,7 +1117,8 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             if (expected->kind != HIR_TYPE_STRUCT &&
                 expected->kind != HIR_TYPE_UNION &&
-                expected->kind != HIR_TYPE_ARRAY) {
+                expected->kind != HIR_TYPE_ARRAY &&
+                expected->kind != HIR_TYPE_SLICE) {
                 //! TODO: expected aggregate initialiser
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
@@ -1156,6 +1160,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                 case HIR_TYPE_ARRAY:
                     field_count = expected->array.length;
+                    break;
+
+                case HIR_TYPE_SLICE:
+                    field_count = expected->slice.fields.len;
                     break;
 
                 default:
@@ -1204,8 +1212,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                         if (expected->kind == HIR_TYPE_STRUCT)
                             field_index = (size_t)(hir_field - (HirField *)expected->structure.fields.data);
-                        else
+                        else if (expected->kind == HIR_TYPE_UNION)
                             field_index = (size_t)(hir_field - (HirField *)expected->union_.fields.data);
+                        else
+                            field_index = (size_t)(hir_field - (HirField *)expected->slice.fields.data);
                     } else {
                         while (positional < field_count && initialized[positional])
                             positional++;
@@ -1220,8 +1230,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                         if (expected->kind == HIR_TYPE_STRUCT)
                             hir_field = &((HirField *)expected->structure.fields.data)[field_index];
-                        else
+                        else if (expected->kind == HIR_TYPE_UNION)
                             hir_field = &((HirField *)expected->union_.fields.data)[field_index];
+                        else
+                            hir_field = &((HirField *)expected->slice.fields.data)[field_index];
                     }
 
                     if (initialized[field_index]) {

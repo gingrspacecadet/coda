@@ -628,26 +628,13 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
 
             if (object_type->kind == HIR_TYPE_SLICE) {
                 LirOperand aggregate = lir_lower_expr(lower, expr->index.object);
-                HirType *pointer_type = arena_calloc(lower->function->arena, sizeof(*pointer_type));
+                assert(object_type->slice.fields.len >= 2);
 
-                *pointer_type = (HirType){
-                    .kind = HIR_TYPE_POINTER,
-                    .mutable = false,
-                    .size = sizeof(void *),
-                    .align = _Alignof(void *),
-                    .pointer = {
-                        .pointee = object_type->slice.element,
-                        .optional = false,
-                    },
-                };
+                HirField *pointer_field = &((HirField *)object_type->slice.fields.data)[1];
+                LirOperand operands[2] = {aggregate, lir_operand_offset(pointer_field->offset)};
 
-                LirOperand operands[2] = {
-                    aggregate,
-                    lir_operand_offset(0),
-                };
-
-                LirValueId data = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, pointer_type, (Array){.data = operands, .len = 2});
-                base = lir_operand_value(data, pointer_type);
+                LirValueId data = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, pointer_field->type, (Array){.data = operands, .len = 2});
+                base = lir_operand_value(data, pointer_field->type);
             } else if (object_type->kind == HIR_TYPE_POINTER) {
                 base = lir_lower_expr(lower, expr->index.object);
             } else {

@@ -25,7 +25,7 @@ fn none set_pointer(mut int64[] *values, int64 i, int64 value) {
 [lir]
 get:
     block0(%0, %1):
-        %2 = extract %0, $0
+        %2 = extract %0, $8
         %3 = mul %1, 8
         %4 = addr_add %2, %3
         %5 = load %4
@@ -33,7 +33,7 @@ get:
 
 set:
     block0(%0, %1, %2):
-        %3 = extract %0, $0
+        %3 = extract %0, $8
         %4 = mul %1, 8
         %5 = addr_add %3, %4
         store %5, %2
@@ -42,7 +42,7 @@ set:
 get_pointer:
     block0(%0, %1):
         %2 = load %0
-        %3 = extract %2, $0
+        %3 = extract %2, $8
         %4 = mul %1, 8
         %5 = addr_add %3, %4
         %6 = load %5
@@ -51,7 +51,7 @@ get_pointer:
 set_pointer:
     block0(%0, %1, %2):
         %3 = load %0
-        %4 = extract %3, $0
+        %4 = extract %3, $8
         %5 = mul %1, 8
         %6 = addr_add %4, %5
         store %6, %2

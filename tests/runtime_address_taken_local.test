@@ -1,0 +1,15 @@
+name: runtime address-taken local
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    mut int64 value = 1;
+    mut int64* pointer = &value;
+    *pointer = 42;
+    return value;
+}
+
+[exit]
+42
