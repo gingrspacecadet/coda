@@ -34,15 +34,15 @@ loop_control:
         branch %5, block2, block3(%1, %2)
 
     block2:
-        %6 = sub %0, 1
+        %6 = sub %1, 1
         %7 = eq %6, 2
-        branch %7, block4, block5(%0, 0, %6)
+        branch %7, block4, block5(%1, %2, %6)
 
     block3(%3, %4):
         return %4
 
     block4:
-        jump block1(%6, 0)
+        jump block1(%6, %2)
 
     block5(%8, %9, %10):
         %11 = eq %10, 0

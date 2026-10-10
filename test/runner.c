@@ -3,7 +3,11 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -38,6 +42,13 @@ typedef struct {
 
     char *diagnostics_data;
     size_t diagnostics_length;
+
+    bool runtime_output_mismatch;
+    String runtime_stream;
+    bool runtime_exit_mismatch;
+    int expected_runtime_exit;
+    int actual_runtime_exit;
+    char *runtime_message;
 } TestFailure;
 
 static bool test_read_file(const char *path, char **data, size_t *length) {
@@ -145,6 +156,9 @@ static CodaStage test_coda_stage(TestStop stop) {
         case TEST_STOP_LIR:
             return CODA_STAGE_LIR;
 
+        case TEST_STOP_RUN:
+            return CODA_STAGE_CODEGEN;
+
         default:
             return CODA_STAGE_LIR;
     }
@@ -180,7 +194,8 @@ static const char *test_stop_name(TestStop stop) {
 static bool test_stop_supported(TestStop stop) {
     return stop == TEST_STOP_AST ||
            stop == TEST_STOP_HIR ||
-           stop == TEST_STOP_LIR;
+           stop == TEST_STOP_LIR ||
+           stop == TEST_STOP_RUN;
 }
 
 static bool test_render_ast(const AstModule *module, char **data, size_t *length) {
@@ -548,17 +563,27 @@ static bool test_capture_stderr_stop(FILE **file, int saved_fd, char **data, siz
 static bool test_compile(const char *path, const TestCase *test, CodaCompiler *compiler, size_t *actual_errors, char **diagnostics, size_t *diagnostics_length) {
     Arena *arena = compiler->arena;
 
-    String test_path = {
-        .data = (char *)path,
-        .length = strlen(path),
-    };
+    char *contents = arena_calloc(arena, test->source.length + 1);
+    if (contents == NULL)
+        return false;
 
-    Source source = {
-        .path = test_path,
-        .contents = test->source,
-    };
+    memcpy(contents, test->source.data, test->source.length);
+    contents[test->source.length] = '\0';
 
-    source_build_lines(&source, arena);
+    Source *source = arena_calloc(arena, sizeof(*source));
+    if (source == NULL)
+        return false;
+
+    *source = (Source) {
+        .path = {
+            .data = (char *)path,
+            .length = strlen(path),
+        },
+        .contents = {
+            .data = contents,
+            .length = test->source.length,
+        },
+    };
 
     FILE *capture = NULL;
     int saved_stderr = -1;
@@ -566,23 +591,214 @@ static bool test_compile(const char *path, const TestCase *test, CodaCompiler *c
     if (!test_capture_stderr_start(&capture, &saved_stderr))
         return false;
 
-    bool compiled = coda_compile(
-        compiler,
-        &source,
-        test_coda_stage(test->stop)
-    );
+    bool compiled = coda_compile(compiler, source, test_coda_stage(test->stop));
 
     *actual_errors = compiler->diags->diags.len;
 
-    if (!test_capture_stderr_stop(
-            &capture,
-            saved_stderr,
-            diagnostics,
-            diagnostics_length)) {
+    if (!test_capture_stderr_stop(&capture, saved_stderr, diagnostics, diagnostics_length))
+        return false;
+
+    return compiled;
+}
+
+static bool test_read_stream(FILE *file, char **data, size_t *length) {
+    if (fflush(file) != 0 || fseek(file, 0, SEEK_END) != 0)
+        return false;
+
+    long size = ftell(file);
+    if (size < 0 || fseek(file, 0, SEEK_SET) != 0)
+        return false;
+
+    char *buffer = malloc((size_t)size + 1);
+    if (buffer == NULL)
+        return false;
+
+    if (fread(buffer, 1, (size_t)size, file) != (size_t)size) {
+        free(buffer);
         return false;
     }
 
-    return compiled;
+    buffer[size] = '\0';
+    *data = buffer;
+    *length = (size_t)size;
+    return true;
+}
+
+static void test_runtime_message(TestFailure *failure, const char *message) {
+    if (failure->runtime_message != NULL)
+        return;
+
+    failure->runtime_message = strdup(message);
+}
+
+static bool test_wait_child(pid_t child, int *status) {
+    pid_t result;
+    do {
+        result = waitpid(child, status, 0);
+    } while (result < 0 && errno == EINTR);
+
+    return result == child;
+}
+
+static bool test_runtime_execute(const char *assembly, size_t assembly_length, const TestCase *test, TestFailure *failure) {
+    char directory[] = "/tmp/coda-test-XXXXXX";
+    char assembly_path[PATH_MAX] = {0};
+    char executable_path[PATH_MAX] = {0};
+    bool passed = false;
+    FILE *link_stderr = NULL;
+    FILE *run_stdout = NULL;
+    FILE *run_stderr = NULL;
+    char *captured = NULL;
+    size_t captured_length = 0;
+    char *stdout_data = NULL;
+    size_t stdout_length = 0;
+    char *stderr_data = NULL;
+    size_t stderr_length = 0;
+
+    if (mkdtemp(directory) == NULL) {
+        test_runtime_message(failure, "could not create temporary directory for runtime test");
+        goto done;
+    }
+
+    if (snprintf(assembly_path, sizeof(assembly_path), "%s/test.s", directory) >= (int)sizeof(assembly_path) ||
+        snprintf(executable_path, sizeof(executable_path), "%s/test-bin", directory) >= (int)sizeof(executable_path)) {
+        test_runtime_message(failure, "temporary runtime-test path is too long");
+        goto done;
+    }
+
+    FILE *assembly_file = fopen(assembly_path, "wb");
+    if (assembly_file == NULL) {
+        test_runtime_message(failure, "could not create temporary assembly file");
+        goto done;
+    }
+
+    bool wrote_assembly = fputs(".globl main\n", assembly_file) >= 0 &&
+                          fwrite(assembly, 1, assembly_length, assembly_file) == assembly_length;
+    if (fclose(assembly_file) != 0)
+        wrote_assembly = false;
+    if (!wrote_assembly) {
+        test_runtime_message(failure, "could not write generated assembly");
+        goto done;
+    }
+
+    link_stderr = tmpfile();
+    if (link_stderr == NULL) {
+        test_runtime_message(failure, "could not capture linker diagnostics");
+        goto done;
+    }
+
+    pid_t child = fork();
+    if (child < 0) {
+        test_runtime_message(failure, "could not start linker process");
+        goto done;
+    }
+    if (child == 0) {
+        int null_fd = open("/dev/null", O_WRONLY);
+        if (null_fd >= 0)
+            dup2(null_fd, STDOUT_FILENO);
+        dup2(fileno(link_stderr), STDERR_FILENO);
+        execlp("gcc", "gcc", "-no-pie", assembly_path, "-o", executable_path, (char *)NULL);
+        _exit(127);
+    }
+
+    int status = 0;
+    if (!test_wait_child(child, &status)) {
+        test_runtime_message(failure, "could not wait for linker process");
+        goto done;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        if (test_read_stream(link_stderr, &captured, &captured_length) && captured_length != 0) {
+            failure->runtime_message = captured;
+            captured = NULL;
+        } else {
+            test_runtime_message(failure, "linking generated assembly failed");
+        }
+        goto done;
+    }
+
+    run_stdout = tmpfile();
+    run_stderr = tmpfile();
+    if (run_stdout == NULL || run_stderr == NULL) {
+        test_runtime_message(failure, "could not capture runtime output");
+        goto done;
+    }
+
+    child = fork();
+    if (child < 0) {
+        test_runtime_message(failure, "could not start runtime test process");
+        goto done;
+    }
+    if (child == 0) {
+        int null_fd = open("/dev/null", O_RDONLY);
+        if (null_fd >= 0)
+            dup2(null_fd, STDIN_FILENO);
+        dup2(fileno(run_stdout), STDOUT_FILENO);
+        dup2(fileno(run_stderr), STDERR_FILENO);
+        alarm(5);
+        execl(executable_path, executable_path, (char *)NULL);
+        _exit(127);
+    }
+
+    if (!test_wait_child(child, &status)) {
+        test_runtime_message(failure, "could not wait for runtime test process");
+        goto done;
+    }
+    if (WIFEXITED(status)) {
+        failure->actual_runtime_exit = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        char message[128];
+        snprintf(message, sizeof(message), "runtime test terminated by signal %d (possible timeout)", WTERMSIG(status));
+        test_runtime_message(failure, message);
+        goto compare_output;
+    } else {
+        test_runtime_message(failure, "runtime test ended without an exit status");
+        goto compare_output;
+    }
+
+compare_output:
+    if (!test_read_stream(run_stdout, &stdout_data, &stdout_length) ||
+        !test_read_stream(run_stderr, &stderr_data, &stderr_length)) {
+        test_runtime_message(failure, "could not read captured runtime output");
+        goto done;
+    }
+
+    if (test->has_stdout && !test_compare_text(test->stdout_text, stdout_data, stdout_length, failure)) {
+        failure->runtime = true;
+        failure->runtime_output_mismatch = true;
+        failure->runtime_stream = (String){.data = "stdout", .length = 6};
+    }
+
+    if (test->has_stderr && !failure->runtime_output_mismatch &&
+        !test_compare_text(test->stderr_text, stderr_data, stderr_length, failure)) {
+        failure->runtime = true;
+        failure->runtime_output_mismatch = true;
+        failure->runtime_stream = (String){.data = "stderr", .length = 6};
+    }
+
+    failure->expected_runtime_exit = test->has_exit_code ? test->exit_code : 0;
+    if (!failure->runtime_message && WIFEXITED(status) && failure->actual_runtime_exit != failure->expected_runtime_exit) {
+        failure->runtime = true;
+        failure->runtime_exit_mismatch = true;
+    }
+
+    passed = !failure->runtime;
+
+done:
+    if (link_stderr != NULL)
+        fclose(link_stderr);
+    if (run_stdout != NULL)
+        fclose(run_stdout);
+    if (run_stderr != NULL)
+        fclose(run_stderr);
+    free(captured);
+    free(stdout_data);
+    free(stderr_data);
+    unlink(assembly_path);
+    unlink(executable_path);
+    rmdir(directory);
+    if (!passed)
+        failure->runtime = true;
+    return passed;
 }
 
 static void test_print_line(const char *label, String line) {
@@ -624,8 +840,19 @@ static void test_print_failures(const TestCase *test, const TestFailure *failure
     if (failure->diagnostics)
         fprintf(stderr, "    diagnostics comparison is not implemented yet\n");
 
-    if (failure->runtime)
-        fprintf(stderr, "    runtime/backend expectations are not implemented yet\n");
+    if (failure->runtime_output_mismatch) {
+        fprintf(stderr, "    runtime %.*s mismatch at line %zu\n", string_fmt(failure->runtime_stream), failure->diff_line);
+        test_print_line("expected", failure->expected_line);
+        test_print_line("actual", failure->actual_line);
+    }
+
+    if (failure->runtime_exit_mismatch)
+        fprintf(stderr, "    runtime exit mismatch: expected %d, got %d\n", failure->expected_runtime_exit, failure->actual_runtime_exit);
+
+    if (failure->runtime_message != NULL)
+        fprintf(stderr, "    runtime error: %s\n", failure->runtime_message);
+    else if (failure->runtime && !failure->runtime_output_mismatch && !failure->runtime_exit_mismatch)
+        fprintf(stderr, "    runtime test failed\n");
 
     if (failure->diagnostics_data && failure->diagnostics_length != 0) {
         fprintf(stderr, "\n");
@@ -645,7 +872,6 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
     }
 
     Arena *arena = arena_create();
-
     if (!arena) {
         fprintf(stderr, "ERROR %s: failed to create arena\n", path);
         failure->runtime = true;
@@ -657,20 +883,40 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
 
     CodaCompiler compiler;
     const TargetInfo *target = target_native();
-
     if (target == NULL) {
         fprintf(stderr, "native target is unsupported\n");
-        return 1;
+        arena_destroy(arena);
+        failure->runtime = true;
+        return false;
     }
     coda_compiler_init(&compiler, arena, &diags, target);
 
+    FILE *assembly_stream = NULL;
+    char *assembly_data = NULL;
+    size_t assembly_length = 0;
+    if (test->stop == TEST_STOP_RUN) {
+        assembly_stream = open_memstream(&assembly_data, &assembly_length);
+        if (assembly_stream == NULL) {
+            test_runtime_message(failure, "could not create assembly stream");
+            arena_destroy(arena);
+            failure->runtime = true;
+            return false;
+        }
+        compiler.output = assembly_stream;
+    }
+
     bool compiled = test_compile(path, test, &compiler, &failure->actual_errors, &failure->diagnostics_data, &failure->diagnostics_length);
+    if (!compiled && test->stop == TEST_STOP_RUN && test->expectation != TEST_EXPECT_FAIL)
+        print_diags(&diags);
+    if (assembly_stream != NULL && fclose(assembly_stream) != 0) {
+        compiled = false;
+        test_runtime_message(failure, "could not finish generated assembly stream");
+    }
 
     failure->expected_failure = test->expectation == TEST_EXPECT_FAIL;
     failure->actual_failure = !compiled;
 
     bool pass = true;
-
     if (failure->expected_failure != failure->actual_failure) {
         failure->compile_status = true;
         pass = false;
@@ -681,9 +927,14 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
         pass = false;
     }
 
-    if (!failure->actual_failure &&
-        !test_compare_stage(test, &compiler, failure)) {
+    if (!failure->actual_failure && test->stop != TEST_STOP_RUN &&
+        !test_compare_stage(test, &compiler, failure))
         pass = false;
+
+    if (test->stop == TEST_STOP_RUN && compiled && !failure->expected_failure &&
+        failure->actual_errors == 0 && !failure->runtime_message) {
+        if (!test_runtime_execute(assembly_data, assembly_length, test, failure))
+            pass = false;
     }
 
     if (test->has_diagnostics) {
@@ -691,11 +942,16 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
         pass = false;
     }
 
-    if (test->has_machine || test->has_assembly || test->has_stdout || test->has_stderr || test->has_exit_code) {
+    if (test->has_machine || test->has_assembly ||
+        (test->stop != TEST_STOP_RUN && (test->has_stdout || test->has_stderr || test->has_exit_code))) {
         failure->runtime = true;
         pass = false;
     }
 
+    if (failure->runtime)
+        pass = false;
+
+    free(assembly_data);
     arena_destroy(arena);
 
     if (pass) {
@@ -705,10 +961,13 @@ static bool test_check(const char *path, const TestCase *test, TestFailure *fail
         free(failure->actual_line.data);
         failure->actual_line.data = NULL;
         failure->actual_line.length = 0;
+        free(failure->runtime_message);
+        failure->runtime_message = NULL;
     }
 
     return pass;
 }
+
 
 static bool test_run_file(const char *path, TestStats *stats) {
     char *contents = NULL;
@@ -753,6 +1012,7 @@ static bool test_run_file(const char *path, TestStats *stats) {
 
     free(failure.diagnostics_data);
     free(failure.actual_line.data);
+    free(failure.runtime_message);
     arena_destroy(arena);
     free(contents);
 

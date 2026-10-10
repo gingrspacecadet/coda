@@ -1,0 +1,59 @@
+name: stable storage for address-taken locals
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Pair = struct {
+    int64 first;
+    int64 second;
+};
+
+fn int64 local_reassignment() {
+    mut int64 value = 1;
+    mut int64 *pointer = &value;
+    value = 42;
+    return *pointer;
+}
+
+fn int64 pointer_write() {
+    mut int64 value = 1;
+    mut int64 *pointer = &value;
+    *pointer = 42;
+    return value;
+}
+
+fn int64 branch_write(bool condition) {
+    mut int64 value = 1;
+    mut int64 *pointer = &value;
+    if (condition) {
+        value = 17;
+    } else {
+        value = 23;
+    }
+    return *pointer;
+}
+
+fn int64 loop_write() {
+    mut int64 value = 0;
+    mut int64 *pointer = &value;
+    mut int64 i = 0;
+    while (i < 3) {
+        *pointer = *pointer + 1;
+        i = i + 1;
+    }
+    return value;
+}
+
+fn int64 parameter_alias(mut int64 initial) {
+    mut int64 *pointer = &initial;
+    *pointer = 99;
+    return initial;
+}
+
+fn int64 aggregate_alias() {
+    mut Pair value = {.first = 1, .second = 2};
+    mut Pair *pointer = &value;
+    value.first = 42;
+    return pointer.first;
+}

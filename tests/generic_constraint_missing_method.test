@@ -12,15 +12,15 @@ type Memory = struct {
     uint64 size;
 };
 
-fn uint64 File.read(File* self, uint8[] buffer) {
+fn uint64 File.read(File *self, uint8[] buffer) {
     return self.size;
 }
 
-fn none require_read<T: { fn uint64 T.read(T* self, uint8[] buffer); }>(T* source) {
+fn none require_read<T: { fn uint64 T.read(T *self, uint8[] buffer); }>(T *source) {
     return;
 }
 
-fn none use(Memory* source) {
+fn none use(Memory *source) {
     require_read(source);
     return;
 }

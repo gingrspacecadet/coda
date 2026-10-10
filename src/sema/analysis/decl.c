@@ -21,7 +21,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     }
 
     if (symbol->type == NULL) {
-        HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+        HirType *type = arena_calloc(sema->arena, sizeof(HirType));
 
         *type = (HirType) {
             .kind = HIR_TYPE_FUNCTION,
@@ -45,7 +45,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (ast->body == NULL)
         return;
 
-    HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
+    HirFunction *fn = arena_calloc(sema->arena, sizeof(HirFunction));
 
     *fn = (HirFunction) {
         .symbol = symbol,
@@ -125,7 +125,7 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
     if (base == NULL || base->kind == HIR_TYPE_ERROR)
         return;
 
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
     *type = *base;
     type->mutable = false;
     type->nominal = symbol;
@@ -239,7 +239,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
 
         switch (d->kind) {
             case AST_DECL_TYPE:
-                sym = arena_alloc(sema->arena, sizeof(Symbol));
+                sym = arena_calloc(sema->arena, sizeof(Symbol));
                 *sym = (Symbol) {
                     .kind = SYMBOL_TYPE,
                     .name = d->type.name,
@@ -249,7 +249,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                 break;
 
             case AST_DECL_FN:
-                sym = arena_alloc(sema->arena, sizeof(Symbol));
+                sym = arena_calloc(sema->arena, sizeof(Symbol));
                 *sym = (Symbol) {
                     .kind = SYMBOL_FN,
                     .name = d->fn.name,
@@ -259,7 +259,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                 break;
 
             case AST_DECL_VAR:
-                sym = arena_alloc(sema->arena, sizeof(Symbol));
+                sym = arena_calloc(sema->arena, sizeof(Symbol));
                 *sym = (Symbol) {
                     .kind = SYMBOL_GLOBAL,
                     .name = d->var.name,
@@ -269,7 +269,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                 break;
 
             case AST_DECL_CONSTRAINT:
-                sym = arena_alloc(sema->arena, sizeof(Symbol));
+                sym = arena_calloc(sema->arena, sizeof(Symbol));
                 *sym = (Symbol) {
                     .kind = SYMBOL_CONSTRAINT,
                     .name = d->constraint.name,

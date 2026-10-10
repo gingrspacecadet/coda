@@ -27,21 +27,31 @@ Arena *arena_create() {
 }
 
 void *arena_alloc(Arena *a, size_t size) {
-    if (size > a->block_size - a->current_index) {
+    size_t alignment = _Alignof(max_align_t);
+    size_t padding = (alignment - a->current_index % alignment) % alignment;
+    size_t remaining = a->block_size - a->current_index;
+
+    if (padding > remaining || size > remaining - padding) {
         a->block_count++;
-        a->blocks = realloc(a->blocks, a->block_count * sizeof(void*));
-        if (!a->blocks) {
+        a->blocks = realloc(a->blocks, a->block_count * sizeof(void *));
+
+        if (!a->blocks)
             exit(1);
-        }
+
         a->blocks[a->block_count - 1] = malloc(a->block_size);
-        if (!a->blocks[a->block_count - 1]) {
+
+        if (!a->blocks[a->block_count - 1])
             exit(1);
-        }
+
         a->current_index = 0;
+        padding = 0;
     }
 
-    void *data = (char*)a->blocks[a->block_count - 1] + a->current_index;
+    a->current_index += padding;
+
+    void *data = (char *)a->blocks[a->block_count - 1] + a->current_index;
     a->current_index += size;
+
     return data;
 }
 
@@ -59,14 +69,13 @@ void *arena_calloc(Arena *a, size_t size) {
     return data;
 }
 
-
 void arena_clear(Arena *a) {
     a->current_index = 0;
 }
 
 char *arena_strdup(Arena *a, char *s) {
     size_t n = strlen(s) + 1;
-    char *dst = arena_alloc(a, n);
+    char *dst = arena_calloc(a, n);
     memcpy(dst, s, n);
     return dst;
 }

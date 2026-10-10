@@ -33,7 +33,7 @@ fn Box<int64> make_box() {
     return {42};
 }
 
-fn int64 read_node(Node<int64>* node) {
+fn int64 read_node(Node<int64> *node) {
     return node.value;
 }
 

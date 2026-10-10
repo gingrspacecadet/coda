@@ -30,19 +30,19 @@ nested:
         branch %5, block2, block3(%1, %2)
 
     block2:
-        %6 = gt %0, 5
+        %6 = gt %1, 5
         branch %6, block4, block5
 
     block3(%3, %4):
         return %4
 
     block4:
-        %7 = add 0, 2
-        jump block6(%0, %7)
+        %7 = add %2, 2
+        jump block6(%1, %7)
 
     block5:
-        %8 = add 0, 1
-        jump block6(%0, %8)
+        %8 = add %2, 1
+        jump block6(%1, %8)
 
     block6(%9, %10):
         %11 = sub %9, 1

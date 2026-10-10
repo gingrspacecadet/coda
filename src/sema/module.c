@@ -54,7 +54,7 @@ static Scope *sema_namespace_child(Sema *sema, Scope *scope, AstName name) {
         return symbol->namespace_scope;
     }
 
-    Scope *child = arena_alloc(sema->arena, sizeof(Scope));
+    Scope *child = arena_calloc(sema->arena, sizeof(Scope));
     *child = sema_make_scope(sema);
 
     sema_make_namespace_symbol(sema, scope, name, child);
@@ -108,7 +108,7 @@ static bool module_read_source(Arena *arena, String filename, Source *source) {
 
     rewind(file);
 
-    char *contents = arena_alloc(arena, (size_t)size + 1);
+    char *contents = arena_calloc(arena, (size_t)size + 1);
 
     size_t read = fread(contents, 1, (size_t)size, file);
     fclose(file);
@@ -196,7 +196,7 @@ static String module_join_path(Arena *arena, String dir, String name) {
 
     String path = {
         .length = dir.length + slash + name.length,
-        .data = arena_alloc(arena, dir.length + slash + name.length + 1),
+        .data = arena_calloc(arena, dir.length + slash + name.length + 1),
     };
 
     memcpy(path.data, dir.data, dir.length);
@@ -282,18 +282,18 @@ static bool module_entry_parse(ModuleEntry *entry, Arena *arena, Diags *diags) {
     if (entry->parsed)
         return true;
 
-    Source *source = arena_alloc(arena, sizeof(Source));
+    Source *source = arena_calloc(arena, sizeof(Source));
 
     if (!module_read_source(arena, entry->filename, source))
         return false;
 
-    Lexer *lexer = arena_alloc(arena, sizeof(Lexer));
+    Lexer *lexer = arena_calloc(arena, sizeof(Lexer));
     *lexer = (Lexer) {
         .source = source,
         .diags = diags,
     };
 
-    Parser *parser = arena_alloc(arena, sizeof(Parser));
+    Parser *parser = arena_calloc(arena, sizeof(Parser));
     parser_init(parser, lexer, arena);
 
     AstModule *module = parser_parse_module(parser);

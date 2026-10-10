@@ -2,7 +2,7 @@
 #include "common.h"
 
 HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
-    HirType *copy = arena_alloc(sema->arena, sizeof(HirType));
+    HirType *copy = arena_calloc(sema->arena, sizeof(HirType));
     *copy = *type;
     copy->mutable = mutable;
     return copy;
@@ -152,7 +152,7 @@ static size_t align_up(size_t value, size_t align) {
 }
 
 static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t offset, Span span) {
-    Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
     *symbol = (Symbol) {
         .kind = SYMBOL_FIELD,
         .name = (AstName) {
@@ -172,7 +172,7 @@ static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t o
 }
 
 HirType *sema_type(Sema *sema, AstType *ast) {
-    HirType *hir = arena_alloc(sema->arena, sizeof(HirType));
+    HirType *hir = arena_calloc(sema->arena, sizeof(HirType));
 
     hir->mutable = ast->mutable;
 
@@ -241,7 +241,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 hir->slice.element = element;
                 hir->slice.fields = array_create(sema->arena, sizeof(HirField));
 
-                Symbol *length_symbol = arena_alloc(sema->arena, sizeof(*length_symbol));
+                Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
                 *length_symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = (AstName) {
@@ -261,7 +261,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
                 size_t pointer_offset = align_up(length_type->size, pointer->align);
 
-                Symbol *pointer_symbol = arena_alloc(sema->arena, sizeof(*pointer_symbol));
+                Symbol *pointer_symbol = arena_calloc(sema->arena, sizeof(*pointer_symbol));
                 *pointer_symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = (AstName) {
@@ -302,7 +302,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             hir->array.length = length->literal.integer;
             hir->array.fields = array_create(sema->arena, sizeof(HirField));
 
-            Symbol *length_symbol = arena_alloc(sema->arena, sizeof(*length_symbol));
+            Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
             *length_symbol = (Symbol) {
                 .kind = SYMBOL_FIELD,
                 .name = (AstName) {
@@ -370,7 +370,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             for (size_t i = 0; i < ast->structure.fields.len; i++) {
                 AstField *field = array_at(&ast->structure.fields, i);
-                Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
+                Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
                 *symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
@@ -408,7 +408,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             for (size_t i = 0; i < ast->union_.fields.len; i++) {
                 AstField *field = array_at(&ast->union_.fields, i);
-                Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
+                Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
                 *symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
@@ -487,7 +487,7 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
             if (fn->generics.len != 0)
                 return NULL;
 
-            HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+            HirType *type = arena_calloc(sema->arena, sizeof(HirType));
 
             type->kind = HIR_TYPE_FUNCTION;
             type->mutable = false;
@@ -550,8 +550,8 @@ static void builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
 }
 
 static void insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
-    Symbol *symbol = arena_alloc(sema->arena, sizeof(*symbol));
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
     *type = (HirType) {
         .kind = HIR_TYPE_BUILTIN,
         .mutable = false,

@@ -71,7 +71,7 @@ static inline bool is_signed(HirType *type) {
 }
 
 static inline Symbol *insert_parameter(Sema *sema, AstParam *param, HirType *type) {
-    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(Symbol));
 
     *symbol = (Symbol) {
         .kind = SYMBOL_PARAMETER,
@@ -124,7 +124,7 @@ static inline size_t loop_scope(Sema *sema, size_t level) {
 }
 
 static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional) {
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
 
     type->kind = HIR_TYPE_POINTER;
     type->size = sizeof(void *);

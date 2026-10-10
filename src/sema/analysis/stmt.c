@@ -30,7 +30,7 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
             return false;
     }
 
-    Symbol *symbol = arena_alloc(sema->arena, sizeof(Symbol));
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(Symbol));
     *symbol = (Symbol) {
         .kind = SYMBOL_LOCAL,
         .decl = NULL,
@@ -52,7 +52,7 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     *init_stmt = NULL;
 
     if (init != NULL) {
-        HirExpr *target = arena_alloc(sema->arena, sizeof(HirExpr));
+        HirExpr *target = arena_calloc(sema->arena, sizeof(HirExpr));
         *target = (HirExpr) {
             .span = ast->span,
             .kind = HIR_EXPR_VALUE,
@@ -62,7 +62,7 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
             },
         };
 
-        HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
+        HirStmt *stmt = arena_calloc(sema->arena, sizeof(HirStmt));
         *stmt = (HirStmt) {
             .span = ast->span,
             .kind = HIR_STMT_ASSIGN,
@@ -142,7 +142,7 @@ static bool block(Sema *sema, AstStmt *ast, HirStmt *hir) {
 }
 
 static HirStmt *hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
-    HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
+    HirStmt *stmt = arena_calloc(sema->arena, sizeof(HirStmt));
 
     stmt->span = span;
     stmt->kind = kind;
@@ -151,7 +151,7 @@ static HirStmt *hir_stmt(Sema *sema, HirStmtKind kind, Span span) {
 }
 
 static HirExpr *hir_bool(Sema *sema, bool value) {
-    HirExpr *expr = arena_alloc(sema->arena, sizeof(HirExpr));
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(HirExpr));
 
     expr->span = (Span) { 0 };
     expr->kind = HIR_EXPR_LITERAL;
@@ -217,7 +217,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         return NULL;
     }
 
-    HirStmt *hir = arena_alloc(sema->arena, sizeof(HirStmt));
+    HirStmt *hir = arena_calloc(sema->arena, sizeof(HirStmt));
 
     hir->span = ast->span;
 
@@ -236,7 +236,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         case AST_STMT_EXPR: {
             if (ast->expr->kind == AST_EXPR_BINARY &&
                 ast->expr->binary.op == AST_BINARY_ASSIGN) {
-                HirStmt *stmt = arena_alloc(sema->arena, sizeof(HirStmt));
+                HirStmt *stmt = arena_calloc(sema->arena, sizeof(HirStmt));
                 HirExpr *target = sema_expr(sema, ast->expr->binary.left, NULL);
                 HirExpr *value = sema_expr(sema, ast->expr->binary.right, target->type);
 

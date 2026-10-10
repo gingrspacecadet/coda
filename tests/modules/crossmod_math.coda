@@ -22,10 +22,10 @@ type Reader = struct {
 
 @export
 constraint Readable = {
-    fn int64 Self.read(Self* self);
+    fn int64 Self.read(Self *self);
 }
 
 @export
-fn int64 Reader.read(Reader* self) {
+fn int64 Reader.read(Reader *self) {
     return self.value;
 }

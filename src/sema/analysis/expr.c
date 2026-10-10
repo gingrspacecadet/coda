@@ -43,14 +43,36 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr->kind == HIR_EXPR_ERROR)
         return expr;
 
-    if (expr->type != NULL) {
-        if (type_equal(expr->type, type))
-            return expr;
+if (expr->type != NULL) {
+    bool equal = type_equal(expr->type, type);
 
-        error_type_mismatch(sema->diags, type, expr->type, expr->span);
+    if (!equal) {
+        fprintf(stderr, "expected: %p kind=%d mutable=%d\n",
+            (void *)type, type->kind, type->mutable);
+        fprintf(stderr, "actual:   %p kind=%d mutable=%d\n",
+            (void *)expr->type, expr->type->kind, expr->type->mutable);
 
-        return NULL;
+        if (type->kind == HIR_TYPE_POINTER)
+            fprintf(stderr, "expected pointer: optional=%d pointee=%p pointee-kind=%d pointee-mutable=%d\n",
+                type->pointer.optional,
+                (void *)type->pointer.pointee,
+                type->pointer.pointee->kind,
+                type->pointer.pointee->mutable);
+
+        if (expr->type->kind == HIR_TYPE_POINTER)
+            fprintf(stderr, "actual pointer:   optional=%d pointee=%p pointee-kind=%d pointee-mutable=%d\n",
+                expr->type->pointer.optional,
+                (void *)expr->type->pointer.pointee,
+                expr->type->pointer.pointee->kind,
+                expr->type->pointer.pointee->mutable);
     }
+
+    if (equal)
+        return expr;
+
+    error_type_mismatch(sema->diags, type, expr->type, expr->span);
+    return NULL;
+}
 
     if (expr->kind != HIR_EXPR_LITERAL) {
         //! TODO: expression has no type
@@ -178,7 +200,7 @@ static HirExpr *implicit_deref(Sema *sema, HirExpr *expr) {
     if (expr->type == NULL || expr->type->kind != HIR_TYPE_POINTER)
         return expr;
 
-    HirExpr *deref = arena_alloc(sema->arena, sizeof(HirExpr));
+    HirExpr *deref = arena_calloc(sema->arena, sizeof(HirExpr));
 
     *deref = (HirExpr) {
         .span = expr->span,
@@ -266,7 +288,7 @@ static HirField *init_field_lookup(HirType *type, AstName name) {
 }
 
 static String literal_compact(Sema *sema, String raw) {
-    char *data = arena_alloc(sema->arena, raw.length + 1);
+    char *data = arena_calloc(sema->arena, raw.length + 1);
     size_t len = 0;
 
     for (size_t i = 0; i < raw.length; i++) {
@@ -423,7 +445,7 @@ static String decode_string(Sema *sema, String raw) {
     size_t start = raw.length > 0 && raw.data[0] == '"' ? 1 : 0;
     size_t end = raw.length > 1 && raw.data[raw.length - 1] == '"' ? raw.length - 1 : raw.length;
 
-    char *data = arena_alloc(sema->arena, end - start + 1);
+    char *data = arena_calloc(sema->arena, end - start + 1);
     size_t out = 0;
     size_t index = start;
 
@@ -507,7 +529,7 @@ static size_t align_up(size_t value, size_t align) {
 }
 
 static HirExpr *sema_method_error(Sema *sema, Span span) {
-    HirExpr *expr = arena_alloc(sema->arena, sizeof(*expr));
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr){.span = span, .kind = HIR_EXPR_ERROR};
     return expr;
 }
@@ -570,7 +592,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     if (receiver_param->kind == HIR_TYPE_POINTER &&
         type_equal(receiver->type, receiver_param->pointer.pointee) &&
         is_place(receiver)) {
-        HirExpr *address = arena_alloc(sema->arena, sizeof(*address));
+        HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
         *address = (HirExpr){
             .span = receiver->span,
             .kind = HIR_EXPR_UNARY,
@@ -587,7 +609,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
         return sema_method_error(sema, ast->span);
 
-    HirExpr *call = arena_alloc(sema->arena, sizeof(*call));
+    HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
     *call = (HirExpr){
         .span = ast->span,
         .kind = HIR_EXPR_CALL,
@@ -640,7 +662,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         if (!comp_expr_is_evaluable(result)) {
             error_comptime_not_evaluable(sema->diags, ast->span);
 
-            HirExpr *error = arena_alloc(sema->arena, sizeof(*error));
+            HirExpr *error = arena_calloc(sema->arena, sizeof(*error));
             error->span = ast->span;
             error->kind = HIR_EXPR_ERROR;
             return error;
@@ -650,7 +672,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (!literal_fits(sema, &result->literal, expected)) {
                 error_type_mismatch(sema->diags, expected, result->type, ast->span);
 
-                HirExpr *error = arena_alloc(sema->arena, sizeof(*error));
+                HirExpr *error = arena_calloc(sema->arena, sizeof(*error));
                 error->span = ast->span;
                 error->kind = HIR_EXPR_ERROR;
                 return error;
@@ -662,7 +684,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         return result;
     }
 
-    HirExpr *hir = arena_alloc(sema->arena, sizeof(HirExpr));
+    HirExpr *hir = arena_calloc(sema->arena, sizeof(HirExpr));
 
     hir->span = ast->span;
     hir->type = NULL;
@@ -991,7 +1013,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     return hir;
                 }
 
-                object = arena_alloc(sema->arena, sizeof(HirExpr));
+                object = arena_calloc(sema->arena, sizeof(HirExpr));
 
                 *object = (HirExpr) {
                     .span = hir->field.object->span,
@@ -1028,7 +1050,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                         HirType *element_type = type_with_mutability(sema, object_type->array.element, object_type->mutable);
                         HirType *pointertype = pointer_type(sema, element_type, false);
 
-                        HirExpr *index = arena_alloc(sema->arena, sizeof(*index));
+                        HirExpr *index = arena_calloc(sema->arena, sizeof(*index));
                         *index = (HirExpr) {
                             .span = ast->span,
                             .kind = HIR_EXPR_LITERAL,
@@ -1039,7 +1061,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                             },
                         };
 
-                        HirExpr *element = arena_alloc(sema->arena, sizeof(*element));
+                        HirExpr *element = arena_calloc(sema->arena, sizeof(*element));
                         *element = (HirExpr) {
                             .span = ast->span,
                             .kind = HIR_EXPR_INDEX,
@@ -1122,7 +1144,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (expected->kind == HIR_TYPE_ARRAY) {
                 HirField *length_field = &((HirField *)expected->array.fields.data)[0];
 
-                HirExpr *length = arena_alloc(sema->arena, sizeof(*length));
+                HirExpr *length = arena_calloc(sema->arena, sizeof(*length));
                 *length = (HirExpr) {
                     .span = ast->span,
                     .kind = HIR_EXPR_LITERAL,
@@ -1257,7 +1279,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         case AST_EXPR_LAMBDA: {
             hir->kind = HIR_EXPR_LAMBDA;
 
-            HirType *type = arena_alloc(sema->arena, sizeof(HirType));
+            HirType *type = arena_calloc(sema->arena, sizeof(HirType));
 
             *type = (HirType) {
                 .kind = HIR_TYPE_FUNCTION,
@@ -1294,7 +1316,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 }
             }
 
-            HirFunction *fn = arena_alloc(sema->arena, sizeof(HirFunction));
+            HirFunction *fn = arena_calloc(sema->arena, sizeof(HirFunction));
 
             *fn = (HirFunction) {
                 .symbol = NULL,

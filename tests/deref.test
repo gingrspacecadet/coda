@@ -8,7 +8,7 @@ fn int64 read(int64 *p) {
     return *p;
 }
 
-fn none write(mut int64* p, int64 value) {
+fn none write(mut int64 *p, int64 value) {
     *p = value;
     return;
 }

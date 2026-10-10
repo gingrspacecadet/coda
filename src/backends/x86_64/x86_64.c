@@ -318,6 +318,11 @@ static void emit_extract(X86Function *function, const LirInstruction *instructio
 }
 
 static void load_operand(X86Function *function, const LirOperand *operand, X86Reg reg) {
+    if (operand->kind == LIR_OPERAND_OFFSET) {
+        fprintf(function->out, "    mov %s, %zu\n", reg_name(reg, 8), operand->offset);
+        return;
+    }
+
     size_t size = type_size(operand->type);
 
     assert(size <= 8);
@@ -465,9 +470,20 @@ static void emit_load(X86Function *function, const LirInstruction *instruction) 
     const LirOperand *address = &((LirOperand *)instruction->operands.data)[0];
     size_t size = type_size(instruction->result_type);
 
-    assert(size == 1 || size == 2 || size == 4 || size == 8);
+    if (size == 0)
+        return;
 
     load_operand(function, address, X86_RAX);
+
+    if (size > 8) {
+        X86Slot *destination = slot(function, instruction->result);
+        fprintf(function->out, "    mov rsi, rax\n");
+        fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+        emit_copy_memory(function, X86_RDI, X86_RSI, size);
+        return;
+    }
+
+    assert(size == 1 || size == 2 || size == 4 || size == 8);
 
     if (size == 1)
         fprintf(function->out, type_is_signed(instruction->result_type) ? "    movsx rcx, byte ptr [rax]\n" : "    movzx rcx, byte ptr [rax]\n");
@@ -485,11 +501,22 @@ static void emit_store(X86Function *function, const LirInstruction *instruction)
     LirOperand *operands = instruction->operands.data;
     size_t size = type_size(operands[1].type);
 
-    assert(size == 1 || size == 2 || size == 4 || size == 8);
+    if (size == 0)
+        return;
 
     load_operand(function, &operands[0], X86_RAX);
-    load_operand(function, &operands[1], X86_RCX);
 
+    if (size > 8) {
+        assert(operands[1].kind == LIR_OPERAND_VALUE);
+        X86Slot *source = slot(function, operands[1].value);
+        fprintf(function->out, "    mov rdi, rax\n");
+        fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset);
+        emit_copy_memory(function, X86_RDI, X86_RSI, size);
+        return;
+    }
+
+    assert(size == 1 || size == 2 || size == 4 || size == 8);
+    load_operand(function, &operands[1], X86_RCX);
     fprintf(function->out, "    mov %s [rax], %s\n", size_name(size), reg_name(X86_RCX, size));
 }
 

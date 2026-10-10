@@ -2,7 +2,7 @@
 #include "common.h"
 
 static HirExpr *generic_error_expr(Sema *sema, AstExpr *ast) {
-    HirExpr *expr = arena_alloc(sema->arena, sizeof(*expr));
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr){
         .span = ast->span,
         .kind = HIR_EXPR_ERROR,
@@ -226,7 +226,7 @@ static Symbol *generic_find_instance(Sema *sema, Symbol *generic, Array argument
 
 static AstName generic_instance_name(Sema *sema, Scope *scope) {
     for (;;) {
-        char *data = arena_alloc(sema->arena, 64);
+        char *data = arena_calloc(sema->arena, 64);
         int length = snprintf(data, 64, ".L_coda_generic_%zu", sema->next_generic_instance++);
         AstName name = {
             .kind = AST_NAME_IDENT,
@@ -265,7 +265,7 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
         scope_insert(scope, &binding);
     }
 
-    AstDecl *instance_decl = arena_alloc(sema->arena, sizeof(*instance_decl));
+    AstDecl *instance_decl = arena_calloc(sema->arena, sizeof(*instance_decl));
     *instance_decl = *generic->decl;
     instance_decl->fn.generics.len = 0;
     instance_decl->fn.name = generic_instance_name(sema, scope);
@@ -390,7 +390,7 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
     if (instance->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime))
         return generic_error(sema, ast, E_CANT_CALL_COMPTIME, STRING("cannot call a comptime function at runtime"), STRING("call this function from a comptime context"));
 
-    HirExpr *call = arena_alloc(sema->arena, sizeof(*call));
+    HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
     *call = (HirExpr){
         .span = ast->span,
         .kind = HIR_EXPR_CALL,

@@ -6,7 +6,7 @@ static HirType *generic_type_error(Sema *sema, AstType *ast, DiagCode code, Stri
         diag_note(&diagnostic, note);
     diag_finish(&diagnostic);
 
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
     *type = (HirType){
         .kind = HIR_TYPE_ERROR,
         .mutable = ast->mutable,
@@ -43,18 +43,18 @@ static HirType *generic_type_with_mutability(Sema *sema, HirType *type, bool mut
     if (type->mutable == mutable)
         return type;
 
-    HirType *copy = arena_alloc(sema->arena, sizeof(*copy));
+    HirType *copy = arena_calloc(sema->arena, sizeof(*copy));
     *copy = *type;
     copy->mutable = mutable;
     return copy;
 }
 
 static Symbol *generic_type_create_symbol(Sema *sema, Symbol *generic) {
-    AstDecl *decl = arena_alloc(sema->arena, sizeof(*decl));
+    AstDecl *decl = arena_calloc(sema->arena, sizeof(*decl));
     *decl = *generic->decl;
     decl->type.generics.len = 0;
 
-    Symbol *instance = arena_alloc(sema->arena, sizeof(*instance));
+    Symbol *instance = arena_calloc(sema->arena, sizeof(*instance));
     *instance = (Symbol){
         .kind = SYMBOL_TYPE,
         .decl = decl,
@@ -64,7 +64,7 @@ static Symbol *generic_type_create_symbol(Sema *sema, Symbol *generic) {
         .owner_scope = generic->owner_scope,
     };
 
-    HirType *type = arena_alloc(sema->arena, sizeof(*type));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
     *type = (HirType){
         .kind = HIR_TYPE_ERROR,
         .mutable = false,
@@ -97,7 +97,7 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
         AstType *argument_ast = ((AstType **)ast->named.args.data)[i];
         HirType *argument = sema_type(sema, argument_ast);
         if (argument == NULL || argument->kind == HIR_TYPE_ERROR) {
-            HirType *error = arena_alloc(sema->arena, sizeof(*error));
+            HirType *error = arena_calloc(sema->arena, sizeof(*error));
             *error = (HirType){.kind = HIR_TYPE_ERROR, .align = 1, .mutable = ast->mutable};
             return error;
         }
@@ -105,7 +105,7 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
     }
 
     if (!sema_check_symbol_generic_constraints(sema, generic, template->generics, arguments, ast->span)) {
-        HirType *error = arena_alloc(sema->arena, sizeof(*error));
+        HirType *error = arena_calloc(sema->arena, sizeof(*error));
         *error = (HirType){.kind = HIR_TYPE_ERROR, .align = 1, .mutable = ast->mutable};
         return error;
     }

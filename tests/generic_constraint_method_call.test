@@ -5,25 +5,25 @@ errors: 0
 
 [source]
 constraint Readable = {
-    fn uint64 Self.read(Self* self, uint8[] buffer);
+    fn uint64 Self.read(Self *self, uint8[] buffer);
 }
 
 type File = struct {
     uint64 size;
 };
 
-fn uint64 File.read(File* self, uint8[] buffer) {
+fn uint64 File.read(File *self, uint8[] buffer) {
     return self.size;
 }
 
-fn uint64 read_size<T: Readable>(T* source, uint8[] buffer) {
+fn uint64 read_size<T: Readable>(T *source, uint8[] buffer) {
     return source.read(buffer);
 }
 
-fn uint64 direct(File* source, uint8[] buffer) {
+fn uint64 direct(File *source, uint8[] buffer) {
     return source.read(buffer);
 }
 
-fn uint64 generic(File* source, uint8[] buffer) {
+fn uint64 generic(File *source, uint8[] buffer) {
     return read_size(source, buffer);
 }

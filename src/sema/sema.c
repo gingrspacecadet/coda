@@ -1,14 +1,14 @@
 #include "common.h"
 
 HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes) {
-    HirModule *hmod = arena_alloc(sema->arena, sizeof(HirModule));
+    HirModule *hmod = arena_calloc(sema->arena, sizeof(HirModule));
 
     *hmod = (HirModule) {
         .functions = array_create(sema->arena, sizeof(HirFunction)),
         .globals = array_create(sema->arena, sizeof(HirGlobal)),
     };
 
-    sema->root_scope = arena_alloc(sema->arena, sizeof(*sema->root_scope));
+    sema->root_scope = arena_calloc(sema->arena, sizeof(*sema->root_scope));
     *sema->root_scope = (Scope){
         .syms = array_create(sema->arena, sizeof(Symbol)),
         .defers = array_create(sema->arena, sizeof(HirStmt *)),

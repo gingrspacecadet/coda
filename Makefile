@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Werror -Wextra -Wall -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -g -Werror -Wextra -Wall -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
 
 SRC := src
 
@@ -159,7 +159,7 @@ build/test/%.o: test/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I$(SRC) -c -o $@ $<
 
-test: $(TEST_TARGET)
+test: $(TARGET) $(TEST_TARGET)
 	$(TEST_TARGET) tests
 
 -include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(BACKEND_OBJS) $(TEST_OBJS))

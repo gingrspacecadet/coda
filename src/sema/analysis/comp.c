@@ -49,7 +49,7 @@ static bool store(CompContext *context, Symbol *symbol, HirExpr *value) {
 }
 
 static HirExpr *literal(Sema *sema, HirExpr *expr, HirLiteral literal, HirType *type) {
-    HirExpr *result = arena_alloc(sema->arena, sizeof(*result));
+    HirExpr *result = arena_calloc(sema->arena, sizeof(*result));
     *result = *expr;
 
     result->kind = HIR_EXPR_LITERAL;
@@ -289,7 +289,7 @@ static HirExpr *eval_binary(CompContext *context, HirExpr *expr) {
 static HirExpr *eval_unary(CompContext *context, HirExpr *expr) {
     switch (expr->unary.op) {
         case AST_UNARY_ADDRESS: {
-            HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+            HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
             *result = *expr;
             return result;
         }
@@ -478,7 +478,7 @@ static HirExpr *zero(CompContext *context, HirType *type) {
 
     HirType *base = base_type(type);
 
-    HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+    HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
 
     result->span = (Span){0};
     result->type = type;
@@ -599,7 +599,7 @@ static HirExpr *eval_index(CompContext *context, HirExpr *expr) {
 }
 
 static HirExpr *update_field(CompContext *context, HirExpr *object, HirField *field, HirExpr *value) {
-    HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+    HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
     *result = *object;
 
     result->init.fields = array_create(context->sema->arena, sizeof(HirInitField));
@@ -639,7 +639,7 @@ static HirExpr *update_index(CompContext *context, HirExpr *object, size_t index
 
     size_t offset = sizeof(uint64_t) + index * type->array.element->size;
 
-    HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+    HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
 
     *result = *object;
 
@@ -934,7 +934,7 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
         }
 
         case HIR_EXPR_INIT: {
-            HirExpr *result = arena_alloc(context->sema->arena, sizeof(*result));
+            HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
             *result = *expr;
 
             result->init.fields = array_create(context->sema->arena, sizeof(HirInitField));

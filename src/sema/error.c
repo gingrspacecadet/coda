@@ -80,7 +80,7 @@ static String path_string(Arena *arena, Path path) {
         length += part->ident.length;
     }
 
-    char *data = arena_alloc(arena, length + 1);
+    char *data = arena_calloc(arena, length + 1);
     size_t offset = 0;
 
     for (size_t i = 0; i < path.parts.len; i++) {

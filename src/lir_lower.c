@@ -23,6 +23,8 @@ typedef struct {
     LirBlockId block;
 
     Array(LirBinding) bindings;
+    Array(LirBinding) addresses;
+    Array(Symbol *) address_taken;
     Array(LirLoop) loops;
 } LirLower;
 
@@ -34,16 +36,49 @@ static bool lir_lower_block_terminated(LirLower *lower) {
     return lir_lower_block(lower)->terminator.kind != LIR_TERM_NONE;
 }
 
+static bool lir_same_symbol(Symbol *a, Symbol *b) {
+    if (a == b)
+        return true;
+
+    return a != NULL && b != NULL && a->kind == b->kind &&
+           a->name.kind == AST_NAME_IDENT && b->name.kind == AST_NAME_IDENT &&
+           string_eq(a->name.ident, b->name.ident);
+}
+
 static LirBinding *lir_find_binding(LirLower *lower, Symbol *symbol) {
     for (size_t i = lower->bindings.len; i > 0; i--) {
         LirBinding *binding = &((LirBinding *)lower->bindings.data)[i - 1];
 
-        if (binding->symbol == symbol || string_eq(binding->symbol->name.ident, symbol->name.ident)) {
+        if (lir_same_symbol(binding->symbol, symbol)) {
             return binding;
         }
     }
     
     return NULL;
+}
+
+static LirBinding *lir_find_address(LirLower *lower, Symbol *symbol) {
+    for (size_t i = lower->addresses.len; i > 0; i--) {
+        LirBinding *binding = &((LirBinding *)lower->addresses.data)[i - 1];
+        if (lir_same_symbol(binding->symbol, symbol))
+            return binding;
+    }
+
+    return NULL;
+}
+
+static bool lir_is_address_taken(LirLower *lower, Symbol *symbol) {
+    for (size_t i = 0; i < lower->address_taken.len; i++) {
+        if (lir_same_symbol(((Symbol **)lower->address_taken.data)[i], symbol))
+            return true;
+    }
+
+    return false;
+}
+
+static void lir_bind_address(LirLower *lower, Symbol *symbol, LirOperand address) {
+    LirBinding binding = {.symbol = symbol, .operand = address};
+    array_push(&lower->addresses, &binding);
 }
 
 static void lir_bind(LirLower *lower, Symbol *symbol, LirOperand operand) {
@@ -223,7 +258,7 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr);
 static LirOperand lir_lower_load(LirLower *lower, LirPlace place);
 static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value);
 static HirExpr *lir_field_root(HirExpr *expr);
-static bool lir_expr_is_ssa(HirExpr *expr);
+static bool lir_expr_is_ssa(LirLower *lower, HirExpr *expr);
 
 static size_t array_data_offset(HirType *type) {
     assert(type->kind == HIR_TYPE_ARRAY);
@@ -311,6 +346,10 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             switch (symbol->kind) {
                 case SYMBOL_LOCAL:
                 case SYMBOL_PARAMETER: {
+                    LirBinding *address = lir_find_address(lower, symbol);
+                    if (address != NULL)
+                        return lir_lower_load(lower, (LirPlace){.address = address->operand, .type = expr->type});
+
                     LirBinding *binding = lir_find_binding(lower, symbol);
                     assert(binding);
                     return binding->operand;
@@ -414,7 +453,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
 
         case HIR_EXPR_CALL: {
             size_t operand_count = expr->call.args.len + 1;
-            LirOperand *operands = arena_alloc(lower->function->arena, sizeof(LirOperand) * operand_count);
+            LirOperand *operands = arena_calloc(lower->function->arena, sizeof(LirOperand) * operand_count);
 
             operands[0] = lir_operand_symbol(expr->call.function, expr->call.function->type);
 
@@ -440,7 +479,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_FIELD: {
-            if (!lir_expr_is_ssa(expr)) {
+            if (!lir_expr_is_ssa(lower, expr)) {
                 LirPlace place = lir_lower_place(lower, expr);
                 return lir_lower_load(lower, place);
             }
@@ -456,7 +495,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             HirExpr *object = expr->index.object;
             HirExpr *index = expr->index.index;
 
-            if (object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(object)) {
+            if (object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(lower, object)) {
                 size_t offset;
 
                 if (lir_constant_array_offset(expr, &offset)) {
@@ -589,7 +628,7 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
 
             if (object_type->kind == HIR_TYPE_SLICE) {
                 LirOperand aggregate = lir_lower_expr(lower, expr->index.object);
-                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
+                HirType *pointer_type = arena_calloc(lower->function->arena, sizeof(*pointer_type));
 
                 *pointer_type = (HirType){
                     .kind = HIR_TYPE_POINTER,
@@ -664,7 +703,7 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             Symbol *symbol = expr->value.symbol;
 
             if (symbol->kind == SYMBOL_GLOBAL) {
-                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
+                HirType *pointer_type = arena_calloc(lower->function->arena, sizeof(*pointer_type));
 
                 *pointer_type = (HirType) {
                     .kind = HIR_TYPE_POINTER,
@@ -690,32 +729,13 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             }
 
             if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
-                LirBinding *binding = lir_find_binding(lower, symbol);
-                if (binding == NULL || binding->operand.kind != LIR_OPERAND_VALUE)
-                    break;
-
-                HirType *pointer_type = arena_alloc(lower->function->arena, sizeof(*pointer_type));
-                *pointer_type = (HirType) {
-                    .kind = HIR_TYPE_POINTER,
-                    .mutable = false,
-                    .size = sizeof(void *),
-                    .align = _Alignof(void *),
-                    .pointer = {
-                        .pointee = expr->type,
-                        .optional = false,
-                    },
-                };
-
-                LirOperand value_operand = binding->operand;
-                LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_type, (Array) {
-                    .data = &value_operand,
-                    .len = 1,
-                });
-
-                return (LirPlace) {
-                    .address = lir_operand_value(address, pointer_type),
-                    .type = expr->type,
-                };
+                LirBinding *address = lir_find_address(lower, symbol);
+                if (address != NULL) {
+                    return (LirPlace){
+                        .address = address->operand,
+                        .type = expr->type,
+                    };
+                }
             }
 
             break;
@@ -953,6 +973,7 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
 
     lower->block = body;
     lower->bindings.len = bindings_len;
+    lir_bind_snapshot_params(lower, header, &snapshot);
     lir_lower_stmt(lower, stmt->_while.body);
 
     bool falls_through = !lir_lower_block_terminated(lower);
@@ -979,17 +1000,17 @@ static HirExpr *lir_field_root(HirExpr *expr) {
     return expr;
 }
 
-static bool lir_expr_is_ssa(HirExpr *expr) {
+static bool lir_expr_is_ssa(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_VALUE:
-            return expr->value.symbol->kind == SYMBOL_LOCAL ||
-                   expr->value.symbol->kind == SYMBOL_PARAMETER;
+            return (expr->value.symbol->kind == SYMBOL_LOCAL || expr->value.symbol->kind == SYMBOL_PARAMETER) &&
+                   lir_find_address(lower, expr->value.symbol) == NULL;
 
         case HIR_EXPR_FIELD:
-            return lir_expr_is_ssa(expr->field.object);
+            return lir_expr_is_ssa(lower, expr->field.object);
 
         case HIR_EXPR_INDEX:
-            return expr->index.object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(expr->index.object);
+            return expr->index.object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(lower, expr->index.object);
 
         default:
             return false;
@@ -1097,7 +1118,12 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 Symbol *symbol = target->value.symbol;
 
                 if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
-                    lir_bind(lower, symbol, value);
+                    LirBinding *address = lir_find_address(lower, symbol);
+                    if (address != NULL) {
+                        lir_lower_store(lower, (LirPlace){.address = address->operand, .type = target->type}, value);
+                    } else {
+                        lir_bind(lower, symbol, value);
+                    }
                     return;
                 }
 
@@ -1110,7 +1136,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 assert(!"unexpected assignment target symbol");
             }
 
-            if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(target)) {
+            if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(lower, target)) {
                 lir_lower_aggregate_store(lower, target, value);
                 return;
             }
@@ -1156,35 +1182,224 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
     assert(!"unhandled HIR statement");
 }
 
+static Symbol *lir_addressed_local_symbol(HirExpr *expr) {
+    if (expr == NULL)
+        return NULL;
+
+    switch (expr->kind) {
+        case HIR_EXPR_VALUE:
+            if (expr->value.symbol->kind == SYMBOL_LOCAL || expr->value.symbol->kind == SYMBOL_PARAMETER)
+                return expr->value.symbol;
+            return NULL;
+
+        case HIR_EXPR_FIELD:
+            if (expr->field.object->type != NULL && expr->field.object->type->kind == HIR_TYPE_POINTER)
+                return NULL;
+            return lir_addressed_local_symbol(expr->field.object);
+
+        case HIR_EXPR_INDEX:
+            if (expr->index.object->type == NULL || expr->index.object->type->kind == HIR_TYPE_POINTER ||
+                expr->index.object->type->kind == HIR_TYPE_SLICE)
+                return NULL;
+            return lir_addressed_local_symbol(expr->index.object);
+
+        default:
+            return NULL;
+    }
+}
+
+static void lir_collect_address_taken_expr(Array(Symbol *) *symbols, HirExpr *expr);
+static void lir_collect_address_taken_stmt(Array(Symbol *) *symbols, HirStmt *stmt);
+
+static void lir_collect_address_taken_expr(Array(Symbol *) *symbols, HirExpr *expr) {
+    if (expr == NULL)
+        return;
+
+    switch (expr->kind) {
+        case HIR_EXPR_UNARY:
+            if (expr->unary.op == AST_UNARY_ADDRESS) {
+                Symbol *symbol = lir_addressed_local_symbol(expr->unary.operand);
+                bool found = false;
+                for (size_t i = 0; symbol != NULL && i < symbols->len; i++) {
+                    if (lir_same_symbol(((Symbol **)symbols->data)[i], symbol)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (symbol != NULL && !found)
+                    array_push(symbols, &symbol);
+            }
+            lir_collect_address_taken_expr(symbols, expr->unary.operand);
+            return;
+
+        case HIR_EXPR_BINARY:
+            lir_collect_address_taken_expr(symbols, expr->binary.left);
+            lir_collect_address_taken_expr(symbols, expr->binary.right);
+            return;
+
+        case HIR_EXPR_CALL:
+            for (size_t i = 0; i < expr->call.args.len; i++)
+                lir_collect_address_taken_expr(symbols, ((HirExpr **)expr->call.args.data)[i]);
+            return;
+
+        case HIR_EXPR_INDEX:
+            lir_collect_address_taken_expr(symbols, expr->index.object);
+            lir_collect_address_taken_expr(symbols, expr->index.index);
+            return;
+
+        case HIR_EXPR_FIELD:
+            lir_collect_address_taken_expr(symbols, expr->field.object);
+            return;
+
+        case HIR_EXPR_CAST:
+            lir_collect_address_taken_expr(symbols, expr->cast.operand);
+            return;
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++)
+                lir_collect_address_taken_expr(symbols, ((HirInitField *)expr->init.fields.data)[i].value);
+            return;
+
+        case HIR_EXPR_LAMBDA:
+            lir_collect_address_taken_stmt(symbols, expr->lambda.body);
+            return;
+
+        case HIR_EXPR_ERROR:
+        case HIR_EXPR_LITERAL:
+        case HIR_EXPR_VALUE:
+            return;
+    }
+}
+
+static void lir_collect_address_taken_stmt(Array(Symbol *) *symbols, HirStmt *stmt) {
+    if (stmt == NULL)
+        return;
+
+    switch (stmt->kind) {
+        case HIR_STMT_BLOCK:
+            for (size_t i = 0; i < stmt->block.stmts.len; i++)
+                lir_collect_address_taken_stmt(symbols, ((HirStmt **)stmt->block.stmts.data)[i]);
+            return;
+
+        case HIR_STMT_EXPR:
+            lir_collect_address_taken_expr(symbols, stmt->expr);
+            return;
+
+        case HIR_STMT_ASSIGN:
+            lir_collect_address_taken_expr(symbols, stmt->assign.target);
+            lir_collect_address_taken_expr(symbols, stmt->assign.value);
+            return;
+
+        case HIR_STMT_RETURN:
+            lir_collect_address_taken_expr(symbols, stmt->_return.value);
+            return;
+
+        case HIR_STMT_IF:
+            lir_collect_address_taken_expr(symbols, stmt->_if.cond);
+            lir_collect_address_taken_stmt(symbols, stmt->_if.then);
+            lir_collect_address_taken_stmt(symbols, stmt->_if._else);
+            return;
+
+        case HIR_STMT_WHILE:
+            lir_collect_address_taken_expr(symbols, stmt->_while.cond);
+            lir_collect_address_taken_stmt(symbols, stmt->_while.body);
+            return;
+
+        case HIR_STMT_BREAK:
+        case HIR_STMT_CONTINUE:
+        case HIR_STMT_ERROR:
+            return;
+    }
+}
+
+static HirType *lir_symbol_type_in_function(HirFunction *hir, Symbol *symbol) {
+    for (size_t i = 0; i < hir->params.len; i++) {
+        HirParam *param = &((HirParam *)hir->params.data)[i];
+        if (lir_same_symbol(param->symbol, symbol))
+            return param->type;
+    }
+
+    for (size_t i = 0; i < hir->locals.len; i++) {
+        HirLocal *local = &((HirLocal *)hir->locals.data)[i];
+        if (lir_same_symbol(local->symbol, symbol))
+            return local->type;
+    }
+
+    return NULL;
+}
+
+static LirOperand lir_allocate_address_storage(LirLower *lower, Symbol *symbol, HirType *type) {
+    LirValueId storage_id = lir_emit(lower->function, lower->block, LIR_OP_ZERO, type, (Array){0});
+    LirOperand storage = lir_operand_value(storage_id, type);
+
+    HirType *pointer_type = arena_calloc(lower->function->arena, sizeof(*pointer_type));
+    *pointer_type = (HirType){
+        .kind = HIR_TYPE_POINTER,
+        .mutable = false,
+        .size = sizeof(void *),
+        .align = _Alignof(void *),
+        .pointer = {.pointee = type, .optional = false},
+    };
+
+    LirValueId address_id = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_type, (Array){.data = &storage, .len = 1});
+    LirOperand address = lir_operand_value(address_id, pointer_type);
+    lir_bind_address(lower, symbol, address);
+    return address;
+}
+
 static void lir_lower_function(LirModule *module, HirFunction *hir) {
     if (hir->is_comptime)
         return;
 
     LirFunction *function = lir_function_create(module, hir->symbol, hir->return_type, hir->is_extern, hir->is_export);
 
-    if (hir->is_extern) {
+    if (hir->is_extern)
         return;
-    }
+
+    Array(Symbol *) address_taken = array_create(module->arena, sizeof(Symbol *));
+    lir_collect_address_taken_stmt(&address_taken, hir->body);
 
     LirLower lower = {
         .function = function,
         .bindings = array_create(module->arena, sizeof(LirBinding)),
-        .loops = array_create(module->arena, sizeof(LirLoop))
+        .addresses = array_create(module->arena, sizeof(LirBinding)),
+        .address_taken = address_taken,
+        .loops = array_create(module->arena, sizeof(LirLoop)),
     };
 
     lower.block = lir_block_create(function);
 
     for (size_t i = 0; i < hir->params.len; i++) {
         HirParam *param = &((HirParam *)hir->params.data)[i];
-
         LirValueId value = lir_function_add_param(function, param->symbol, param->type);
-
-        lir_bind(&lower, param->symbol, lir_operand_value(value, param->type));
+        if (!lir_is_address_taken(&lower, param->symbol))
+            lir_bind(&lower, param->symbol, lir_operand_value(value, param->type));
     }
 
-    if (hir->body) {
+    for (size_t i = 0; i < lower.address_taken.len; i++) {
+        Symbol *symbol = ((Symbol **)lower.address_taken.data)[i];
+        HirType *type = lir_symbol_type_in_function(hir, symbol);
+
+        assert(type != NULL);
+
+        LirOperand address = lir_allocate_address_storage(&lower, symbol, type);
+
+        if (symbol->kind == SYMBOL_PARAMETER) {
+            LirFunctionParam *parameter = NULL;
+            for (size_t j = 0; j < function->params.len; j++) {
+                LirFunctionParam *candidate = &((LirFunctionParam *)function->params.data)[j];
+                if (lir_same_symbol(candidate->symbol, symbol)) {
+                    parameter = candidate;
+                    break;
+                }
+            }
+            assert(parameter != NULL);
+            lir_lower_store(&lower, (LirPlace){.address = address, .type = type}, lir_operand_value(parameter->value, parameter->type));
+        }
+    }
+
+    if (hir->body)
         lir_lower_stmt(&lower, hir->body);
-    }
 }
 
 static void lir_collect_static_data(Array(LirData) *data, HirExpr *expr, size_t base_offset) {

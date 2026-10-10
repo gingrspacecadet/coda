@@ -19,7 +19,7 @@ fn int64 imported_generic_type() {
     return box.value;
 }
 
-fn int64 constrained_imported_method<T: crossmod::math::Readable>(T* value) {
+fn int64 constrained_imported_method<T: crossmod::math::Readable>(T *value) {
     return value.read();
 }
 

@@ -53,8 +53,8 @@ sum:
         branch %5, block2, block3(%1, %2)
 
     block2:
-        %6 = add 0, %0
-        %7 = sub %0, 1
+        %6 = add %2, %1
+        %7 = sub %1, 1
         jump block1(%7, %6)
 
     block3(%3, %4):
