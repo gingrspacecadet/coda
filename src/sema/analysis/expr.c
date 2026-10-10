@@ -1,10 +1,37 @@
 #include <assert.h>
 #include "common.h"
 
+static HirType *sema_string_literal_type(Sema *sema, Span span);
+
+static HirType *sema_unwrap_type(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+
+    return type;
+}
+
+static bool sema_is_byte_slice(HirType *type) {
+    if (type == NULL || type->mutable)
+        return false;
+
+    type = sema_unwrap_type(type);
+
+    if (type == NULL || type->kind != HIR_TYPE_SLICE)
+        return false;
+
+    HirType *element = sema_unwrap_type(type->slice.element);
+
+    return element != NULL && element->kind == HIR_TYPE_BUILTIN &&
+           element->builtin == BUILTIN_UINT8;
+}
+
 static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     if (literal->kind == HIR_LITERAL_NULL)
         return type->kind == HIR_TYPE_POINTER &&
                type->pointer.optional;
+
+    if (literal->kind == HIR_LITERAL_STRING)
+        return sema_is_byte_slice(type);
 
     if (type->kind != HIR_TYPE_BUILTIN)
         return false;
@@ -129,6 +156,19 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
 
     if (expr->kind == HIR_EXPR_ERROR)
         return expr;
+
+    if (expr->kind == HIR_EXPR_LITERAL && expr->literal.kind == HIR_LITERAL_STRING) {
+        if (!literal_fits(sema, &expr->literal, type)) {
+            if (expr->type == NULL)
+                expr->type = sema_string_literal_type(sema, expr->span);
+
+            error_type_mismatch(sema->diags, type, expr->type, expr->span);
+            return NULL;
+        }
+
+        expr->type = type;
+        return expr;
+    }
 
     if (expr->type != NULL) {
         if (type_equal(expr->type, type))
@@ -602,6 +642,50 @@ static size_t align_up(size_t value, size_t align) {
     return remainder == 0 ? value : value + align - remainder;
 }
 
+static HirType *sema_string_literal_type(Sema *sema, Span span) {
+    HirType *element = builtin_type(sema, BUILTIN_UINT8);
+    HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
+    HirType *pointer = pointer_type(sema, element, false);
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
+
+    *type = (HirType) {
+        .kind = HIR_TYPE_SLICE,
+        .mutable = false,
+        .slice = {
+            .element = element,
+            .fields = array_create(sema->arena, sizeof(HirField)),
+        },
+    };
+
+    Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
+    *length_symbol = (Symbol) {
+        .kind = SYMBOL_FIELD,
+        .name = {.kind = AST_NAME_IDENT, .ident = STRING("len")},
+        .type = length_type,
+        .span = span,
+    };
+
+    HirField length_field = {.symbol = length_symbol, .type = length_type, .offset = 0};
+    array_push(&type->slice.fields, &length_field);
+
+    size_t pointer_offset = align_up(length_type->size, pointer->align);
+    Symbol *pointer_symbol = arena_calloc(sema->arena, sizeof(*pointer_symbol));
+    *pointer_symbol = (Symbol) {
+        .kind = SYMBOL_FIELD,
+        .name = {.kind = AST_NAME_IDENT, .ident = STRING("ptr")},
+        .type = pointer,
+        .span = span,
+    };
+
+    HirField pointer_field = {.symbol = pointer_symbol, .type = pointer, .offset = pointer_offset};
+    array_push(&type->slice.fields, &pointer_field);
+
+    type->align = length_type->align > pointer->align ? length_type->align : pointer->align;
+    type->size = align_up(pointer_offset + pointer->size, type->align);
+
+    return type;
+}
+
 static HirExpr *sema_method_error(Sema *sema, Span span) {
     HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr){.span = span, .kind = HIR_EXPR_ERROR};
@@ -774,6 +858,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             switch (hir->literal.kind) {
                 case HIR_LITERAL_INTEGER:
                     hir->type = builtin_type(sema, BUILTIN_INT64);
+                    break;
+
+                case HIR_LITERAL_STRING:
+                    hir->type = sema_string_literal_type(sema, ast->span);
                     break;
 
                 default:

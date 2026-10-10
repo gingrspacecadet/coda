@@ -163,6 +163,7 @@ typedef enum {
     LIR_DATA_FLOAT,
     LIR_DATA_BOOL,
     LIR_DATA_BYTES,
+    LIR_DATA_ADDRESS,
 } LirDataKind;
 
 typedef struct {
@@ -175,8 +176,14 @@ typedef struct {
         double floating;
         bool boolean;
         String bytes;
+        Symbol *symbol;
     };
 } LirData;
+
+typedef struct {
+    Symbol *symbol;
+    String bytes;
+} LirString;
 
 typedef struct {
     Symbol *symbol;
@@ -190,6 +197,7 @@ typedef struct {
     Arena *arena;
     Array(LirFunction *) functions;
     Array(LirGlobal) globals;
+    Array(LirString) strings;
 } LirModule;
 
 LirModule *lir_module_create(Arena *arena);

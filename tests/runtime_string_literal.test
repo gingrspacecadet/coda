@@ -1,0 +1,26 @@
+name: runtime string literal
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@extern
+fn int64 write(int64 fd, uint8* data, uint64 count);
+
+uint8[] greeting = "hello\n";
+
+fn int64 main() {
+    uint8[] local = "Coda\n";
+    write(1, greeting.ptr, greeting.len);
+    write(1, local.ptr, local.len);
+    return 0;
+}
+
+[stdout]
+hello
+Coda
+
+[stderr]
+
+[exit]
+0

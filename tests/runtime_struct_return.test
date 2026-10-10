@@ -1,0 +1,34 @@
+name: runtime struct return
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Pair = struct {
+    int64 x;
+    int64 y;
+};
+
+fn Pair make_pair(int64 x, int64 y) {
+    return {x, y};
+}
+
+fn int64 main() {
+    Pair value = make_pair(17, 25);
+    if (value.x != 17) return 1;
+    if (value.y != 25) return 2;
+
+    mut Pair changed = make_pair(31, 47);
+    changed.y = 99;
+    if (changed.x != 31) return 3;
+    if (changed.y != 99) return 4;
+
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

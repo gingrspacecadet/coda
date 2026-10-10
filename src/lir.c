@@ -38,6 +38,7 @@ LirModule *lir_module_create(Arena *arena) {
     module->arena = arena;
     module->functions = array_create(arena, sizeof(LirFunction *));
     module->globals = array_create(arena, sizeof(LirGlobal));
+    module->strings = array_create(arena, sizeof(LirString));
 
     return module;
 }

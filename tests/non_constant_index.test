@@ -27,26 +27,32 @@ fn none set_constant(mut Values values, int64 value) {
 }
 
 [lir]
+[lir]
 get:
     block0(%0, %1):
         %2 = mul %1, 8
-        %3 = extract_dynamic %0, %2
-        return %3
+        %3 = add %2, 8
+        %4 = extract_dynamic %0, %3
+        return %4
 
 set2:
     block0(%0, %1, %2, %3):
         %4 = mul %1, 40
-        %5 = extract_dynamic %0, %4
-        %6 = mul %2, 8
-        %7 = insert_dynamic %5, %6, %3
-        %8 = mul %1, 40
-        %9 = insert_dynamic %0, %8, %7
+        %5 = add %4, 8
+        %6 = extract_dynamic %0, %5
+        %7 = mul %2, 8
+        %8 = add %7, 8
+        %9 = insert_dynamic %6, %8, %3
+        %10 = mul %1, 40
+        %11 = add %10, 8
+        %12 = insert_dynamic %0, %11, %9
         return
 
 set:
     block0(%0, %1, %2):
         %3 = mul %1, 8
-        %4 = insert_dynamic %0, %3, %2
+        %4 = add %3, 8
+        %5 = insert_dynamic %0, %4, %2
         return
 
 set_constant:

@@ -1,0 +1,59 @@
+name: runtime string literal edge cases
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@extern
+fn int64 write(int64 fd, uint8* data, uint64 count);
+
+fn int64 main() {
+    uint64 zero = 0;
+    uint64 one = 1;
+    uint64 two = 2;
+    uint64 three = 3;
+
+    uint8 a = 97;
+    uint8 b = 98;
+    uint8 nul = 0;
+    uint8 quote_char = 34;
+    uint8 backslash_char = 92;
+    uint8 utf8_first = 195;
+    uint8 utf8_second = 169;
+
+    uint8[] empty = "";
+    if (empty.len != zero) return 1;
+
+    uint8[] embedded_nul = "a\0b";
+    if (embedded_nul.len != three) return 2;
+    if (embedded_nul[zero] != a) return 3;
+    if (embedded_nul[one] != nul) return 4;
+    if (embedded_nul[two] != b) return 5;
+
+    uint8[] quoted = "a\"b";
+    if (quoted.len != three) return 6;
+    if (quoted[one] != quote_char) return 7;
+
+    uint8[] backslash = "a\\b";
+    if (backslash.len != three) return 8;
+    if (backslash[one] != backslash_char) return 9;
+
+    uint8[] utf8 = "é";
+    if (utf8.len != two) return 10;
+    if (utf8[zero] != utf8_first) return 11;
+    if (utf8[one] != utf8_second) return 12;
+
+    uint8[] first = "same";
+    uint8[] second = "same";
+    write(1, first.ptr, first.len);
+    write(1, second.ptr, second.len);
+
+    return 0;
+}
+
+[stdout]
+samesame
+[stderr]
+
+[exit]
+0

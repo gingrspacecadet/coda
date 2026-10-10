@@ -1,0 +1,9 @@
+name: reject out-of-bounds array index
+expect: fail
+errors: 1
+
+[source]
+fn int64 main() {
+    int64[3] values = {10, 20, 30};
+    return values[3];
+}

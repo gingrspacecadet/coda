@@ -1,0 +1,27 @@
+name: runtime dynamic array index
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 get(int64[3] values, uint64 index) {
+    return values[index];
+}
+
+fn int64 main() {
+    int64[3] values = {10, 20, 30};
+    mut uint64 index = 2;
+
+    if (get(values, index) != 30) return 1;
+    index = 0;
+    if (get(values, index) != 10) return 2;
+
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

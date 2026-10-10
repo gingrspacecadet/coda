@@ -959,9 +959,14 @@ static void emit_global(FILE *out, const LirGlobal *global) {
 
             case LIR_DATA_BYTES:
                 for (size_t j = 0; j < data->bytes.length; j++)
-                    fprintf(out, "    .byte %u\n", data->bytes.data[j]);
+                    fprintf(out, "    .byte %u\n", (unsigned char)data->bytes.data[j]);
 
                 offset = data->offset + data->bytes.length;
+                break;
+
+            case LIR_DATA_ADDRESS:
+                fprintf(out, "    .quad %.*s\n", (int)data->symbol->name.ident.length, data->symbol->name.ident.data);
+                offset = data->offset + type_size(data->type);
                 break;
         }
     }
@@ -970,6 +975,21 @@ static void emit_global(FILE *out, const LirGlobal *global) {
         fprintf(out, "    .zero %zu\n", type_size(global->type) - offset);
 
     fprintf(out, ".size %.*s, %zu\n", (int)name.length, name.data, type_size(global->type));
+}
+
+static void emit_string(FILE *out, const LirString *string) {
+    String name = string->symbol->name.ident;
+
+    fprintf(out, "\n.section .rodata\n.balign 1\n%.*s:\n", (int)name.length, name.data);
+
+    if (string->bytes.length == 0) {
+        fprintf(out, "    .zero 1\n");
+    } else {
+        for (size_t i = 0; i < string->bytes.length; i++)
+            fprintf(out, "    .byte %u\n", (unsigned char)string->bytes.data[i]);
+    }
+
+    fprintf(out, ".size %.*s, %zu\n", (int)name.length, name.data, string->bytes.length);
 }
 
 static bool emit(Backend *backend, const TargetInfo *target, const LirModule *module, FILE *output) {
@@ -982,6 +1002,9 @@ static bool emit(Backend *backend, const TargetInfo *target, const LirModule *mo
 
     for (size_t i = 0; i < module->globals.len; i++)
         emit_global(output, &((LirGlobal *)module->globals.data)[i]);
+
+    for (size_t i = 0; i < module->strings.len; i++)
+        emit_string(output, &((LirString *)module->strings.data)[i]);
 
     for (size_t i = 0; i < module->functions.len; i++) {
         const LirFunction *function = ((LirFunction **)module->functions.data)[i];

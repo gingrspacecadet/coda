@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 
 #include "lir_lower.h"
 
@@ -19,6 +20,7 @@ typedef struct {
 } LirLoop;
 
 typedef struct {
+    LirModule *module;
     LirFunction *function;
     LirBlockId block;
 
@@ -222,7 +224,27 @@ static bool hir_type_is_integer(HirType *type) {
     return false;
 }
 
-static LirOperand lir_lower_literal(HirExpr *expr) {
+static Symbol *lir_add_string(LirModule *module, String bytes) {
+    char *name = arena_alloc(module->arena, 64);
+    int name_length = snprintf(name, 64, ".L_coda_string_%zu", module->strings.len);
+    assert(name_length > 0 && name_length < 64);
+
+    Symbol *symbol = arena_calloc(module->arena, sizeof(*symbol));
+    *symbol = (Symbol) {
+        .kind = SYMBOL_GLOBAL,
+        .name = {
+            .kind = AST_NAME_IDENT,
+            .ident = {.data = name, .length = (size_t)name_length},
+        },
+    };
+
+    LirString string = {.symbol = symbol, .bytes = bytes};
+    array_push(&module->strings, &string);
+
+    return symbol;
+}
+
+static LirOperand lir_lower_literal(LirLower *lower, HirExpr *expr) {
     HirLiteral literal = expr->literal;
 
     switch (literal.kind) {
@@ -242,9 +264,29 @@ static LirOperand lir_lower_literal(HirExpr *expr) {
         case HIR_LITERAL_NULL:
             return lir_operand_uint(0, expr->type);
 
-        case HIR_LITERAL_STRING:
-            assert(!"string literals are not lowered yet");
-            return lir_operand_invalid();
+        case HIR_LITERAL_STRING: {
+            HirType *type = expr->type;
+            assert(type != NULL && type->kind == HIR_TYPE_SLICE && type->slice.fields.len == 2);
+
+            HirField *length_field = &((HirField *)type->slice.fields.data)[0];
+            HirField *pointer_field = &((HirField *)type->slice.fields.data)[1];
+            Symbol *symbol = lir_add_string(lower->module, literal.string);
+
+            LirOperand symbol_operand = lir_operand_symbol(symbol, pointer_field->type);
+            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_field->type, (Array){.data = &symbol_operand, .len = 1});
+            LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, type, (Array){0});
+            LirOperand aggregate = lir_operand_value(zero, type);
+            LirOperand length = lir_operand_uint((uint64_t)literal.string.length, length_field->type);
+            LirOperand length_operands[3] = {aggregate, lir_operand_offset(length_field->offset), length};
+            LirValueId with_length = lir_emit(lower->function, lower->block, LIR_OP_INSERT, type, (Array){.data = length_operands, .len = 3});
+            aggregate = lir_operand_value(with_length, type);
+
+            LirOperand pointer = lir_operand_value(address, pointer_field->type);
+            LirOperand pointer_operands[3] = {aggregate, lir_operand_offset(pointer_field->offset), pointer};
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, type, (Array){.data = pointer_operands, .len = 3});
+
+            return lir_operand_value(result, type);
+        }
     }
 
     assert(!"unhandled HIR literal");
@@ -335,10 +377,13 @@ static LirOperand lir_lower_init(LirLower *lower, HirExpr *expr) {
     return aggregate;
 }
 
+static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr);
+static LirOperand lir_lower_array_aggregate_offset(LirLower *lower, HirExpr *expr);
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
-            return lir_lower_literal(expr);
+            return lir_lower_literal(lower, expr);
 
         case HIR_EXPR_VALUE: {
             Symbol *symbol = expr->value.symbol;
@@ -493,7 +538,6 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
 
         case HIR_EXPR_INDEX: {
             HirExpr *object = expr->index.object;
-            HirExpr *index = expr->index.index;
 
             if (object->type->kind == HIR_TYPE_ARRAY && lir_expr_is_ssa(lower, object)) {
                 size_t offset;
@@ -506,8 +550,7 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 }
 
                 LirOperand aggregate = lir_lower_expr(lower, object);
-                LirOperand index_operand = lir_lower_expr(lower, index);
-                LirOperand lir_offset = lir_lower_scaled_index(lower, index_operand, object->type->array.element->size);
+                LirOperand lir_offset = lir_lower_array_aggregate_offset(lower, expr);
 
                 LirOperand extract_operands[2] = {aggregate, lir_offset};
                 LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT_DYNAMIC, expr->type, (Array){.data = extract_operands, .len = 2});
@@ -605,8 +648,6 @@ static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value) {
 
     lir_emit(lower->function, lower->block, LIR_OP_STORE, NULL, (Array){.data = operands, .len = 2});
 }
-
-static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr);
 
 static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
@@ -988,6 +1029,9 @@ static HirExpr *lir_field_root(HirExpr *expr) {
 
 static bool lir_expr_is_ssa(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
+        case HIR_EXPR_LITERAL:
+            return expr->literal.kind == HIR_LITERAL_STRING;
+
         case HIR_EXPR_VALUE:
             return (expr->value.symbol->kind == SYMBOL_LOCAL || expr->value.symbol->kind == SYMBOL_PARAMETER) &&
                    lir_find_address(lower, expr->value.symbol) == NULL;
@@ -1011,9 +1055,30 @@ static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr) {
 
     HirExpr *index = expr->index.index;
     LirOperand index_operand = lir_lower_expr(lower, index);
-    HirType *element_type = expr->type;
 
-    return lir_lower_scaled_index(lower, index_operand, element_type->size);
+    return lir_lower_scaled_index(lower, index_operand, expr->type->size);
+}
+
+static LirOperand lir_lower_array_aggregate_offset(LirLower *lower, HirExpr *expr) {
+    size_t constant_offset;
+
+    if (lir_constant_array_offset(expr, &constant_offset))
+        return lir_operand_offset(constant_offset);
+
+    HirType *array_type = expr->index.object->type;
+    assert(array_type->kind == HIR_TYPE_ARRAY);
+
+    LirOperand index = lir_lower_expr(lower, expr->index.index);
+    LirOperand offset = lir_lower_scaled_index(lower, index, expr->type->size);
+    size_t data_offset = array_data_offset(array_type);
+
+    LirOperand base_offset = hir_type_is_signed_integer(index.type)
+        ? lir_operand_int((int64_t)data_offset, index.type)
+        : lir_operand_uint((uint64_t)data_offset, index.type);
+    LirOperand operands[2] = {offset, base_offset};
+
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADD, index.type, (Array){.data = operands, .len = 2});
+    return lir_operand_value(result, index.type);
 }
 
 static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *target, LirOperand value) {
@@ -1039,7 +1104,7 @@ static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *target, Li
         case HIR_EXPR_INDEX: {
             object = target->index.object;
             aggregate = lir_lower_expr(lower, object);
-            offset = lir_lower_array_offset(lower, target);
+            offset = lir_lower_array_aggregate_offset(lower, target);
 
             bool constant = offset.kind == LIR_OPERAND_OFFSET;
 
@@ -1346,6 +1411,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
     lir_collect_address_taken_stmt(&address_taken, hir->body);
 
     LirLower lower = {
+        .module = module,
         .function = function,
         .bindings = array_create(module->arena, sizeof(LirBinding)),
         .addresses = array_create(module->arena, sizeof(LirBinding)),
@@ -1388,7 +1454,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
         lir_lower_stmt(&lower, hir->body);
 }
 
-static void lir_collect_static_data(Array(LirData) *data, HirExpr *expr, size_t base_offset) {
+static void lir_collect_static_data(LirModule *module, Array(LirData) *data, HirExpr *expr, size_t base_offset) {
     if (expr == NULL)
         return;
 
@@ -1427,13 +1493,33 @@ static void lir_collect_static_data(Array(LirData) *data, HirExpr *expr, size_t 
                 case HIR_LITERAL_NULL:
                     return;
 
-                case HIR_LITERAL_STRING:
-                    if (expr->literal.string.length == 0)
-                        return;
+                case HIR_LITERAL_STRING: {
+                    HirType *type = expr->type;
+                    assert(type != NULL && type->kind == HIR_TYPE_SLICE && type->slice.fields.len == 2);
 
-                    value.kind = LIR_DATA_BYTES;
-                    value.bytes = expr->literal.string;
-                    break;
+                    HirField *length_field = &((HirField *)type->slice.fields.data)[0];
+                    HirField *pointer_field = &((HirField *)type->slice.fields.data)[1];
+                    Symbol *symbol = lir_add_string(module, expr->literal.string);
+
+                    if (expr->literal.string.length != 0) {
+                        LirData length = {
+                            .offset = base_offset + length_field->offset,
+                            .type = length_field->type,
+                            .kind = LIR_DATA_INTEGER,
+                            .integer = (uint64_t)expr->literal.string.length,
+                        };
+                        array_push(data, &length);
+                    }
+
+                    LirData address = {
+                        .offset = base_offset + pointer_field->offset,
+                        .type = pointer_field->type,
+                        .kind = LIR_DATA_ADDRESS,
+                        .symbol = symbol,
+                    };
+                    array_push(data, &address);
+                    return;
+                }
 
                 case HIR_LITERAL_ERROR:
                     assert(!"error literal reached LIR");
@@ -1447,7 +1533,7 @@ static void lir_collect_static_data(Array(LirData) *data, HirExpr *expr, size_t 
             for (size_t i = 0; i < expr->init.fields.len; i++) {
                 HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
 
-                lir_collect_static_data(data, field->value, base_offset + field->offset);
+                lir_collect_static_data(module, data, field->value, base_offset + field->offset);
             }
 
             return;
@@ -1469,7 +1555,7 @@ static void lir_lower_global(LirModule *module, HirGlobal *hir) {
         .is_export = hir->is_export,
     };
 
-    lir_collect_static_data(&global.data, hir->init, 0);
+    lir_collect_static_data(module, &global.data, hir->init, 0);
     array_push(&module->globals, &global);
 }
 
