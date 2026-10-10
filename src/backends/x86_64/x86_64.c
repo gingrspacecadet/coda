@@ -816,9 +816,22 @@ static void emit_block_args(X86Function *function, LirBlockId block_id, Array(Li
     for (size_t i = 0; i < args.len; i++) {
         LirBlockParam *param = &((LirBlockParam *)block->params.data)[i];
         LirOperand *operand = &((LirOperand *)args.data)[i];
+        size_t size = type_size(param->type);
 
-        load_operand(function, operand, X86_RAX);
-        store_register(function, X86_RAX, param->value, type_size(param->type));
+        if (size == 0)
+            continue;
+
+        if (size > 8) {
+            assert(operand->kind == LIR_OPERAND_VALUE);
+
+            X86Slot *source = slot(function, operand->value);
+            X86Slot *destination = slot(function, param->value);
+
+            emit_copy_stack(function, destination, source, size);
+        } else {
+            load_operand(function, operand, X86_RAX);
+            store_register(function, X86_RAX, param->value, size);
+        }
     }
 }
 

@@ -35,6 +35,93 @@ static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     return false;
 }
 
+static HirExpr *sema_array_to_slice(Sema *sema, HirExpr *expr, HirType *type) {
+    HirType *array_type = expr->type;
+
+    if (array_type->kind != HIR_TYPE_ARRAY ||
+        type->kind != HIR_TYPE_SLICE ||
+        !type_equal(array_type->array.element, type->slice.element) ||
+        (type->mutable && !array_type->mutable))
+        return NULL;
+
+    assert(type->slice.fields.len == 2);
+
+    HirField *length_field = &((HirField *)type->slice.fields.data)[0];
+    HirField *pointer_field = &((HirField *)type->slice.fields.data)[1];
+
+    HirExpr *length = arena_calloc(sema->arena, sizeof(*length));
+    *length = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_LITERAL,
+        .type = length_field->type,
+        .literal = {
+            .kind = HIR_LITERAL_INTEGER,
+            .integer = array_type->array.length,
+        },
+    };
+
+    HirExpr *index = arena_calloc(sema->arena, sizeof(*index));
+    *index = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_LITERAL,
+        .type = builtin_type(sema, BUILTIN_UINT64),
+        .literal = {
+            .kind = HIR_LITERAL_INTEGER,
+            .integer = 0,
+        },
+    };
+
+    HirType *element_type = type_with_mutability(sema, array_type->array.element, array_type->mutable);
+
+    HirExpr *element = arena_calloc(sema->arena, sizeof(*element));
+    *element = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_INDEX,
+        .type = element_type,
+        .index = {
+            .object = expr,
+            .index = index,
+        },
+    };
+
+    HirExpr *pointer = arena_calloc(sema->arena, sizeof(*pointer));
+    *pointer = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_UNARY,
+        .type = pointer_type(sema, element_type, false),
+        .unary = {
+            .op = AST_UNARY_ADDRESS,
+            .operand = element,
+        },
+    };
+
+    HirExpr *slice = arena_calloc(sema->arena, sizeof(*slice));
+    *slice = (HirExpr) {
+        .span = expr->span,
+        .kind = HIR_EXPR_INIT,
+        .type = type,
+        .init = {
+            .fields = array_create(sema->arena, sizeof(HirInitField)),
+        },
+    };
+
+    HirInitField length_init = {
+        .field = length_field,
+        .offset = length_field->offset,
+        .value = length,
+    };
+
+    HirInitField pointer_init = {
+        .field = pointer_field,
+        .offset = pointer_field->offset,
+        .value = pointer,
+    };
+
+    array_push(&slice->init.fields, &length_init);
+    array_push(&slice->init.fields, &pointer_init);
+
+    return slice;
+}
 
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr == NULL || type == NULL)
@@ -44,10 +131,15 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
         return expr;
 
     if (expr->type != NULL) {
-        bool equal = type_equal(expr->type, type);
-
-        if (equal)
+        if (type_equal(expr->type, type))
             return expr;
+
+        if (expr->type->kind == HIR_TYPE_ARRAY && type->kind == HIR_TYPE_SLICE) {
+            HirExpr *slice = sema_array_to_slice(sema, expr, type);
+
+            if (slice != NULL)
+                return slice;
+        }
 
         error_type_mismatch(sema->diags, type, expr->type, expr->span);
         return NULL;

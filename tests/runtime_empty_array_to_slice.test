@@ -1,0 +1,25 @@
+name: empty array to slice conversion
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 size(int64[] values, uint64 expected) {
+    if (values.len != expected) return 9;
+    return 17;
+}
+
+fn int64 main() {
+    int64[0] empty = {};
+    int64[] view = empty;
+
+    if (view.len != empty.len) return 1;
+    return size(empty, empty.len);
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+17

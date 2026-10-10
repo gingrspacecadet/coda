@@ -285,7 +285,7 @@ static bool lir_constant_array_offset(HirExpr *expr, size_t *offset) {
 
     uint64_t value = index->literal.integer;
 
-    assert(value < type->array.length);
+    assert(value < type->array.length || (type->array.length == 0 && value == 0));
     assert(value <= SIZE_MAX);
 
     HirType *element = type->array.element;
