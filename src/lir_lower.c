@@ -741,7 +741,6 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
             break;
         }
     }
-    fprintf(stderr, "lir_lower_place: kind=%d type=%p\n", expr->kind, (void *)expr->type);
     assert(!"expression is not an lvalue");
     return (LirPlace){0};
 }

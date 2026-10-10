@@ -43,36 +43,15 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr->kind == HIR_EXPR_ERROR)
         return expr;
 
-if (expr->type != NULL) {
-    bool equal = type_equal(expr->type, type);
+    if (expr->type != NULL) {
+        bool equal = type_equal(expr->type, type);
 
-    if (!equal) {
-        fprintf(stderr, "expected: %p kind=%d mutable=%d\n",
-            (void *)type, type->kind, type->mutable);
-        fprintf(stderr, "actual:   %p kind=%d mutable=%d\n",
-            (void *)expr->type, expr->type->kind, expr->type->mutable);
+        if (equal)
+            return expr;
 
-        if (type->kind == HIR_TYPE_POINTER)
-            fprintf(stderr, "expected pointer: optional=%d pointee=%p pointee-kind=%d pointee-mutable=%d\n",
-                type->pointer.optional,
-                (void *)type->pointer.pointee,
-                type->pointer.pointee->kind,
-                type->pointer.pointee->mutable);
-
-        if (expr->type->kind == HIR_TYPE_POINTER)
-            fprintf(stderr, "actual pointer:   optional=%d pointee=%p pointee-kind=%d pointee-mutable=%d\n",
-                expr->type->pointer.optional,
-                (void *)expr->type->pointer.pointee,
-                expr->type->pointer.pointee->kind,
-                expr->type->pointer.pointee->mutable);
+        error_type_mismatch(sema->diags, type, expr->type, expr->span);
+        return NULL;
     }
-
-    if (equal)
-        return expr;
-
-    error_type_mismatch(sema->diags, type, expr->type, expr->span);
-    return NULL;
-}
 
     if (expr->kind != HIR_EXPR_LITERAL) {
         //! TODO: expression has no type
