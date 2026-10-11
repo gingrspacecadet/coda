@@ -20,6 +20,8 @@ static String sema_type_string(Arena *arena, HirType *type) {
                 case BUILTIN_INT64:  return STRING("int64");
                 case BUILTIN_BOOL:   return STRING("bool");
                 case BUILTIN_NONE:   return STRING("none");
+                case BUILTIN_FLOAT32: return STRING("float32");
+                case BUILTIN_FLOAT64: return STRING("float64");
             }
             break;
 

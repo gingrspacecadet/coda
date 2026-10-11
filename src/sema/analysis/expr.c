@@ -10,6 +10,33 @@ static HirType *sema_unwrap_type(HirType *type) {
     return type;
 }
 
+static bool sema_type_is_float(HirType *type) {
+    type = sema_unwrap_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
+}
+
+static bool sema_retype_float_literal(AstExpr *ast, HirExpr *expr, HirType *type) {
+    if (ast == NULL || expr == NULL || !sema_type_is_float(type))
+        return false;
+
+    if (ast->kind == AST_EXPR_UNARY && expr->kind == HIR_EXPR_UNARY &&
+        (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) &&
+        sema_retype_float_literal(ast->unary.operand, expr->unary.operand, type)) {
+        expr->type = type;
+        return true;
+    }
+
+    if (ast->kind != AST_EXPR_LITERAL ||
+        (ast->literal.kind != AST_LIT_INTEGER && ast->literal.kind != AST_LIT_FLOAT) ||
+        expr->kind != HIR_EXPR_LITERAL ||
+        (expr->literal.kind != HIR_LITERAL_INTEGER && expr->literal.kind != HIR_LITERAL_FLOAT))
+        return false;
+
+    expr->type = type;
+    return true;
+}
+
 static bool sema_is_byte_slice(HirType *type) {
     if (type == NULL || type->mutable)
         return false;
@@ -26,6 +53,11 @@ static bool sema_is_byte_slice(HirType *type) {
 }
 
 static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
+    if (type == NULL)
+        return false;
+
+    type = sema_unwrap_type(type);
+
     if (literal->kind == HIR_LITERAL_NULL)
         return type->kind == HIR_TYPE_POINTER &&
                type->pointer.optional;
@@ -39,11 +71,11 @@ static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     switch (literal->kind) {
         case HIR_LITERAL_INTEGER:
             //! TODO: integer range check
-            return true;
+            return is_integer(type) || type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64;
 
         case HIR_LITERAL_FLOAT:
             //! TODO: float range / precision check
-            return true;
+            return type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64;
 
         case HIR_LITERAL_BOOL:
             return type->builtin == BUILTIN_BOOL;
@@ -226,6 +258,28 @@ static bool binop_is_comparison(AstBinaryOp op) {
 
 static HirType *binop_type(Sema *sema, AstBinaryOp op, HirExpr *left, HirExpr *right, HirType *expected) {
     if (left->type != NULL && right->type != NULL) {
+        if (sema_type_is_float(left->type) || sema_type_is_float(right->type)) {
+            if (!sema_type_is_float(left->type) || !sema_type_is_float(right->type) || !type_equal(left->type, right->type))
+                return NULL;
+
+            switch (op) {
+                case AST_BINARY_ADD:
+                case AST_BINARY_SUB:
+                case AST_BINARY_MUL:
+                case AST_BINARY_DIV:
+                case AST_BINARY_LT:
+                case AST_BINARY_LTE:
+                case AST_BINARY_GT:
+                case AST_BINARY_GTE:
+                case AST_BINARY_EQUAL:
+                case AST_BINARY_NOT_EQUAL:
+                    return left->type;
+
+                default:
+                    return NULL;
+            }
+        }
+
         if (binop_is_comparison(op) && is_pointer(left->type) && is_pointer(right->type)) {
             if (!type_equal(left->type->pointer.pointee, right->type->pointer.pointee))
                 return NULL;
@@ -356,8 +410,10 @@ static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     switch (op) {
         case AST_UNARY_POS:
         case AST_UNARY_NEG:
-        case AST_UNARY_BIT_NOT:
             return operand->type;
+
+        case AST_UNARY_BIT_NOT:
+            return sema_type_is_float(operand->type) ? NULL : operand->type;
 
         case AST_UNARY_NOT:
             if (operand->type->kind != HIR_TYPE_BUILTIN ||
@@ -860,6 +916,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     hir->type = builtin_type(sema, BUILTIN_INT64);
                     break;
 
+                case HIR_LITERAL_FLOAT:
+                    hir->type = builtin_type(sema, BUILTIN_FLOAT64);
+                    break;
+
                 case HIR_LITERAL_STRING:
                     hir->type = sema_string_literal_type(sema, ast->span);
                     break;
@@ -924,7 +984,9 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->kind = HIR_EXPR_UNARY;
             hir->unary.op = ast->unary.op;
 
-            HirExpr *operand = sema_expr(sema, ast->unary.operand, NULL);
+            HirType *operand_expected = sema_type_is_float(expected) &&
+                (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) ? expected : NULL;
+            HirExpr *operand = sema_expr(sema, ast->unary.operand, operand_expected);
 
             if (operand == NULL || operand->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_EXPR_ERROR;
@@ -955,6 +1017,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             HirExpr *left = sema_expr(sema, ast->binary.left, NULL);
 
             HirExpr *right = sema_expr(sema, ast->binary.right, NULL);
+
+            sema_retype_float_literal(ast->binary.left, left, expected);
+            sema_retype_float_literal(ast->binary.right, right, expected);
+            if (sema_type_is_float(left != NULL ? left->type : NULL))
+                sema_retype_float_literal(ast->binary.right, right, left->type);
+            if (sema_type_is_float(right != NULL ? right->type : NULL))
+                sema_retype_float_literal(ast->binary.left, left, right->type);
 
             HirType *operand_type = binop_type(sema, ast->binary.op, left, right, expected);
 

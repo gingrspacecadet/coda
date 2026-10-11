@@ -1,0 +1,31 @@
+name: float32 and float64 comparisons
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    float64 one = 1.0;
+    float64 two = 2.0;
+    if (!(one < two)) return 1;
+    if (!(one <= two)) return 2;
+    if (!(two > one)) return 3;
+    if (!(two >= one)) return 4;
+    if (!(one == one)) return 5;
+    if (!(one != two)) return 6;
+    if (one == two) return 7;
+    if (one != one) return 8;
+
+    float32 small = 1.0;
+    float32 large = 2.0;
+    if (!(small < large)) return 9;
+    if (!(large > small)) return 10;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

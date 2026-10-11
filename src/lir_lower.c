@@ -193,6 +193,8 @@ static bool hir_type_is_signed_integer(HirType *type) {
         case BUILTIN_UINT64:
         case BUILTIN_BOOL:
         case BUILTIN_NONE:
+        case BUILTIN_FLOAT32:
+        case BUILTIN_FLOAT64:
             return false;
     }
 
@@ -217,6 +219,8 @@ static bool hir_type_is_integer(HirType *type) {
 
         case BUILTIN_BOOL:
         case BUILTIN_NONE:
+        case BUILTIN_FLOAT32:
+        case BUILTIN_FLOAT64:
             return false;
     }
 

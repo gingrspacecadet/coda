@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "x86_64.h"
 
@@ -80,11 +81,19 @@ static bool type_is_signed(HirType *type) {
         case BUILTIN_UINT64:
         case BUILTIN_BOOL:
         case BUILTIN_NONE:
+        case BUILTIN_FLOAT32:
+        case BUILTIN_FLOAT64:
             return false;
     }
 
     assert(!"unhandled builtin type");
     return false;
+}
+
+static bool type_is_float(HirType *type) {
+    type = base_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
 }
 
 static const char *reg_name(X86Reg reg, size_t size) {
@@ -250,6 +259,7 @@ static void emit_zero(X86Function *function, const LirInstruction *instruction) 
 }
 
 static void load_operand(X86Function *function, const LirOperand *operand, X86Reg reg);
+static void load_float_operand(X86Function *function, const LirOperand *operand, const char *reg);
 
 static void emit_insert(X86Function *function, const LirInstruction *instruction, bool dynamic) {
     LirOperand *operands = instruction->operands.data;
@@ -276,10 +286,12 @@ static void emit_insert(X86Function *function, const LirInstruction *instruction
 
     if (value_size > 8) {
         assert(value->kind == LIR_OPERAND_VALUE);
-
         X86Slot *value_slot = slot(function, value->value);
         fprintf(function->out, "    lea rsi, [rbp%ld]\n", value_slot->offset);
         emit_copy_memory(function, X86_RDI, X86_RSI, value_size);
+    } else if (type_is_float(value->type)) {
+        load_float_operand(function, value, "xmm0");
+        fprintf(function->out, value_size == 4 ? "    movss dword ptr [rdi], xmm0\n" : "    movsd qword ptr [rdi], xmm0\n");
     } else {
         load_operand(function, value, X86_RAX);
         emit_memory_store(function, X86_RDI, X86_RAX, value_size);
@@ -374,9 +386,59 @@ static void store_register(X86Function *function, X86Reg reg, LirValueId value, 
     fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
 }
 
+static void load_float_operand(X86Function *function, const LirOperand *operand, const char *reg) {
+    size_t size = type_size(operand->type);
+    assert(size == 4 || size == 8);
+
+    if (operand->kind == LIR_OPERAND_VALUE) {
+        X86Slot *s = slot(function, operand->value);
+        fprintf(function->out, size == 4 ? "    movss %s, dword ptr [rbp%ld]\n" : "    movsd %s, qword ptr [rbp%ld]\n", reg, s->offset);
+        return;
+    }
+
+    double value;
+    switch (operand->kind) {
+        case LIR_OPERAND_FLOAT: value = operand->float_value; break;
+        case LIR_OPERAND_INT: value = (double)operand->int_value; break;
+        case LIR_OPERAND_UINT: value = (double)operand->uint_value; break;
+        case LIR_OPERAND_BOOL: value = operand->bool_value ? 1.0 : 0.0; break;
+        default: assert(!"unsupported floating-point operand"); return;
+    }
+
+    if (size == 4) {
+        float narrowed = (float)value;
+        uint32_t bits;
+        memcpy(&bits, &narrowed, sizeof(bits));
+        fprintf(function->out, "    mov eax, 0x%08" PRIx32 "\n", bits);
+        fprintf(function->out, "    movd %s, eax\n", reg);
+    } else {
+        uint64_t bits;
+        memcpy(&bits, &value, sizeof(bits));
+        fprintf(function->out, "    mov rax, 0x%016" PRIx64 "\n", bits);
+        fprintf(function->out, "    movq %s, rax\n", reg);
+    }
+}
+
+static void store_float_register(X86Function *function, const char *reg, LirValueId value, size_t size) {
+    X86Slot *s = slot(function, value);
+    assert(size == 4 || size == 8);
+    fprintf(function->out, size == 4 ? "    movss dword ptr [rbp%ld], %s\n" : "    movsd qword ptr [rbp%ld], %s\n", s->offset, reg);
+}
+
 static void emit_unary(X86Function *function, const LirInstruction *instruction) {
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
     size_t size = type_size(instruction->result_type);
+
+    if (instruction->opcode == LIR_OP_NEG && type_is_float(instruction->result_type)) {
+        load_float_operand(function, operand, "xmm0");
+        if (size == 4) {
+            fprintf(function->out, "    movd eax, xmm0\n    btc eax, 31\n    movd xmm0, eax\n");
+        } else {
+            fprintf(function->out, "    movq rax, xmm0\n    btc rax, 63\n    movq xmm0, rax\n");
+        }
+        store_float_register(function, "xmm0", instruction->result, size);
+        return;
+    }
 
     load_operand(function, operand, X86_RAX);
 
@@ -400,11 +462,25 @@ static void emit_unary(X86Function *function, const LirInstruction *instruction)
 static void emit_binary(X86Function *function, const LirInstruction *instruction, const char *opcode) {
     LirOperand *operands = instruction->operands.data;
 
+    if (type_is_float(instruction->result_type)) {
+        size_t size = type_size(instruction->result_type);
+        load_float_operand(function, &operands[0], "xmm0");
+        load_float_operand(function, &operands[1], "xmm1");
+        const char *float_opcode = NULL;
+        switch (instruction->opcode) {
+            case LIR_OP_ADD: float_opcode = size == 4 ? "addss" : "addsd"; break;
+            case LIR_OP_SUB: float_opcode = size == 4 ? "subss" : "subsd"; break;
+            case LIR_OP_MUL: float_opcode = size == 4 ? "mulss" : "mulsd"; break;
+            default: assert(!"invalid floating-point binary opcode"); return;
+        }
+        fprintf(function->out, "    %s xmm0, xmm1\n", float_opcode);
+        store_float_register(function, "xmm0", instruction->result, size);
+        return;
+    }
+
     load_operand(function, &operands[0], X86_RAX);
     load_operand(function, &operands[1], X86_RCX);
-
     fprintf(function->out, "    %s rax, rcx\n", opcode);
-
     store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
 }
 
@@ -426,40 +502,53 @@ static void emit_shift(X86Function *function, const LirInstruction *instruction)
 
 static void emit_compare(X86Function *function, const LirInstruction *instruction) {
     LirOperand *operands = instruction->operands.data;
-    bool signed_ = type_is_signed(operands[0].type);
 
+    if (type_is_float(operands[0].type)) {
+        size_t size = type_size(operands[0].type);
+        load_float_operand(function, &operands[0], "xmm0");
+        load_float_operand(function, &operands[1], "xmm1");
+        fprintf(function->out, size == 4 ? "    ucomiss xmm0, xmm1\n" : "    ucomisd xmm0, xmm1\n");
+        switch (instruction->opcode) {
+            case LIR_OP_LT:
+                fprintf(function->out, "    setb al\n    setnp cl\n    and al, cl\n");
+                break;
+            case LIR_OP_LE:
+                fprintf(function->out, "    setbe al\n    setnp cl\n    and al, cl\n");
+                break;
+            case LIR_OP_GT:
+                fprintf(function->out, "    seta al\n");
+                break;
+            case LIR_OP_GE:
+                fprintf(function->out, "    setae al\n");
+                break;
+            case LIR_OP_EQ:
+                fprintf(function->out, "    sete al\n    setnp cl\n    and al, cl\n");
+                break;
+            case LIR_OP_NE:
+                fprintf(function->out, "    setne al\n    setp cl\n    or al, cl\n");
+                break;
+            default:
+                assert(!"invalid floating-point comparison opcode");
+                return;
+        }
+        fprintf(function->out, "    movzx eax, al\n");
+        store_register(function, X86_RAX, instruction->result, 1);
+        return;
+    }
+
+    bool signed_ = type_is_signed(operands[0].type);
     load_operand(function, &operands[0], X86_RAX);
     load_operand(function, &operands[1], X86_RCX);
-
     fprintf(function->out, "    cmp rax, rcx\n");
 
     switch (instruction->opcode) {
-        case LIR_OP_LT:
-            fprintf(function->out, signed_ ? "    setl al\n" : "    setb al\n");
-            break;
-
-        case LIR_OP_LE:
-            fprintf(function->out, signed_ ? "    setle al\n" : "    setbe al\n");
-            break;
-
-        case LIR_OP_GT:
-            fprintf(function->out, signed_ ? "    setg al\n" : "    seta al\n");
-            break;
-
-        case LIR_OP_GE:
-            fprintf(function->out, signed_ ? "    setge al\n" : "    setae al\n");
-            break;
-
-        case LIR_OP_EQ:
-            fprintf(function->out, "    sete al\n");
-            break;
-
-        case LIR_OP_NE:
-            fprintf(function->out, "    setne al\n");
-            break;
-
-        default:
-            assert(!"invalid comparison opcode");
+        case LIR_OP_LT: fprintf(function->out, signed_ ? "    setl al\n" : "    setb al\n"); break;
+        case LIR_OP_LE: fprintf(function->out, signed_ ? "    setle al\n" : "    setbe al\n"); break;
+        case LIR_OP_GT: fprintf(function->out, signed_ ? "    setg al\n" : "    seta al\n"); break;
+        case LIR_OP_GE: fprintf(function->out, signed_ ? "    setge al\n" : "    setae al\n"); break;
+        case LIR_OP_EQ: fprintf(function->out, "    sete al\n"); break;
+        case LIR_OP_NE: fprintf(function->out, "    setne al\n"); break;
+        default: assert(!"invalid comparison opcode");
     }
 
     fprintf(function->out, "    movzx eax, al\n");
@@ -503,6 +592,13 @@ static void emit_store(X86Function *function, const LirInstruction *instruction)
 
     if (size == 0)
         return;
+
+    if (type_is_float(operands[1].type)) {
+        load_float_operand(function, &operands[1], "xmm0");
+        load_operand(function, &operands[0], X86_RAX);
+        fprintf(function->out, size == 4 ? "    movss dword ptr [rax], xmm0\n" : "    movsd qword ptr [rax], xmm0\n");
+        return;
+    }
 
     load_operand(function, &operands[0], X86_RAX);
 
@@ -584,8 +680,18 @@ static void emit_cast(X86Function *function, const LirInstruction *instruction) 
 
 static void emit_division(X86Function *function, const LirInstruction *instruction) {
     LirOperand *operands = instruction->operands.data;
-    bool signed_ = type_is_signed(operands[0].type);
 
+    if (type_is_float(operands[0].type)) {
+        assert(instruction->opcode == LIR_OP_DIV);
+        size_t size = type_size(operands[0].type);
+        load_float_operand(function, &operands[0], "xmm0");
+        load_float_operand(function, &operands[1], "xmm1");
+        fprintf(function->out, size == 4 ? "    divss xmm0, xmm1\n" : "    divsd xmm0, xmm1\n");
+        store_float_register(function, "xmm0", instruction->result, size);
+        return;
+    }
+
+    bool signed_ = type_is_signed(operands[0].type);
     load_operand(function, &operands[0], X86_RAX);
     load_operand(function, &operands[1], X86_RCX);
 
@@ -846,6 +952,9 @@ static void emit_block_args(X86Function *function, LirBlockId block_id, Array(Li
             X86Slot *destination = slot(function, param->value);
 
             emit_copy_stack(function, destination, source, size);
+        } else if (type_is_float(param->type)) {
+            load_float_operand(function, operand, "xmm0");
+            store_float_register(function, "xmm0", param->value, size);
         } else {
             load_operand(function, operand, X86_RAX);
             store_register(function, X86_RAX, param->value, size);

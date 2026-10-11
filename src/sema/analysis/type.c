@@ -533,11 +533,13 @@ static void builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
             return;
         case BUILTIN_UINT32:
         case BUILTIN_INT32:
+        case BUILTIN_FLOAT32:
             *size = 4;
             *align = 4;
             return;
         case BUILTIN_UINT64:
         case BUILTIN_INT64:
+        case BUILTIN_FLOAT64:
             *size = 8;
             *align = 8;
             return;
@@ -580,6 +582,9 @@ void sema_insert_builtin_types(Sema *sema) {
     insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
     insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
     insert_builtin_type(sema, STRING("uint64"), BUILTIN_UINT64);
+
+    insert_builtin_type(sema, STRING("float32"), BUILTIN_FLOAT32);
+    insert_builtin_type(sema, STRING("float64"), BUILTIN_FLOAT64);
 
     insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
 

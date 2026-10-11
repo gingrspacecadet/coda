@@ -45,6 +45,8 @@ typedef enum {
     BUILTIN_INT64,
     BUILTIN_BOOL,
     BUILTIN_NONE,
+    BUILTIN_FLOAT32,
+    BUILTIN_FLOAT64,
 } BuiltinType;
 
 struct HirType {

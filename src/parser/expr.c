@@ -277,7 +277,9 @@ AstExpr *parse_expression_prefix(Parser *p) {
 
         AstType *type = parse_type(p);
 
-        if (type->kind != AST_TYPE_ERROR && match(p, TK_RPAREN)) {
+        if (p->diags->diags.len == cp.diagnostic_count &&
+            type->kind != AST_TYPE_ERROR &&
+            match(p, TK_RPAREN)) {
             AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
 
             expr->span = start.span;

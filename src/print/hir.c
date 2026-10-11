@@ -70,6 +70,8 @@ static const char *builtin_name(BuiltinType builtin) {
     case BUILTIN_INT64:  return "int64";
     case BUILTIN_BOOL:   return "bool";
     case BUILTIN_NONE:   return "none";
+    case BUILTIN_FLOAT32: return "float32";
+    case BUILTIN_FLOAT64: return "float64";
     }
 
     return "?";
