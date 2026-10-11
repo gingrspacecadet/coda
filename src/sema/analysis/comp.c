@@ -1123,7 +1123,7 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
         case HIR_EXPR_CALL: {
             HirFunction *function = find_function(context, expr->call.function);
 
-            if (function == NULL || !function->is_comptime)
+            if (function == NULL)
                 return expr;
 
             Array args = array_create(context->sema->arena, sizeof(HirExpr *));

@@ -160,6 +160,42 @@ static bool expr_is_static(HirExpr *expr) {
     }
 }
 
+static bool expr_contains_call(HirExpr *expr) {
+    if (expr == NULL)
+        return false;
+
+    switch (expr->kind) {
+        case HIR_EXPR_CALL:
+            return true;
+
+        case HIR_EXPR_UNARY:
+            return expr_contains_call(expr->unary.operand);
+
+        case HIR_EXPR_BINARY:
+            return expr_contains_call(expr->binary.left) || expr_contains_call(expr->binary.right);
+
+        case HIR_EXPR_INDEX:
+            return expr_contains_call(expr->index.object) || expr_contains_call(expr->index.index);
+
+        case HIR_EXPR_FIELD:
+            return expr_contains_call(expr->field.object);
+
+        case HIR_EXPR_CAST:
+            return expr_contains_call(expr->cast.operand);
+
+        case HIR_EXPR_INIT:
+            for (size_t i = 0; i < expr->init.fields.len; i++) {
+                HirInitField *field = &((HirInitField *)expr->init.fields.data)[i];
+                if (expr_contains_call(field->value))
+                    return true;
+            }
+            return false;
+
+        default:
+            return false;
+    }
+}
+
 bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     Symbol *symbol = sema_lookup(sema, ast->name);
 
@@ -179,10 +215,12 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
             return false;
 
-        CompContext context = {.sema = sema, .frame = NULL};
-        init = comp_eval_expr(&context, init);
-        if (init == NULL || init->kind == HIR_EXPR_ERROR)
-            return false;
+        if (!expr_contains_call(init)) {
+            CompContext context = {.sema = sema, .frame = NULL};
+            init = comp_eval_expr(&context, init);
+            if (init == NULL || init->kind == HIR_EXPR_ERROR)
+                return false;
+        }
 
         if (!expr_is_static(init)) {
             error_global_initialiser_not_static(sema->diags, init->span);
