@@ -7,6 +7,7 @@
 typedef enum {
     TEST_SECTION_NONE,
     TEST_SECTION_SOURCE,
+    TEST_SECTION_C_SOURCE,
     TEST_SECTION_DIAGNOSTICS,
     TEST_SECTION_AST,
     TEST_SECTION_HIR,
@@ -90,6 +91,9 @@ static bool test_parse_stop(String value, TestStop *stop) {
 static TestSection test_parse_section(String name) {
     if (test_string_equal(name, "source"))
         return TEST_SECTION_SOURCE;
+
+    if (test_string_equal(name, "c_source"))
+        return TEST_SECTION_C_SOURCE;
 
     if (test_string_equal(name, "diagnostics"))
         return TEST_SECTION_DIAGNOSTICS;
@@ -196,6 +200,11 @@ static void test_assign_section(TestCase *test, TestSection section, String valu
     switch (section) {
         case TEST_SECTION_SOURCE:
             test->source = value;
+            break;
+
+        case TEST_SECTION_C_SOURCE:
+            test->c_source = value;
+            test->has_c_source = true;
             break;
 
         case TEST_SECTION_DIAGNOSTICS:

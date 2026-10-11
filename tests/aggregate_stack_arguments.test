@@ -1,0 +1,31 @@
+name: aggregate returns preserve stack argument placement
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Wide = struct {
+    int64 a;
+    int64 b;
+    int64 c;
+};
+
+fn Wide combine(int64 a, int64 b, int64 c, int64 d, int64 e, int64 f, Wide input, float64 x, float64 y, float64 z, float64 w, float64 v, float64 u, float64 t, float64 s, float64 q) {
+    return {a + f + input.a, (int64)(x + q), input.c + b + c};
+}
+
+fn int64 main() {
+    Wide input = {10, 20, 30};
+    Wide result = combine(1, 2, 3, 4, 5, 6, input, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+    if (result.a != 17) return 1;
+    if (result.b != 10) return 2;
+    if (result.c != 35) return 3;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

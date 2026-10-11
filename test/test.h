@@ -27,12 +27,14 @@ typedef enum {
 typedef struct {
     String name;
     String source;
+    String c_source;
 
     TestExpectation expectation;
     TestStop stop;
 
     size_t error_count;
     bool has_exit_code;
+    bool has_c_source;
     int exit_code;
 
     bool has_diagnostics;

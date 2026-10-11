@@ -643,6 +643,7 @@ static bool test_wait_child(pid_t child, int *status) {
 static bool test_runtime_execute(const char *assembly, size_t assembly_length, const TestCase *test, TestFailure *failure) {
     char directory[] = "/tmp/coda-test-XXXXXX";
     char assembly_path[PATH_MAX] = {0};
+    char c_source_path[PATH_MAX] = {0};
     char executable_path[PATH_MAX] = {0};
     bool passed = false;
     FILE *link_stderr = NULL;
@@ -661,6 +662,7 @@ static bool test_runtime_execute(const char *assembly, size_t assembly_length, c
     }
 
     if (snprintf(assembly_path, sizeof(assembly_path), "%s/test.s", directory) >= (int)sizeof(assembly_path) ||
+        (test->has_c_source && snprintf(c_source_path, sizeof(c_source_path), "%s/test.c", directory) >= (int)sizeof(c_source_path)) ||
         snprintf(executable_path, sizeof(executable_path), "%s/test-bin", directory) >= (int)sizeof(executable_path)) {
         test_runtime_message(failure, "temporary runtime-test path is too long");
         goto done;
@@ -681,6 +683,22 @@ static bool test_runtime_execute(const char *assembly, size_t assembly_length, c
         goto done;
     }
 
+    if (test->has_c_source) {
+        FILE *c_source_file = fopen(c_source_path, "wb");
+        if (c_source_file == NULL) {
+            test_runtime_message(failure, "could not create C ABI test source");
+            goto done;
+        }
+
+        bool wrote_c_source = fwrite(test->c_source.data, 1, test->c_source.length, c_source_file) == test->c_source.length;
+        if (fclose(c_source_file) != 0)
+            wrote_c_source = false;
+        if (!wrote_c_source) {
+            test_runtime_message(failure, "could not write C ABI test source");
+            goto done;
+        }
+    }
+
     link_stderr = tmpfile();
     if (link_stderr == NULL) {
         test_runtime_message(failure, "could not capture linker diagnostics");
@@ -697,7 +715,10 @@ static bool test_runtime_execute(const char *assembly, size_t assembly_length, c
         if (null_fd >= 0)
             dup2(null_fd, STDOUT_FILENO);
         dup2(fileno(link_stderr), STDERR_FILENO);
-        execlp("gcc", "gcc", "-no-pie", assembly_path, "-o", executable_path, (char *)NULL);
+        if (test->has_c_source)
+            execlp("gcc", "gcc", "-no-pie", assembly_path, c_source_path, "-o", executable_path, (char *)NULL);
+        else
+            execlp("gcc", "gcc", "-no-pie", assembly_path, "-o", executable_path, (char *)NULL);
         _exit(127);
     }
 
@@ -794,6 +815,8 @@ done:
     free(stdout_data);
     free(stderr_data);
     unlink(assembly_path);
+    if (c_source_path[0] != '\0')
+        unlink(c_source_path);
     unlink(executable_path);
     rmdir(directory);
     if (!passed)
