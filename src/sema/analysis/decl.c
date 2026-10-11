@@ -102,7 +102,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     array_push(&sema->hir_module->functions, fn);
 }
 
-void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
+void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed) {
     if (ast->generics.len != 0)
         return;
 
@@ -124,6 +124,17 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast) {
 
     if (base == NULL || base->kind == HIR_TYPE_ERROR)
         return;
+
+    if (packed && ast->type->kind == AST_TYPE_STRUCT && base->kind == HIR_TYPE_STRUCT) {
+        size_t offset = 0;
+        for (size_t i = 0; i < base->structure.fields.len; i++) {
+            HirField *field = &((HirField *)base->structure.fields.data)[i];
+            field->offset = offset;
+            offset += field->type->size;
+        }
+        base->size = offset;
+        base->align = 1;
+    }
 
     HirType *type = arena_calloc(sema->arena, sizeof(*type));
     *type = *base;
@@ -250,9 +261,18 @@ void sema_decl(Sema *sema, AstDecl *ast) {
             sema_fn_decl(sema, &ast->fn);
             break;
 
-        case AST_DECL_TYPE:
-            sema_type_decl(sema, &ast->type);
+        case AST_DECL_TYPE: {
+            bool packed = false;
+            for (size_t i = 0; i < ast->attrs.len; i++) {
+                AstAttribute *attribute = array_at(&ast->attrs, i);
+                if (string_eq(attribute->name, STRING("packed"))) {
+                    packed = true;
+                    break;
+                }
+            }
+            sema_type_decl(sema, &ast->type, packed);
             break;
+        }
 
         case AST_DECL_VAR:
             sema_var_decl(sema, &ast->var);

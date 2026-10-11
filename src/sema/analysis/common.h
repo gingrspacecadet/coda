@@ -32,7 +32,7 @@ void sema_decl(Sema *sema, AstDecl *ast);
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
 void sema_include_decl(Sema *sema, AstIncludeDecl *ast);
 bool sema_var_decl(Sema *sema, AstVarDecl *ast);
-void sema_type_decl(Sema *sema, AstTypeDecl *ast);
+void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed);
 void sema_fn_decl(Sema *sema, AstFnDecl *ast);
 
 static inline bool is_integer(HirType *type) {

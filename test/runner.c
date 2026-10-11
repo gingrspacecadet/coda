@@ -1024,9 +1024,9 @@ static bool test_run_file(const char *path, TestStats *stats) {
     TestFailure failure;
     bool pass = test_check(path, &test, &failure);
 
-    printf("%s\x1b[0m  %.*s\n", pass ? "\x1b[32mPASS" : "\x1b[31mFAIL", string_fmt(test.name));
-
+    
     if (!pass) {
+        printf("\x1b[31mFAIL\x1b[0m  %.*s\n", string_fmt(test.name));
         test_print_failures(&test, &failure);
         printf("Test file: %s\n", path);
         stats->failed++;

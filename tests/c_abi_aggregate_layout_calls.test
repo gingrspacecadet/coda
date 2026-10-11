@@ -1,0 +1,64 @@
+name: System V AMD64 aggregate ABI handles nested mixed, union, and packed layouts from Coda to C
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Inner = struct {
+    float64 value;
+};
+type NestedMixed = struct {
+    int64 count;
+    Inner inner;
+};
+type Choice = union {
+    int64 integer;
+    float64 real;
+};
+@packed type Packed = struct {
+    uint8 tag;
+    int64 value;
+};
+
+@extern
+fn NestedMixed c_abi_nested_mixed(NestedMixed value);
+@extern
+fn Choice c_abi_union_integer(Choice value);
+@extern
+fn Packed c_abi_packed_roundtrip(Packed value);
+
+fn int64 main() {
+    Inner inner = {.value = 1.5};
+    NestedMixed nested = {.count = 10, .inner = inner};
+    NestedMixed nested_result = c_abi_nested_mixed(nested);
+    if (nested_result.count != 12) return 1;
+    if (nested_result.inner.value != 4.0) return 2;
+
+    Choice choice = {.integer = 40};
+    Choice choice_result = c_abi_union_integer(choice);
+    if (choice_result.integer != 45) return 3;
+
+    Packed packed = {.tag = 7, .value = 1000};
+    Packed packed_result = c_abi_packed_roundtrip(packed);
+    if (packed_result.tag != 8) return 4;
+    if (packed_result.value != 1010) return 5;
+    return 0;
+}
+
+[c_source]
+#include <stdint.h>
+typedef struct { double value; } Inner;
+typedef struct { int64_t count; Inner inner; } NestedMixed;
+typedef union { int64_t integer; double real; } Choice;
+typedef struct __attribute__((packed)) { uint8_t tag; int64_t value; } Packed;
+
+NestedMixed c_abi_nested_mixed(NestedMixed value) { value.count += 2; value.inner.value += 2.5; return value; }
+Choice c_abi_union_integer(Choice value) { value.integer += 5; return value; }
+Packed c_abi_packed_roundtrip(Packed value) { value.tag += 1; value.value += 10; return value; }
+
+[stdout]
+
+[stderr]
+
+[exit]
+0
