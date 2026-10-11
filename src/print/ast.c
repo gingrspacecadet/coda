@@ -282,8 +282,27 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
         fputc('\n', out);
 
         for (size_t i = 0; i < expr->intrinsic.args.len; i++) {
-            AstExpr **arg = array_at((Array *)&expr->intrinsic.args, i);
-            print_expr(out, *arg, depth + 1);
+            AstIntrinsicArg *arg = array_at((Array *)&expr->intrinsic.args, i);
+            switch (arg->kind) {
+                case AST_INTRINSIC_ARG_EXPR:
+                    print_expr(out, arg->expr, depth + 1);
+                    break;
+
+                case AST_INTRINSIC_ARG_TYPE:
+                    print_type(out, arg->type, depth + 1);
+                    break;
+
+                case AST_INTRINSIC_ARG_MEMBER_PATH:
+                    indent(out, depth + 1);
+                    fputs("member ", out);
+                    for (size_t j = 0; j < arg->member_path.len; j++) {
+                        if (j != 0)
+                            fputc('.', out);
+                        print_name(out, &((AstName *)arg->member_path.data)[j]);
+                    }
+                    fputc('\n', out);
+                    break;
+            }
         }
         break;
 

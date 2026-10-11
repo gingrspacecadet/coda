@@ -335,46 +335,82 @@ AstExpr *parse_expression_prefix(Parser *p) {
     return error;
 }
 
+static AstIntrinsicArg parse_intrinsic_argument(Parser *p, AstIntrinsicArgKind kind) {
+    AstIntrinsicArg arg = {
+        .kind = kind,
+        .span = p->current.span,
+    };
+
+    switch (kind) {
+        case AST_INTRINSIC_ARG_TYPE:
+            arg.type = parse_type(p);
+            arg.span = arg.type->span;
+            break;
+
+        case AST_INTRINSIC_ARG_MEMBER_PATH: {
+            arg.member_path = array_create(p->arena, sizeof(AstName));
+            AstName member = parse_name(p);
+            array_push(&arg.member_path, &member);
+
+            while (match(p, TK_DOT)) {
+                member = parse_name(p);
+                array_push(&arg.member_path, &member);
+            }
+            break;
+        }
+
+        case AST_INTRINSIC_ARG_EXPR:
+        default:
+            arg.kind = AST_INTRINSIC_ARG_EXPR;
+            arg.expr = parse_expression(p);
+            arg.span = arg.expr->span;
+            break;
+    }
+
+    return arg;
+}
+
 AstExpr *parse_hash_expression(Parser *p) {
     Token start = p->current;
     advance(p);
 
     if (match(p, TK_LPAREN)) {
         AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
-
         expr->span = start.span;
         expr->kind = AST_EXPR_SPLICE;
         expr->splice.expression = parse_expression(p);
-
         expect(p, TK_RPAREN);
-
         return expr;
     }
 
+    Path name = parse_path(p);
     AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
-
     expr->span = start.span;
     expr->kind = AST_EXPR_INTRINSIC;
-    expr->intrinsic.name = parse_path(p);
-    expr->intrinsic.args = array_create(
-        p->arena,
-        sizeof(AstExpr *)
-    );
+    expr->intrinsic.name = name;
+    expr->intrinsic.args = array_create(p->arena, sizeof(AstIntrinsicArg));
 
-    if (match(p, TK_LPAREN)) {
-        if (!at(p, TK_RPAREN)) {
-            for (;;) {
-                AstExpr *arg = parse_expression(p);
-                array_push(&expr->intrinsic.args, &arg);
+    if (!match(p, TK_LPAREN))
+        return expr;
 
-                if (!match(p, TK_COMMA))
-                    break;
-            }
+    const IntrinsicDefinition *definition = intrinsic_lookup(name);
+    if (!at(p, TK_RPAREN)) {
+        size_t index = 0;
+        for (;;) {
+            AstIntrinsicArgKind kind = AST_INTRINSIC_ARG_EXPR;
+            if (definition != NULL && index < definition->arg_count)
+                kind = definition->arg_kinds[index];
+
+            AstIntrinsicArg arg = parse_intrinsic_argument(p, kind);
+            array_push(&expr->intrinsic.args, &arg);
+            index++;
+
+            if (!match(p, TK_COMMA))
+                break;
         }
-
-        expect(p, TK_RPAREN);
     }
 
+    expect(p, TK_RPAREN);
     return expr;
 }
 

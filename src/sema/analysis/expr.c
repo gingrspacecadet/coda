@@ -950,6 +950,47 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     return call;
 }
 
+static HirField *sema_layout_field(HirType *type, AstName name) {
+    type = sema_unwrap_type(type);
+    if (type == NULL)
+        return NULL;
+
+    switch (type->kind) {
+        case HIR_TYPE_STRUCT:
+            return field_lookup(type->structure.fields, name);
+        case HIR_TYPE_UNION:
+            return field_lookup(type->union_.fields, name);
+        case HIR_TYPE_SLICE:
+            return field_lookup(type->slice.fields, name);
+        case HIR_TYPE_ARRAY:
+            return field_lookup(type->array.fields, name);
+        default:
+            return NULL;
+    }
+}
+
+static bool sema_layout_member_offset(Sema *sema, HirType *type, Array(AstName) member, size_t *offset, Span span) {
+    if (member.len == 0) {
+        error_unknown_field(sema->diags, STRING("<member>"), span);
+        return false;
+    }
+
+    for (size_t i = 0; i < member.len; i++) {
+        AstName name = ((AstName *)member.data)[i];
+        HirField *field = sema_layout_field(type, name);
+        if (field == NULL) {
+            String field_name = name.kind == AST_NAME_IDENT ? name.ident : STRING("<member>");
+            error_unknown_field(sema->diags, field_name, span);
+            return false;
+        }
+
+        *offset += field->offset;
+        type = field->type;
+    }
+
+    return true;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     if (ast->comptime) {
         AstExpr copy = *ast;
@@ -1470,10 +1511,77 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             break;
         }
 
-        case AST_EXPR_INTRINSIC:
-            //! TODO: resolve intrinsic
-            hir->kind = HIR_EXPR_ERROR;
-            break;
+        case AST_EXPR_INTRINSIC: {
+            const IntrinsicDefinition *definition = intrinsic_lookup(ast->intrinsic.name);
+            if (definition == NULL) {
+                if (ast->intrinsic.name.parts.len != 1) {
+                    error_unknown_path(sema->diags, ast->intrinsic.name, ast->span);
+                } else {
+                    AstName *name = array_at(&ast->intrinsic.name.parts, 0);
+                    String intrinsic_name = name->kind == AST_NAME_IDENT ? name->ident : STRING("<intrinsic>");
+                    error_unknown_name(sema->diags, intrinsic_name, ast->span);
+                }
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            if (ast->intrinsic.args.len != definition->arg_count) {
+                error_wrong_argument_count(sema->diags, definition->arg_count, ast->intrinsic.args.len, ast->span);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            AstIntrinsicArg *type_arg = array_at(&ast->intrinsic.args, 0);
+            if (type_arg->kind != AST_INTRINSIC_ARG_TYPE || type_arg->type == NULL) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            HirType *type = sema_type(sema, type_arg->type);
+            if (type == NULL || type->kind == HIR_TYPE_ERROR) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            uint64_t value;
+            switch (definition->id) {
+                case INTRINSIC_SIZEOF:
+                    value = type->size;
+                    break;
+
+                case INTRINSIC_ALIGNOF:
+                    value = type->align;
+                    break;
+
+                case INTRINSIC_OFFSETOF: {
+                    AstIntrinsicArg *member_arg = array_at(&ast->intrinsic.args, 1);
+                    size_t offset = 0;
+                    if (member_arg->kind != AST_INTRINSIC_ARG_MEMBER_PATH ||
+                        !sema_layout_member_offset(sema, type, member_arg->member_path, &offset, member_arg->span)) {
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
+                    value = offset;
+                    break;
+                }
+
+                default:
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+            }
+
+            hir->kind = HIR_EXPR_LITERAL;
+            hir->type = builtin_type(sema, BUILTIN_UINT64);
+            hir->literal = (HirLiteral) {
+                .kind = HIR_LITERAL_INTEGER,
+                .integer = value,
+            };
+
+            if (expected != NULL)
+                return expr_coerce(sema, hir, expected);
+
+            return hir;
+        }
 
         case AST_EXPR_BUBBLE:
             hir->kind = HIR_EXPR_ERROR;

@@ -2,6 +2,7 @@
 #define PARSER_COMMON_H
 
 #include "../parser.h"
+#include "../intrinsic.h"
 
 void error_expected_token(Diags *diags, TokenType expected, Span span);
 void error_expected_identifier(Diags *diags, Span span);

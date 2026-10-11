@@ -1,0 +1,57 @@
+name: offsetof resolves nested, packed, union, alias, and generic layouts
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Inner = struct {
+    uint8 tag;
+    uint64 value;
+};
+
+type Outer = struct {
+    uint8 prefix;
+    Inner inner;
+};
+
+type OuterAlias = Outer;
+
+@packed
+type Packed = struct {
+    uint8 tag;
+    uint64 value;
+};
+
+type Choice = union {
+    uint64 integer;
+    float64 real;
+};
+
+uint64 inner_value_offset = #offsetof(Inner, value);
+uint64 nested_value_offset = #offsetof(Outer, inner.value);
+uint64 alias_value_offset = #offsetof(OuterAlias, inner.value);
+uint64 packed_value_offset = #offsetof(Packed, value);
+uint64 union_real_offset = #offsetof(Choice, real);
+
+fn uint64 nested_offset<T>() {
+    return #offsetof(T, inner.value);
+}
+
+fn int64 main() {
+    if (inner_value_offset != 8) return 1;
+    if (nested_value_offset != 16) return 2;
+    if (alias_value_offset != 16) return 3;
+    if (packed_value_offset != 1) return 4;
+    if (union_real_offset != 0) return 5;
+    if (nested_offset<Outer>() != 16) return 6;
+    if (#offsetof(Outer, prefix) != 0) return 7;
+    if (#offsetof(Packed, tag) != 0) return 8;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

@@ -2,6 +2,7 @@
 #define SEMA_COMMON_H
 
 #include "../sema.h"
+#include "../intrinsic.h"
 
 static inline bool ast_name_equal(AstName *a, AstName *b) {
     if (a->kind != AST_NAME_IDENT || b->kind != AST_NAME_IDENT)

@@ -218,6 +218,22 @@ typedef struct {
 } AstInitField;
 
 typedef enum {
+    AST_INTRINSIC_ARG_EXPR,
+    AST_INTRINSIC_ARG_TYPE,
+    AST_INTRINSIC_ARG_MEMBER_PATH,
+} AstIntrinsicArgKind;
+
+typedef struct {
+    AstIntrinsicArgKind kind;
+    Span span;
+    union {
+        AstExpr *expr;
+        AstType *type;
+        Array(AstName) member_path;
+    };
+} AstIntrinsicArg;
+
+typedef enum {
     AST_EXPR_ERROR,
 
     AST_EXPR_LITERAL,
@@ -287,7 +303,7 @@ struct AstExpr {
 
         struct {
             Path name;
-            Array(AstExpr *) args;
+            Array(AstIntrinsicArg) args;
         } intrinsic;
 
         struct {
