@@ -16,6 +16,42 @@ static bool sema_type_is_float(HirType *type) {
            (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
 }
 
+static bool sema_type_is_numeric(HirType *type) {
+    type = sema_unwrap_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           (is_integer(type) || type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
+}
+
+static bool sema_is_untyped_numeric_expression(AstExpr *ast) {
+    if (ast == NULL)
+        return false;
+
+    switch (ast->kind) {
+        case AST_EXPR_LITERAL:
+            return ast->literal.kind == AST_LIT_INTEGER || ast->literal.kind == AST_LIT_FLOAT;
+
+        case AST_EXPR_UNARY:
+            return (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) &&
+                   sema_is_untyped_numeric_expression(ast->unary.operand);
+
+        case AST_EXPR_BINARY:
+            switch (ast->binary.op) {
+                case AST_BINARY_ADD:
+                case AST_BINARY_SUB:
+                case AST_BINARY_MUL:
+                case AST_BINARY_DIV:
+                    return sema_is_untyped_numeric_expression(ast->binary.left) &&
+                           sema_is_untyped_numeric_expression(ast->binary.right);
+
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
 static bool sema_retype_float_literal(AstExpr *ast, HirExpr *expr, HirType *type) {
     if (ast == NULL || expr == NULL || !sema_type_is_float(type))
         return false;
@@ -32,6 +68,69 @@ static bool sema_retype_float_literal(AstExpr *ast, HirExpr *expr, HirType *type
         expr->kind != HIR_EXPR_LITERAL ||
         (expr->literal.kind != HIR_LITERAL_INTEGER && expr->literal.kind != HIR_LITERAL_FLOAT))
         return false;
+
+    expr->type = type;
+    return true;
+}
+
+static bool sema_is_untyped_integer_expression(AstExpr *ast) {
+    if (ast == NULL)
+        return false;
+
+    switch (ast->kind) {
+        case AST_EXPR_LITERAL:
+            return ast->literal.kind == AST_LIT_INTEGER;
+
+        case AST_EXPR_UNARY:
+            return (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) &&
+                   sema_is_untyped_integer_expression(ast->unary.operand);
+
+        case AST_EXPR_BINARY:
+            switch (ast->binary.op) {
+                case AST_BINARY_ADD:
+                case AST_BINARY_SUB:
+                case AST_BINARY_MUL:
+                case AST_BINARY_DIV:
+                case AST_BINARY_MOD:
+                    return sema_is_untyped_integer_expression(ast->binary.left) &&
+                           sema_is_untyped_integer_expression(ast->binary.right);
+
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
+static bool sema_retype_integer_expression(AstExpr *ast, HirExpr *expr, HirType *type) {
+    if (!sema_is_untyped_integer_expression(ast) || expr == NULL || type == NULL ||
+        !is_integer(sema_unwrap_type(type)))
+        return false;
+
+    switch (ast->kind) {
+        case AST_EXPR_LITERAL:
+            if (expr->kind != HIR_EXPR_LITERAL || expr->literal.kind != HIR_LITERAL_INTEGER)
+                return false;
+            break;
+
+        case AST_EXPR_UNARY:
+            if (expr->kind != HIR_EXPR_UNARY ||
+                !sema_retype_integer_expression(ast->unary.operand, expr->unary.operand, type))
+                return false;
+            break;
+
+        case AST_EXPR_BINARY:
+            if (expr->kind != HIR_EXPR_BINARY ||
+                !sema_retype_integer_expression(ast->binary.left, expr->binary.left, type) ||
+                !sema_retype_integer_expression(ast->binary.right, expr->binary.right, type))
+                return false;
+            break;
+
+        default:
+            return false;
+    }
 
     expr->type = type;
     return true;
@@ -1025,6 +1124,18 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (sema_type_is_float(right != NULL ? right->type : NULL))
                 sema_retype_float_literal(ast->binary.left, left, right->type);
 
+            if (sema_is_untyped_integer_expression(ast) && is_integer(sema_unwrap_type(expected))) {
+                sema_retype_integer_expression(ast->binary.left, left, expected);
+                sema_retype_integer_expression(ast->binary.right, right, expected);
+            } else {
+                if (left != NULL && is_integer(sema_unwrap_type(left->type)) &&
+                    sema_is_untyped_integer_expression(ast->binary.right))
+                    sema_retype_integer_expression(ast->binary.right, right, left->type);
+                if (right != NULL && is_integer(sema_unwrap_type(right->type)) &&
+                    sema_is_untyped_integer_expression(ast->binary.left))
+                    sema_retype_integer_expression(ast->binary.left, left, right->type);
+            }
+
             HirType *operand_type = binop_type(sema, ast->binary.op, left, right, expected);
 
             if (operand_type == NULL) {
@@ -1335,14 +1446,29 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             return hir;
         }
 
-        case AST_EXPR_CAST:
+        case AST_EXPR_CAST: {
             hir->kind = HIR_EXPR_CAST;
-            hir->cast.type = sema_type(sema, ast->cast.type);
-            hir->cast.operand = sema_expr(sema, ast->cast.operand, hir->cast.type);
-            hir->type = hir->cast.type;
+            HirType *target = sema_type(sema, ast->cast.type);
+            bool literal_context = sema_type_is_float(target) && sema_is_untyped_numeric_expression(ast->cast.operand);
+            HirExpr *operand = sema_expr(sema, ast->cast.operand, literal_context ? target : NULL);
 
-            //! TODO: validate cast
+            if (target == NULL || target->kind == HIR_TYPE_ERROR || operand == NULL || operand->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            if ((sema_type_is_float(target) || sema_type_is_float(operand->type)) &&
+                (!sema_type_is_numeric(target) || !sema_type_is_numeric(operand->type))) {
+                error_type_mismatch(sema->diags, target, operand->type, ast->span);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            hir->cast.type = target;
+            hir->cast.operand = operand;
+            hir->type = target;
             break;
+        }
 
         case AST_EXPR_INTRINSIC:
             //! TODO: resolve intrinsic

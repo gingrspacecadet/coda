@@ -1,0 +1,9 @@
+name: reject floating-point casts to non-numeric types
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn bool invalid(float64 value) {
+    return (bool) value;
+}
