@@ -531,3 +531,15 @@ void error_cant_call_comptime(Diags *diags, Span span) {
 
     diag_finish(&b);
 }
+
+void error_too_many_initialiser_values(Diags *diags, Span span) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_TOO_MANY_INIT_VALUES,
+        span,
+        STRING("Too many values in initialiser")
+    );
+
+    diag_finish(&b);
+}

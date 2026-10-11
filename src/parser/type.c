@@ -329,11 +329,6 @@ AstType *parse_type_single(Parser *p) {
                 expect(p, TK_RBRACK);
             }
 
-            if (prefix_mut) {
-                array->mutable = true;
-                prefix_mut = false;
-            }
-
             base = array;
             continue;
         }

@@ -1369,7 +1369,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     }
 
                     if (positional >= expected->array.length) {
-                        //! TODO: too many initialiser values
+                        error_too_many_initialiser_values(sema->diags, field->span);
                         hir->kind = HIR_EXPR_ERROR;
                         return hir;
                     }
