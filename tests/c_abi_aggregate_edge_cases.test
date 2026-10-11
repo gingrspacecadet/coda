@@ -1,0 +1,90 @@
+name: System V AMD64 aggregate ABI edge cases from Coda to C
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Tiny = struct {
+    uint8 a;
+    uint8 b;
+    uint8 c;
+};
+type FloatPair = struct {
+    float32 x;
+    float32 y;
+};
+type DoublePair = struct {
+    float64 x;
+    float64 y;
+};
+type FloatTriple = struct {
+    float32 x;
+    float32 y;
+    float32 z;
+};
+type Pair = struct {
+    int64 x;
+    int64 y;
+};
+
+@extern
+fn Tiny c_abi_tiny_roundtrip(Tiny value);
+@extern
+fn FloatPair c_abi_float_pair_roundtrip(FloatPair value);
+@extern
+fn FloatTriple c_abi_float_triple_roundtrip(FloatTriple value);
+@extern
+fn Pair c_abi_pair_fallback_then_scalar(int64 a, int64 b, int64 c, int64 d, int64 e, Pair value, int64 marker);
+@extern
+fn DoublePair c_abi_double_pair_fallback_then_scalar(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, DoublePair value, float64 marker);
+
+fn int64 main() {
+    Tiny tiny = {.a = 1, .b = 2, .c = 3};
+    Tiny tiny_result = c_abi_tiny_roundtrip(tiny);
+    if (tiny_result.a != 2) return 1;
+    if (tiny_result.b != 4) return 1;
+    if (tiny_result.c != 6) return 1;
+
+    FloatPair pair32 = {.x = 1.25, .y = 2.5};
+    FloatPair pair32_result = c_abi_float_pair_roundtrip(pair32);
+    if (pair32_result.x != 2.25) return 2;
+    if (pair32_result.y != 4.5) return 2;
+
+    FloatTriple triple32 = {.x = 1.0, .y = 2.0, .z = 3.0};
+    FloatTriple triple32_result = c_abi_float_triple_roundtrip(triple32);
+    if (triple32_result.x != 1.5) return 3;
+    if (triple32_result.y != 3.0) return 3;
+    if (triple32_result.z != 4.5) return 3;
+
+    Pair pair = {.x = 10, .y = 20};
+    Pair pair_result = c_abi_pair_fallback_then_scalar(1, 2, 3, 4, 5, pair, 6);
+    if (pair_result.x != 31) return 4;
+    if (pair_result.y != 26) return 4;
+
+    DoublePair spill_pair = {.x = 1.25, .y = 2.5};
+    DoublePair spill_result = c_abi_double_pair_fallback_then_scalar(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, spill_pair, 8.0);
+    if (spill_result.x != 37.25) return 5;
+    if (spill_result.y != 10.5) return 5;
+    return 0;
+}
+
+[c_source]
+#include <stdint.h>
+typedef struct { uint8_t a, b, c; } Tiny;
+typedef struct { float x, y; } FloatPair;
+typedef struct { double x, y; } DoublePair;
+typedef struct { float x, y, z; } FloatTriple;
+typedef struct { int64_t x, y; } Pair;
+
+Tiny c_abi_tiny_roundtrip(Tiny value) { value.a += 1; value.b += 2; value.c += 3; return value; }
+FloatPair c_abi_float_pair_roundtrip(FloatPair value) { value.x += 1.0f; value.y += 2.0f; return value; }
+FloatTriple c_abi_float_triple_roundtrip(FloatTriple value) { value.x += 0.5f; value.y += 1.0f; value.z += 1.5f; return value; }
+Pair c_abi_pair_fallback_then_scalar(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, Pair value, int64_t marker) { value.x += a + b + c + d + e + marker; value.y += marker; return value; }
+DoublePair c_abi_double_pair_fallback_then_scalar(double a, double b, double c, double d, double e, double f, double g, DoublePair value, double marker) { value.x += a + b + c + d + e + f + g + marker; value.y += marker; return value; }
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

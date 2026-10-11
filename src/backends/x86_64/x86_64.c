@@ -35,10 +35,7 @@ typedef struct {
     int64_t return_address_offset;
 } X86Function;
 
-static bool function_returns_indirect(X86Function *function) {
-    return function->function->return_type != NULL &&
-           function->function->return_type->size > 8;
-}
+static bool function_returns_indirect(X86Function *function);
 
 static size_t type_size(HirType *type) {
     assert(type != NULL);
@@ -139,6 +136,341 @@ static const char *size_name(size_t size) {
     assert(!"invalid operand size");
     return NULL;
 }
+
+typedef enum {
+    X86_ABI_NO_CLASS,
+    X86_ABI_INTEGER,
+    X86_ABI_SSE,
+    X86_ABI_MEMORY,
+} X86AbiClass;
+
+typedef struct {
+    X86AbiClass classes[2];
+    size_t count;
+    size_t size;
+    bool memory;
+} X86AbiClassification;
+
+typedef struct {
+    X86AbiClassification classification;
+    bool stack;
+    size_t stack_offset;
+    size_t gp_register[2];
+    size_t fp_register[2];
+} X86AbiArgument;
+
+static bool abi_is_aggregate(HirType *type) {
+    type = base_type(type);
+    if (type == NULL)
+        return false;
+
+    return type->kind == HIR_TYPE_STRUCT || type->kind == HIR_TYPE_UNION ||
+           type->kind == HIR_TYPE_ARRAY || type->kind == HIR_TYPE_SLICE ||
+           type->kind == HIR_TYPE_SUM;
+}
+
+static X86AbiClass abi_merge_class(X86AbiClass left, X86AbiClass right) {
+    if (left == X86_ABI_NO_CLASS)
+        return right;
+    if (right == X86_ABI_NO_CLASS || left == right)
+        return left;
+    if (left == X86_ABI_MEMORY || right == X86_ABI_MEMORY)
+        return X86_ABI_MEMORY;
+    return X86_ABI_INTEGER;
+}
+
+static void abi_mark(X86AbiClassification *classification, size_t offset, size_t size, X86AbiClass class_) {
+    if (size == 0)
+        return;
+    if (offset > classification->size || size > classification->size - offset) {
+        classification->memory = true;
+        return;
+    }
+
+    size_t first = offset / 8;
+    size_t last = (offset + size - 1) / 8;
+    for (size_t i = first; i <= last; i++) {
+        if (i >= 2) {
+            classification->memory = true;
+            return;
+        }
+        classification->classes[i] = abi_merge_class(classification->classes[i], class_);
+        if (classification->classes[i] == X86_ABI_MEMORY)
+            classification->memory = true;
+    }
+}
+
+static void abi_classify_at(HirType *type, size_t offset, X86AbiClassification *classification) {
+    type = base_type(type);
+    if (type == NULL || type->size == 0 || classification->memory)
+        return;
+    if (offset > classification->size || type->size > classification->size - offset) {
+        classification->memory = true;
+        return;
+    }
+    if (type->size > 16) {
+        classification->memory = true;
+        return;
+    }
+    if (type_is_float(type)) {
+        abi_mark(classification, offset, type->size, X86_ABI_SSE);
+        return;
+    }
+
+    switch (type->kind) {
+        case HIR_TYPE_BUILTIN:
+        case HIR_TYPE_POINTER:
+        case HIR_TYPE_ENUM:
+            abi_mark(classification, offset, type->size, X86_ABI_INTEGER);
+            return;
+
+        case HIR_TYPE_STRUCT:
+            for (size_t i = 0; i < type->structure.fields.len; i++) {
+                HirField *field = &((HirField *)type->structure.fields.data)[i];
+                size_t field_offset = offset + field->offset;
+                size_t field_align = type_align(field->type);
+                if (field_align != 0 && field_offset % field_align != 0) {
+                    classification->memory = true;
+                    return;
+                }
+                abi_classify_at(field->type, field_offset, classification);
+                if (classification->memory)
+                    return;
+            }
+            return;
+
+        case HIR_TYPE_UNION:
+            for (size_t i = 0; i < type->union_.fields.len; i++) {
+                HirField *field = &((HirField *)type->union_.fields.data)[i];
+                size_t field_align = type_align(field->type);
+                if (field_align != 0 && offset % field_align != 0) {
+                    classification->memory = true;
+                    return;
+                }
+                abi_classify_at(field->type, offset, classification);
+                if (classification->memory)
+                    return;
+            }
+            return;
+
+        case HIR_TYPE_SLICE:
+            for (size_t i = 0; i < type->slice.fields.len; i++) {
+                HirField *field = &((HirField *)type->slice.fields.data)[i];
+                size_t field_offset = offset + field->offset;
+                size_t field_align = type_align(field->type);
+                if (field_align != 0 && field_offset % field_align != 0) {
+                    classification->memory = true;
+                    return;
+                }
+                abi_classify_at(field->type, field_offset, classification);
+                if (classification->memory)
+                    return;
+            }
+            return;
+
+        case HIR_TYPE_ARRAY: {
+            if (type->array.length == 0)
+                return;
+            abi_mark(classification, offset, sizeof(uint64_t), X86_ABI_INTEGER);
+            if (type_size(type->array.element) == 0)
+                return;
+            size_t data_offset = align_up(sizeof(uint64_t), type_align(type->array.element));
+            for (uint64_t i = 0; i < type->array.length; i++) {
+                size_t element_offset = data_offset + (size_t)i * type_size(type->array.element);
+                if (element_offset >= type->size)
+                    break;
+                abi_classify_at(type->array.element, offset + element_offset, classification);
+                if (classification->memory)
+                    return;
+            }
+            return;
+        }
+
+        case HIR_TYPE_SUM:
+            classification->memory = true;
+            return;
+
+        case HIR_TYPE_ERROR:
+        case HIR_TYPE_FUNCTION:
+            classification->memory = true;
+            return;
+    }
+
+    classification->memory = true;
+}
+
+static X86AbiClassification abi_classify_type(HirType *type) {
+    X86AbiClassification classification = {0};
+    type = base_type(type);
+    if (type == NULL)
+        return classification;
+
+    classification.size = type->size;
+    classification.count = type->size > 16 ? 2 : (type->size + 7) / 8;
+    if (type->size == 0)
+        return classification;
+    if (type->size > 16) {
+        classification.memory = true;
+        return classification;
+    }
+
+    if (!abi_is_aggregate(type)) {
+        classification.classes[0] = type_is_float(type) ? X86_ABI_SSE : X86_ABI_INTEGER;
+        return classification;
+    }
+
+    abi_classify_at(type, 0, &classification);
+    if (classification.memory)
+        return classification;
+
+    for (size_t i = 0; i < classification.count; i++) {
+        if (classification.classes[i] == X86_ABI_NO_CLASS)
+            classification.classes[i] = X86_ABI_INTEGER;
+    }
+    return classification;
+}
+
+static bool function_returns_indirect(X86Function *function) {
+    return function->function->return_type != NULL &&
+           abi_classify_type(function->function->return_type).memory;
+}
+
+static size_t abi_assign_arguments(HirType **types, size_t count, bool hidden_return, X86AbiArgument *arguments) {
+    size_t gp_count = hidden_return ? 1 : 0;
+    size_t fp_count = 0;
+    size_t stack_size = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        X86AbiArgument *argument = &arguments[i];
+        argument->classification = abi_classify_type(types[i]);
+        argument->gp_register[0] = argument->gp_register[1] = SIZE_MAX;
+        argument->fp_register[0] = argument->fp_register[1] = SIZE_MAX;
+
+        size_t size = type_size(types[i]);
+        if (size == 0 || argument->classification.count == 0)
+            continue;
+
+        size_t gp_needed = 0;
+        size_t fp_needed = 0;
+        for (size_t j = 0; j < argument->classification.count; j++) {
+            if (argument->classification.classes[j] == X86_ABI_INTEGER)
+                gp_needed++;
+            else if (argument->classification.classes[j] == X86_ABI_SSE)
+                fp_needed++;
+        }
+
+        if (argument->classification.memory || gp_count + gp_needed > 6 || fp_count + fp_needed > 8) {
+            argument->stack = true;
+            size_t alignment = type_align(types[i]);
+            if (alignment < 8)
+                alignment = 8;
+            argument->stack_offset = align_up(stack_size, alignment);
+            size_t stack_slot_size = align_up(size < 8 ? 8 : size, 8);
+            stack_size = argument->stack_offset + stack_slot_size;
+            continue;
+        }
+
+        for (size_t j = 0; j < argument->classification.count; j++) {
+            if (argument->classification.classes[j] == X86_ABI_INTEGER)
+                argument->gp_register[j] = gp_count++;
+            else if (argument->classification.classes[j] == X86_ABI_SSE)
+                argument->fp_register[j] = fp_count++;
+        }
+    }
+
+    return stack_size == 0 ? 0 : align_up(stack_size, 16);
+}
+
+static size_t abi_chunk_size(HirType *type, size_t chunk) {
+    size_t size = type_size(type);
+    size_t offset = chunk * 8;
+    assert(offset < size);
+    return size - offset < 8 ? size - offset : 8;
+}
+
+static void abi_format_memory(char *buffer, size_t capacity, const char *base, size_t offset) {
+    if (offset == 0)
+        snprintf(buffer, capacity, "[%s]", base);
+    else
+        snprintf(buffer, capacity, "[%s+%zu]", base, offset);
+}
+
+static void emit_abi_load_gp_chunk(X86Function *function, X86Reg destination, const char *base, size_t offset, size_t size) {
+    char memory[64];
+    abi_format_memory(memory, sizeof(memory), base, offset);
+    if (size == 8) {
+        fprintf(function->out, "    mov %s, qword ptr %s\n", reg_name(destination, 8), memory);
+    } else if (size == 4) {
+        fprintf(function->out, "    mov %s, dword ptr %s\n", reg_name(destination, 4), memory);
+    } else if (size == 2) {
+        fprintf(function->out, "    movzx %s, word ptr %s\n", reg_name(destination, 8), memory);
+    } else if (size == 1) {
+        fprintf(function->out, "    movzx %s, byte ptr %s\n", reg_name(destination, 8), memory);
+    } else {
+        fprintf(function->out, "    xor %s, %s\n", reg_name(destination, 4), reg_name(destination, 4));
+        for (size_t i = 0; i < size; i++) {
+            abi_format_memory(memory, sizeof(memory), base, offset + i);
+            fprintf(function->out, "    movzx r10, byte ptr %s\n", memory);
+            if (i != 0)
+                fprintf(function->out, "    shl r10, %zu\n", i * 8);
+            fprintf(function->out, "    or %s, r10\n", reg_name(destination, 8));
+        }
+    }
+}
+
+static void emit_abi_store_gp_chunk(X86Function *function, const char *base, size_t offset, X86Reg source, size_t size) {
+    char memory[64];
+    abi_format_memory(memory, sizeof(memory), base, offset);
+    if (size == 8) {
+        fprintf(function->out, "    mov qword ptr %s, %s\n", memory, reg_name(source, 8));
+    } else if (size == 4) {
+        fprintf(function->out, "    mov dword ptr %s, %s\n", memory, reg_name(source, 4));
+    } else if (size == 2) {
+        fprintf(function->out, "    mov word ptr %s, %s\n", memory, reg_name(source, 2));
+    } else if (size == 1) {
+        fprintf(function->out, "    mov byte ptr %s, %s\n", memory, reg_name(source, 1));
+    } else {
+        fprintf(function->out, "    mov r10, %s\n", reg_name(source, 8));
+        for (size_t i = 0; i < size; i++) {
+            abi_format_memory(memory, sizeof(memory), base, offset + i);
+            fprintf(function->out, "    mov byte ptr %s, r10b\n", memory);
+            if (i + 1 < size)
+                fprintf(function->out, "    shr r10, 8\n");
+        }
+    }
+}
+
+static void emit_abi_load_sse_chunk(X86Function *function, const char *destination, const char *base, size_t offset, size_t size) {
+    char memory[64];
+    abi_format_memory(memory, sizeof(memory), base, offset);
+    if (size == 8) {
+        fprintf(function->out, "    movq %s, qword ptr %s\n", destination, memory);
+    } else if (size == 4) {
+        fprintf(function->out, "    movd %s, dword ptr %s\n", destination, memory);
+    } else {
+        emit_abi_load_gp_chunk(function, X86_R10, base, offset, size);
+        fprintf(function->out, "    movq %s, r10\n", destination);
+    }
+}
+
+static void emit_abi_store_sse_chunk(X86Function *function, const char *base, size_t offset, const char *source, size_t size) {
+    char memory[64];
+    abi_format_memory(memory, sizeof(memory), base, offset);
+    if (size == 8) {
+        fprintf(function->out, "    movq qword ptr %s, %s\n", memory, source);
+    } else if (size == 4) {
+        fprintf(function->out, "    movd dword ptr %s, %s\n", memory, source);
+    } else {
+        fprintf(function->out, "    movq r10, %s\n", source);
+        for (size_t i = 0; i < size; i++) {
+            abi_format_memory(memory, sizeof(memory), base, offset + i);
+            fprintf(function->out, "    mov byte ptr %s, r10b\n", memory);
+            if (i + 1 < size)
+                fprintf(function->out, "    shr r10, 8\n");
+        }
+    }
+}
+
 
 static X86Slot *slot(X86Function *function, LirValueId value) {
     assert(value < function->slot_count);
@@ -662,8 +994,6 @@ static void emit_aggregate_return(X86Function *function, const LirOperand *opera
     X86Slot *source = slot(function, operand->value);
     size_t size = type_size(operand->type);
 
-    assert(size > 8);
-
     fprintf(function->out, "    mov rdi, qword ptr [rbp%ld]\n", function->return_address_offset);
     fprintf(function->out, "    mov rax, rdi\n");
     fprintf(function->out, "    lea rsi, [rbp%ld]\n", source->offset);
@@ -864,22 +1194,91 @@ static const char *float_argument_register(size_t index) {
     return registers[index];
 }
 
+static void emit_abi_return_registers(X86Function *function, const LirOperand *operand) {
+    X86AbiClassification classification = abi_classify_type(operand->type);
+    assert(!classification.memory && classification.count <= 2);
+    emit_operand_address(function, operand, X86_R11);
+
+    size_t gp_return = 0;
+    size_t fp_return = 0;
+    for (size_t i = 0; i < classification.count; i++) {
+        size_t chunk_size = abi_chunk_size(operand->type, i);
+        size_t offset = i * 8;
+        if (classification.classes[i] == X86_ABI_INTEGER) {
+            X86Reg reg = gp_return++ == 0 ? X86_RAX : X86_RDX;
+            emit_abi_load_gp_chunk(function, reg, "r11", offset, chunk_size);
+        } else if (classification.classes[i] == X86_ABI_SSE) {
+            char reg[8];
+            snprintf(reg, sizeof(reg), "xmm%zu", fp_return++);
+            emit_abi_load_sse_chunk(function, reg, "r11", offset, chunk_size);
+        }
+    }
+}
+
+static void emit_abi_store_call_result(X86Function *function, HirType *type, LirValueId result) {
+    X86AbiClassification classification = abi_classify_type(type);
+    assert(!classification.memory && classification.count <= 2);
+    X86Slot *destination = slot(function, result);
+    fprintf(function->out, "    lea r11, [rbp%ld]\n", destination->offset);
+
+    size_t gp_return = 0;
+    size_t fp_return = 0;
+    for (size_t i = 0; i < classification.count; i++) {
+        size_t chunk_size = abi_chunk_size(type, i);
+        size_t offset = i * 8;
+        if (classification.classes[i] == X86_ABI_INTEGER) {
+            X86Reg reg = gp_return++ == 0 ? X86_RAX : X86_RDX;
+            emit_abi_store_gp_chunk(function, "r11", offset, reg, chunk_size);
+        } else if (classification.classes[i] == X86_ABI_SSE) {
+            char reg[8];
+            snprintf(reg, sizeof(reg), "xmm%zu", fp_return++);
+            emit_abi_store_sse_chunk(function, "r11", offset, reg, chunk_size);
+        }
+    }
+}
+
+static void emit_abi_stack_copy(X86Function *function, const LirOperand *operand, size_t stack_offset, size_t size) {
+    emit_operand_address(function, operand, X86_RSI);
+    fprintf(function->out, "    lea rdi, [rsp+%zu]\n", stack_offset);
+    fprintf(function->out, "    mov rcx, %zu\n", size);
+    fprintf(function->out, "    rep movsb\n");
+}
+
 static void emit_call(X86Function *function, const LirInstruction *instruction) {
     LirOperand *operands = instruction->operands.data;
     Symbol *symbol = operands[0].symbol;
     size_t arg_count = instruction->operands.len - 1;
-
     HirType *callee_type = base_type(symbol->type);
     assert(callee_type != NULL && callee_type->kind == HIR_TYPE_FUNCTION);
 
     HirType *return_type = base_type(callee_type->function.ret);
-    bool indirect_return = return_type != NULL && return_type->size > 8;
-    size_t gp_count = indirect_return ? 1 : 0;
-    size_t fp_count = 0;
-    size_t stack_count = 0;
-    size_t *stack_offsets = calloc(arg_count ? arg_count : 1, sizeof(*stack_offsets));
-    bool *stack_args = calloc(arg_count ? arg_count : 1, sizeof(*stack_args));
-    assert(stack_offsets != NULL && stack_args != NULL);
+    bool indirect_return = return_type != NULL && abi_classify_type(return_type).memory;
+    HirType **arg_types = calloc(arg_count ? arg_count : 1, sizeof(*arg_types));
+    X86AbiArgument *arguments = calloc(arg_count ? arg_count : 1, sizeof(*arguments));
+    assert(arg_types != NULL && arguments != NULL);
+    for (size_t i = 0; i < arg_count; i++)
+        arg_types[i] = operands[i + 1].type;
+
+    size_t stack_size = abi_assign_arguments(arg_types, arg_count, indirect_return, arguments);
+    if (stack_size != 0)
+        fprintf(function->out, "    sub rsp, %zu\n", stack_size);
+
+    for (size_t i = 0; i < arg_count; i++) {
+        LirOperand *arg = &operands[i + 1];
+        size_t size = type_size(arg->type);
+        if (size == 0 || !arguments[i].stack)
+            continue;
+
+        if (abi_is_aggregate(arg->type)) {
+            emit_abi_stack_copy(function, arg, arguments[i].stack_offset, size);
+        } else if (type_is_float(arg->type)) {
+            load_float_operand(function, arg, "xmm15");
+            fprintf(function->out, size == 4 ? "    movss dword ptr [rsp+%zu], xmm15\n" : "    movsd qword ptr [rsp+%zu], xmm15\n", arguments[i].stack_offset);
+        } else {
+            load_operand(function, arg, X86_RAX);
+            fprintf(function->out, "    mov %s [rsp+%zu], %s\n", size_name(size), arguments[i].stack_offset, reg_name(X86_RAX, size));
+        }
+    }
 
     if (indirect_return) {
         assert(instruction->result != LIR_INVALID_VALUE);
@@ -890,74 +1289,47 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
     for (size_t i = 0; i < arg_count; i++) {
         LirOperand *arg = &operands[i + 1];
         size_t size = type_size(arg->type);
-        if (size == 0)
+        if (size == 0 || arguments[i].stack)
             continue;
 
-        if (type_is_float(arg->type)) {
-            if (fp_count++ >= 8) {
-                stack_args[i] = true;
-                stack_offsets[i] = stack_count * 8;
-                stack_count++;
+        if (abi_is_aggregate(arg->type)) {
+            emit_operand_address(function, arg, X86_R11);
+            for (size_t j = 0; j < arguments[i].classification.count; j++) {
+                size_t chunk_size = abi_chunk_size(arg->type, j);
+                size_t offset = j * 8;
+                X86AbiClass class_ = arguments[i].classification.classes[j];
+                if (class_ == X86_ABI_INTEGER) {
+                    assert(arguments[i].gp_register[j] != SIZE_MAX);
+                    emit_abi_load_gp_chunk(function, integer_argument_register(arguments[i].gp_register[j]), "r11", offset, chunk_size);
+                } else if (class_ == X86_ABI_SSE) {
+                    assert(arguments[i].fp_register[j] != SIZE_MAX);
+                    emit_abi_load_sse_chunk(function, float_argument_register(arguments[i].fp_register[j]), "r11", offset, chunk_size);
+                }
             }
-        } else if (gp_count++ >= 6) {
-            stack_args[i] = true;
-            stack_offsets[i] = stack_count * 8;
-            stack_count++;
-        }
-    }
-
-    size_t stack_size = align_up(stack_count * 8, 16);
-    if (stack_size != 0)
-        fprintf(function->out, "    sub rsp, %zu\n", stack_size);
-
-    gp_count = indirect_return ? 1 : 0;
-    fp_count = 0;
-
-    for (size_t i = 0; i < arg_count; i++) {
-        LirOperand *arg = &operands[i + 1];
-        size_t size = type_size(arg->type);
-        if (size == 0)
-            continue;
-
-        if (stack_args[i]) {
-            if (type_is_float(arg->type)) {
-                load_float_operand(function, arg, "xmm15");
-                fprintf(function->out, size == 4 ? "    movss dword ptr [rsp+%zu], xmm15\n" : "    movsd qword ptr [rsp+%zu], xmm15\n", stack_offsets[i]);
-            } else if (size > 8) {
-                emit_operand_address(function, arg, X86_RAX);
-                fprintf(function->out, "    mov qword ptr [rsp+%zu], rax\n", stack_offsets[i]);
-            } else {
-                load_operand(function, arg, X86_RAX);
-                fprintf(function->out, "    mov %s [rsp+%zu], %s\n", size_name(size), stack_offsets[i], reg_name(X86_RAX, size));
-            }
-            continue;
-        }
-
-        if (type_is_float(arg->type)) {
-            load_float_operand(function, arg, float_argument_register(fp_count++));
+        } else if (type_is_float(arg->type)) {
+            assert(arguments[i].fp_register[0] != SIZE_MAX);
+            load_float_operand(function, arg, float_argument_register(arguments[i].fp_register[0]));
         } else {
-            X86Reg reg = integer_argument_register(gp_count++);
-            if (size > 8)
-                emit_operand_address(function, arg, reg);
-            else
-                load_operand(function, arg, reg);
+            assert(arguments[i].gp_register[0] != SIZE_MAX);
+            load_operand(function, arg, integer_argument_register(arguments[i].gp_register[0]));
         }
     }
 
     fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
-
     if (stack_size != 0)
         fprintf(function->out, "    add rsp, %zu\n", stack_size);
 
     if (!indirect_return && instruction->result != LIR_INVALID_VALUE && type_size(instruction->result_type) != 0) {
-        if (type_is_float(instruction->result_type))
+        if (abi_is_aggregate(instruction->result_type))
+            emit_abi_store_call_result(function, instruction->result_type, instruction->result);
+        else if (type_is_float(instruction->result_type))
             store_float_register(function, "xmm0", instruction->result, type_size(instruction->result_type));
         else
             store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
     }
 
-    free(stack_offsets);
-    free(stack_args);
+    free(arguments);
+    free(arg_types);
 }
 
 static void emit_instruction(X86Function *function, const LirInstruction *instruction) {
@@ -1066,68 +1438,71 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
 
 static void emit_parameters(X86Function *function) {
     LirFunction *lir = (LirFunction *)function->function;
-    size_t gp_count = function_returns_indirect(function) ? 1 : 0;
-    size_t fp_count = 0;
-    size_t stack_count = 0;
+    size_t count = lir->params.len;
+    HirType **types = calloc(count ? count : 1, sizeof(*types));
+    X86AbiArgument *arguments = calloc(count ? count : 1, sizeof(*arguments));
+    assert(types != NULL && arguments != NULL);
+    for (size_t i = 0; i < count; i++)
+        types[i] = ((LirFunctionParam *)lir->params.data)[i].type;
 
-    for (size_t i = 0; i < lir->params.len; i++) {
+    size_t stack_size = abi_assign_arguments(types, count, function_returns_indirect(function), arguments);
+    (void)stack_size;
+
+    for (size_t i = 0; i < count; i++) {
         LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
-        X86Slot *s = slot(function, param->value);
+        X86Slot *destination = slot(function, param->value);
         size_t size = type_size(param->type);
-
-        if (size == 0)
+        if (size == 0 || arguments[i].stack)
             continue;
 
-        bool stack_arg = false;
-        if (type_is_float(param->type)) {
-            if (fp_count < 8) {
-                store_float_register(function, float_argument_register(fp_count++), param->value, size);
-            } else {
-                stack_arg = true;
+        if (abi_is_aggregate(param->type)) {
+            fprintf(function->out, "    lea r11, [rbp%ld]\n", destination->offset);
+            for (size_t j = 0; j < arguments[i].classification.count; j++) {
+                size_t chunk_size = abi_chunk_size(param->type, j);
+                size_t offset = j * 8;
+                X86AbiClass class_ = arguments[i].classification.classes[j];
+                if (class_ == X86_ABI_INTEGER) {
+                    assert(arguments[i].gp_register[j] != SIZE_MAX);
+                    emit_abi_store_gp_chunk(function, "r11", offset, integer_argument_register(arguments[i].gp_register[j]), chunk_size);
+                } else if (class_ == X86_ABI_SSE) {
+                    assert(arguments[i].fp_register[j] != SIZE_MAX);
+                    emit_abi_store_sse_chunk(function, "r11", offset, float_argument_register(arguments[i].fp_register[j]), chunk_size);
+                }
             }
+        } else if (type_is_float(param->type)) {
+            store_float_register(function, float_argument_register(arguments[i].fp_register[0]), param->value, size);
         } else {
-            if (gp_count < 6) {
-                X86Reg reg = integer_argument_register(gp_count++);
-                if (size > 8)
-                    fprintf(function->out, "    mov qword ptr [rbp%ld], %s\n", s->offset, reg_name(reg, 8));
-                else
-                    fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
-            } else {
-                stack_arg = true;
-            }
-        }
-
-        if (!stack_arg)
-            continue;
-
-        size_t stack_offset = 16 + stack_count * 8;
-        stack_count++;
-
-        if (type_is_float(param->type)) {
-            fprintf(function->out, size == 4 ? "    movss xmm0, dword ptr [rbp+%zu]\n" : "    movsd xmm0, qword ptr [rbp+%zu]\n", stack_offset);
-            store_float_register(function, "xmm0", param->value, size);
-        } else {
-            fprintf(function->out, "    mov rax, qword ptr [rbp+%zu]\n", stack_offset);
-            if (size > 8)
-                fprintf(function->out, "    mov qword ptr [rbp%ld], rax\n", s->offset);
-            else
-                fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(X86_RAX, size));
+            assert(arguments[i].gp_register[0] != SIZE_MAX);
+            X86Reg reg = integer_argument_register(arguments[i].gp_register[0]);
+            fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), destination->offset, reg_name(reg, size));
         }
     }
 
-    for (size_t i = 0; i < lir->params.len; i++) {
+    for (size_t i = 0; i < count; i++) {
         LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
-        X86Slot *s = slot(function, param->value);
+        X86Slot *destination = slot(function, param->value);
         size_t size = type_size(param->type);
-
-        if (size <= 8)
+        if (size == 0 || !arguments[i].stack)
             continue;
 
-        fprintf(function->out, "    mov rsi, qword ptr [rbp%ld]\n", s->offset);
-        fprintf(function->out, "    lea rdi, [rbp%ld]\n", s->offset);
-        fprintf(function->out, "    mov rcx, %zu\n", size);
-        fprintf(function->out, "    rep movsb\n");
+        size_t stack_offset = 16 + arguments[i].stack_offset;
+        if (abi_is_aggregate(param->type)) {
+            fprintf(function->out, "    lea rsi, [rbp+%zu]\n", stack_offset);
+            fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+            fprintf(function->out, "    mov rcx, %zu\n", size);
+            fprintf(function->out, "    rep movsb\n");
+        } else if (type_is_float(param->type)) {
+            fprintf(function->out, size == 4 ? "    movss xmm15, dword ptr [rbp+%zu]\n" : "    movsd xmm15, qword ptr [rbp+%zu]\n", stack_offset);
+            store_float_register(function, "xmm15", param->value, size);
+        } else {
+            fprintf(function->out, "    lea r11, [rbp+%zu]\n", stack_offset);
+            emit_abi_load_gp_chunk(function, X86_RAX, "r11", 0, size);
+            fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), destination->offset, reg_name(X86_RAX, size));
+        }
     }
+
+    free(arguments);
+    free(types);
 }
 
 static void emit_prologue(X86Function *function) {
@@ -1162,13 +1537,11 @@ static void emit_block_args(X86Function *function, LirBlockId block_id, Array(Li
         if (size == 0)
             continue;
 
-        if (size > 8) {
-            assert(operand->kind == LIR_OPERAND_VALUE);
-
-            X86Slot *source = slot(function, operand->value);
+        if (size > 8 || abi_is_aggregate(param->type)) {
             X86Slot *destination = slot(function, param->value);
-
-            emit_copy_stack(function, destination, source, size);
+            fprintf(function->out, "    lea rdi, [rbp%ld]\n", destination->offset);
+            emit_operand_address(function, operand, X86_RSI);
+            emit_copy_memory(function, X86_RDI, X86_RSI, size);
         } else if (type_is_float(param->type)) {
             load_float_operand(function, operand, "xmm0");
             store_float_register(function, "xmm0", param->value, size);
@@ -1204,6 +1577,8 @@ static void emit_terminator(X86Function *function, const LirTerminator *terminat
             if (terminator->_return.has_value) {
                 if (function_returns_indirect(function)) {
                     emit_aggregate_return(function, &terminator->_return.value);
+                } else if (abi_is_aggregate(terminator->_return.value.type) && type_size(terminator->_return.value.type) != 0) {
+                    emit_abi_return_registers(function, &terminator->_return.value);
                 } else if (type_is_float(terminator->_return.value.type)) {
                     load_float_operand(function, &terminator->_return.value, "xmm0");
                 } else {

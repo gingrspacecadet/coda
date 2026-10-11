@@ -1,0 +1,79 @@
+name: C callers exercise System V AMD64 aggregate ABI edge cases in Coda
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Tiny = struct {
+    uint8 a;
+    uint8 b;
+    uint8 c;
+};
+type FloatPair = struct {
+    float32 x;
+    float32 y;
+};
+type DoublePair = struct {
+    float64 x;
+    float64 y;
+};
+type FloatTriple = struct {
+    float32 x;
+    float32 y;
+    float32 z;
+};
+type Pair = struct {
+    int64 x;
+    int64 y;
+};
+
+@export
+fn Tiny coda_abi_tiny_roundtrip(mut Tiny value) { value.a = value.a + 1; value.b = value.b + 2; value.c = value.c + 3; return value; }
+@export
+fn FloatPair coda_abi_float_pair_roundtrip(mut FloatPair value) { value.x = value.x + 1.0; value.y = value.y + 2.0; return value; }
+@export
+fn FloatTriple coda_abi_float_triple_roundtrip(mut FloatTriple value) { value.x = value.x + 0.5; value.y = value.y + 1.0; value.z = value.z + 1.5; return value; }
+@export
+fn Pair coda_abi_pair_fallback_then_scalar(int64 a, int64 b, int64 c, int64 d, int64 e, mut Pair value, int64 marker) { value.x = value.x + a + b + c + d + e + marker; value.y = value.y + marker; return value; }
+@export
+fn DoublePair coda_abi_double_pair_fallback_then_scalar(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, mut DoublePair value, float64 marker) { value.x = value.x + a + b + c + d + e + f + g + marker; value.y = value.y + marker; return value; }
+
+[c_source]
+#include <stdint.h>
+typedef struct { uint8_t a, b, c; } Tiny;
+typedef struct { float x, y; } FloatPair;
+typedef struct { double x, y; } DoublePair;
+typedef struct { float x, y, z; } FloatTriple;
+typedef struct { int64_t x, y; } Pair;
+
+extern Tiny coda_abi_tiny_roundtrip(Tiny value);
+extern FloatPair coda_abi_float_pair_roundtrip(FloatPair value);
+extern FloatTriple coda_abi_float_triple_roundtrip(FloatTriple value);
+extern Pair coda_abi_pair_fallback_then_scalar(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, Pair value, int64_t marker);
+extern DoublePair coda_abi_double_pair_fallback_then_scalar(double a, double b, double c, double d, double e, double f, double g, DoublePair value, double marker);
+
+int main(void) {
+    Tiny tiny = {1, 2, 3};
+    Tiny tiny_result = coda_abi_tiny_roundtrip(tiny);
+    if (tiny_result.a != 2) return 1;
+    if (tiny_result.b != 4) return 1;
+    if (tiny_result.c != 6) return 1;
+
+    FloatPair pair32 = {1.25f, 2.5f};
+    FloatPair pair32_result = coda_abi_float_pair_roundtrip(pair32);
+    if (pair32_result.x != 2.25f || pair32_result.y != 4.5f) return 2;
+
+    FloatTriple triple32 = {1.0f, 2.0f, 3.0f};
+    FloatTriple triple32_result = coda_abi_float_triple_roundtrip(triple32);
+    if (triple32_result.x != 1.5f || triple32_result.y != 3.0f || triple32_result.z != 4.5f) return 3;
+
+    Pair pair = {10, 20};
+    Pair pair_result = coda_abi_pair_fallback_then_scalar(1, 2, 3, 4, 5, pair, 6);
+    if (pair_result.x != 31) return 4;
+    if (pair_result.y != 26) return 4;
+
+    DoublePair spill_pair = {1.25, 2.5};
+    DoublePair spill_result = coda_abi_double_pair_fallback_then_scalar(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, spill_pair, 8.0);
+    if (spill_result.x != 37.25f || spill_result.y != 10.5f) return 5;
+    return 0;
+}
