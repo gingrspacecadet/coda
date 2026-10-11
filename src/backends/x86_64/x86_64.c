@@ -519,7 +519,7 @@ static void emit_compare(X86Function *function, const LirInstruction *instructio
                 fprintf(function->out, "    seta al\n");
                 break;
             case LIR_OP_GE:
-                fprintf(function->out, "    setae al\n");
+                fprintf(function->out, "    setae al\n    setnp cl\n    and al, cl\n");
                 break;
             case LIR_OP_EQ:
                 fprintf(function->out, "    sete al\n    setnp cl\n    and al, cl\n");
@@ -692,6 +692,67 @@ static bool type_is_integer_numeric(HirType *type) {
     }
 }
 
+static void emit_float_power_of_two(X86Function *function, size_t source_size, const char *reg, unsigned exponent, bool negative) {
+    if (source_size == sizeof(float)) {
+        uint32_t bits = (uint32_t)(exponent + 127u) << 23;
+        if (negative)
+            bits |= UINT32_C(0x80000000);
+        fprintf(function->out, "    mov eax, 0x%08" PRIx32 "\n    movd %s, eax\n", bits, reg);
+    } else {
+        uint64_t bits = (uint64_t)(exponent + 1023u) << 52;
+        if (negative)
+            bits |= UINT64_C(0x8000000000000000);
+        fprintf(function->out, "    mov rax, 0x%016" PRIx64 "\n    movq %s, rax\n", bits, reg);
+    }
+}
+
+static void emit_float_zero_xmm1(X86Function *function, size_t source_size) {
+    (void)source_size;
+    fprintf(function->out, "    pxor xmm1, xmm1\n");
+}
+
+static void emit_float_compare(X86Function *function, size_t source_size) {
+    fprintf(function->out, source_size == sizeof(float) ? "    ucomiss xmm0, xmm1\n" : "    ucomisd xmm0, xmm1\n");
+}
+
+static void emit_float_to_integer_cast(X86Function *function, size_t source_size, HirType *target_type, LirValueId result) {
+    unsigned bits = (unsigned)(type_size(target_type) * 8);
+    bool signed_ = type_is_signed(target_type);
+    uint64_t mask = bits == 64 ? UINT64_MAX : (UINT64_C(1) << bits) - 1;
+    uint64_t minimum = signed_ ? (UINT64_C(1) << (bits - 1)) : 0;
+    uint64_t maximum = signed_ ? mask >> 1 : mask;
+    const char *convert = source_size == sizeof(float) ? "cvttss2si" : "cvttsd2si";
+    const char *subtract = source_size == sizeof(float) ? "subss" : "subsd";
+
+    if (signed_) {
+        fprintf(function->out, "    ucomi%s xmm0, xmm0\n    jp 3f\n", source_size == sizeof(float) ? "ss" : "sd");
+        emit_float_power_of_two(function, source_size, "xmm1", bits - 1, false);
+        emit_float_compare(function, source_size);
+        fprintf(function->out, "    jae 2f\n");
+        emit_float_power_of_two(function, source_size, "xmm1", bits - 1, true);
+        emit_float_compare(function, source_size);
+        fprintf(function->out, "    jb 1f\n    %s rax, xmm0\n    jmp 4f\n1:\n    mov rax, 0x%016" PRIx64 "\n    jmp 4f\n2:\n    mov rax, 0x%016" PRIx64 "\n    jmp 4f\n3:\n    xor eax, eax\n4:\n", convert, minimum, maximum);
+    } else {
+        emit_float_zero_xmm1(function, source_size);
+        emit_float_compare(function, source_size);
+        fprintf(function->out, "    jbe 3f\n");
+        emit_float_power_of_two(function, source_size, "xmm1", bits, false);
+        emit_float_compare(function, source_size);
+        fprintf(function->out, "    jae 2f\n");
+
+        if (bits == 64) {
+            emit_float_power_of_two(function, source_size, "xmm1", 63, false);
+            emit_float_compare(function, source_size);
+            fprintf(function->out, "    jb 5f\n    %s xmm0, xmm1\n    %s rax, xmm0\n    bts rax, 63\n    jmp 4f\n5:\n    %s rax, xmm0\n    jmp 4f\n", subtract, convert, convert);
+        } else {
+            fprintf(function->out, "    %s rax, xmm0\n    jmp 4f\n", convert);
+        }
+        fprintf(function->out, "2:\n    mov rax, 0x%016" PRIx64 "\n    jmp 4f\n3:\n    xor eax, eax\n4:\n", maximum);
+    }
+
+    store_register(function, X86_RAX, result, type_size(target_type));
+}
+
 static void emit_cast(X86Function *function, const LirInstruction *instruction) {
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
     HirType *source_type = base_type(operand->type);
@@ -712,16 +773,7 @@ static void emit_cast(X86Function *function, const LirInstruction *instruction) 
         }
 
         assert(type_is_integer_numeric(target_type));
-        if (target_type->builtin == BUILTIN_UINT64) {
-            if (source_size == 4) {
-                fprintf(function->out, "    mov eax, 0x5f000000\n    movd xmm1, eax\n    ucomiss xmm0, xmm1\n    jb 1f\n    subss xmm0, xmm1\n    cvttss2si rax, xmm0\n    bts rax, 63\n    jmp 2f\n1:\n    cvttss2si rax, xmm0\n2:\n");
-            } else {
-                fprintf(function->out, "    mov rax, 0x43e0000000000000\n    movq xmm1, rax\n    ucomisd xmm0, xmm1\n    jb 1f\n    subsd xmm0, xmm1\n    cvttsd2si rax, xmm0\n    bts rax, 63\n    jmp 2f\n1:\n    cvttsd2si rax, xmm0\n2:\n");
-            }
-        } else {
-            fprintf(function->out, source_size == 4 ? "    cvttss2si rax, xmm0\n" : "    cvttsd2si rax, xmm0\n");
-        }
-        store_register(function, X86_RAX, instruction->result, target_size);
+        emit_float_to_integer_cast(function, source_size, target_type, instruction->result);
         return;
     }
 
@@ -822,8 +874,12 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
 
     HirType *return_type = base_type(callee_type->function.ret);
     bool indirect_return = return_type != NULL && return_type->size > 8;
-    size_t gp_index = indirect_return ? 1 : 0;
-    size_t fp_index = 0;
+    size_t gp_count = indirect_return ? 1 : 0;
+    size_t fp_count = 0;
+    size_t stack_count = 0;
+    size_t *stack_offsets = calloc(arg_count ? arg_count : 1, sizeof(*stack_offsets));
+    bool *stack_args = calloc(arg_count ? arg_count : 1, sizeof(*stack_args));
+    assert(stack_offsets != NULL && stack_args != NULL);
 
     if (indirect_return) {
         assert(instruction->result != LIR_INVALID_VALUE);
@@ -838,11 +894,49 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
             continue;
 
         if (type_is_float(arg->type)) {
-            assert(fp_index < 8 && "stack-passed floating-point arguments are not implemented");
-            load_float_operand(function, arg, float_argument_register(fp_index++));
+            if (fp_count++ >= 8) {
+                stack_args[i] = true;
+                stack_offsets[i] = stack_count * 8;
+                stack_count++;
+            }
+        } else if (gp_count++ >= 6) {
+            stack_args[i] = true;
+            stack_offsets[i] = stack_count * 8;
+            stack_count++;
+        }
+    }
+
+    size_t stack_size = align_up(stack_count * 8, 16);
+    if (stack_size != 0)
+        fprintf(function->out, "    sub rsp, %zu\n", stack_size);
+
+    gp_count = indirect_return ? 1 : 0;
+    fp_count = 0;
+
+    for (size_t i = 0; i < arg_count; i++) {
+        LirOperand *arg = &operands[i + 1];
+        size_t size = type_size(arg->type);
+        if (size == 0)
+            continue;
+
+        if (stack_args[i]) {
+            if (type_is_float(arg->type)) {
+                load_float_operand(function, arg, "xmm15");
+                fprintf(function->out, size == 4 ? "    movss dword ptr [rsp+%zu], xmm15\n" : "    movsd qword ptr [rsp+%zu], xmm15\n", stack_offsets[i]);
+            } else if (size > 8) {
+                emit_operand_address(function, arg, X86_RAX);
+                fprintf(function->out, "    mov qword ptr [rsp+%zu], rax\n", stack_offsets[i]);
+            } else {
+                load_operand(function, arg, X86_RAX);
+                fprintf(function->out, "    mov %s [rsp+%zu], %s\n", size_name(size), stack_offsets[i], reg_name(X86_RAX, size));
+            }
+            continue;
+        }
+
+        if (type_is_float(arg->type)) {
+            load_float_operand(function, arg, float_argument_register(fp_count++));
         } else {
-            assert(gp_index < 6 && "stack-passed integer arguments are not implemented");
-            X86Reg reg = integer_argument_register(gp_index++);
+            X86Reg reg = integer_argument_register(gp_count++);
             if (size > 8)
                 emit_operand_address(function, arg, reg);
             else
@@ -852,12 +946,18 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
 
     fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
 
+    if (stack_size != 0)
+        fprintf(function->out, "    add rsp, %zu\n", stack_size);
+
     if (!indirect_return && instruction->result != LIR_INVALID_VALUE && type_size(instruction->result_type) != 0) {
         if (type_is_float(instruction->result_type))
             store_float_register(function, "xmm0", instruction->result, type_size(instruction->result_type));
         else
             store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
     }
+
+    free(stack_offsets);
+    free(stack_args);
 }
 
 static void emit_instruction(X86Function *function, const LirInstruction *instruction) {
@@ -966,8 +1066,9 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
 
 static void emit_parameters(X86Function *function) {
     LirFunction *lir = (LirFunction *)function->function;
-    size_t gp_index = function_returns_indirect(function) ? 1 : 0;
-    size_t fp_index = 0;
+    size_t gp_count = function_returns_indirect(function) ? 1 : 0;
+    size_t fp_count = 0;
+    size_t stack_count = 0;
 
     for (size_t i = 0; i < lir->params.len; i++) {
         LirFunctionParam *param = &((LirFunctionParam *)lir->params.data)[i];
@@ -977,18 +1078,41 @@ static void emit_parameters(X86Function *function) {
         if (size == 0)
             continue;
 
+        bool stack_arg = false;
         if (type_is_float(param->type)) {
-            assert(fp_index < 8 && "stack-passed floating-point parameters are not implemented");
-            store_float_register(function, float_argument_register(fp_index++), param->value, size);
-            continue;
+            if (fp_count < 8) {
+                store_float_register(function, float_argument_register(fp_count++), param->value, size);
+            } else {
+                stack_arg = true;
+            }
+        } else {
+            if (gp_count < 6) {
+                X86Reg reg = integer_argument_register(gp_count++);
+                if (size > 8)
+                    fprintf(function->out, "    mov qword ptr [rbp%ld], %s\n", s->offset, reg_name(reg, 8));
+                else
+                    fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
+            } else {
+                stack_arg = true;
+            }
         }
 
-        assert(gp_index < 6 && "stack-passed integer parameters are not implemented");
-        X86Reg reg = integer_argument_register(gp_index++);
-        if (size > 8)
-            fprintf(function->out, "    mov qword ptr [rbp%ld], %s\n", s->offset, reg_name(reg, 8));
-        else
-            fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(reg, size));
+        if (!stack_arg)
+            continue;
+
+        size_t stack_offset = 16 + stack_count * 8;
+        stack_count++;
+
+        if (type_is_float(param->type)) {
+            fprintf(function->out, size == 4 ? "    movss xmm0, dword ptr [rbp+%zu]\n" : "    movsd xmm0, qword ptr [rbp+%zu]\n", stack_offset);
+            store_float_register(function, "xmm0", param->value, size);
+        } else {
+            fprintf(function->out, "    mov rax, qword ptr [rbp+%zu]\n", stack_offset);
+            if (size > 8)
+                fprintf(function->out, "    mov qword ptr [rbp%ld], rax\n", s->offset);
+            else
+                fprintf(function->out, "    mov %s [rbp%ld], %s\n", size_name(size), s->offset, reg_name(X86_RAX, size));
+        }
     }
 
     for (size_t i = 0; i < lir->params.len; i++) {

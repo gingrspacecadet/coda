@@ -1005,6 +1005,7 @@ static bool test_run_file(const char *path, TestStats *stats) {
 
     if (!pass) {
         test_print_failures(&test, &failure);
+        printf("Test file: %s\n", path);
         stats->failed++;
     } else {
         stats->passed++;

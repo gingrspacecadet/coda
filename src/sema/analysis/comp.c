@@ -1073,31 +1073,43 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
                     }, target);
                 }
 
-                if (is_integer(target) && isfinite(value)) {
+                if (is_integer(target)) {
                     unsigned bits = integer_bits(target);
                     long double number = (long double)value;
+                    uint64_t converted;
 
-                    if (is_signed(target)) {
+                    if (isnan(value)) {
+                        converted = 0;
+                    } else if (is_signed(target)) {
                         long double limit = bits == 64
                             ? 9223372036854775808.0L
                             : (long double)(UINT64_C(1) << (bits - 1));
-                        if (number < -limit || number >= limit)
-                            return expr;
-                        int64_t converted = (int64_t)number;
-                        return literal(context->sema, expr, (HirLiteral){
-                            .kind = HIR_LITERAL_INTEGER,
-                            .integer = integer_wrap(target, (uint64_t)converted),
-                        }, target);
+                        uint64_t minimum = UINT64_C(1) << (bits - 1);
+                        uint64_t maximum = bits == 64 ? (uint64_t)INT64_MAX : (UINT64_C(1) << (bits - 1)) - 1;
+
+                        if (number <= -limit)
+                            converted = minimum;
+                        else if (number >= limit)
+                            converted = maximum;
+                        else
+                            converted = (uint64_t)(int64_t)number;
+                    } else {
+                        long double limit = bits == 64
+                            ? 18446744073709551616.0L
+                            : (long double)(UINT64_C(1) << bits);
+                        uint64_t maximum = bits == 64 ? UINT64_MAX : (UINT64_C(1) << bits) - 1;
+
+                        if (number <= 0.0L)
+                            converted = 0;
+                        else if (number >= limit)
+                            converted = maximum;
+                        else
+                            converted = (uint64_t)number;
                     }
 
-                    long double limit = bits == 64
-                        ? 18446744073709551616.0L
-                        : (long double)(UINT64_C(1) << bits);
-                    if (number < 0.0L || number >= limit)
-                        return expr;
                     return literal(context->sema, expr, (HirLiteral){
                         .kind = HIR_LITERAL_INTEGER,
-                        .integer = integer_wrap(target, (uint64_t)number),
+                        .integer = integer_wrap(target, converted),
                     }, target);
                 }
             }

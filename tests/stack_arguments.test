@@ -1,0 +1,31 @@
+name: stack-passed scalar arguments follow the SysV ABI
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 sum7(int64 a, int64 b, int64 c, int64 d, int64 e, int64 f, int64 g) {
+    return a + b + c + d + e + f + g;
+}
+
+fn float64 sum9(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, float64 h, float64 i) {
+    return a + b + c + d + e + f + g + h + i;
+}
+
+fn int64 mixed(int64 a, float64 b, int64 c, float64 d, int64 e, float64 f, int64 g, float64 h, int64 i, float64 j, int64 k, float64 l, int64 m, float64 n, float64 o, float64 p, float64 q) {
+    return a + (int64) b + c + (int64) d + e + (int64) f + g + (int64) h + i + (int64) j + k + (int64) l + m + (int64) n + (int64) o + (int64) p + (int64) q;
+}
+
+fn int64 main() {
+    if (sum7(1, 2, 3, 4, 5, 6, 7) != 28) return 1;
+    if (sum9(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0) != 45.0) return 2;
+    if (mixed(1, 2.0, 3, 4.0, 5, 6.0, 7, 8.0, 9, 10.0, 11, 12.0, 13, 14.0, 15.0, 16.0, 17.0) != 153) return 3;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

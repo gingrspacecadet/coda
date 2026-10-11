@@ -1,0 +1,39 @@
+name: floating-point unordered comparisons follow IEEE semantics
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    float64 nan = 0.0 / 0.0;
+    float64 one = 1.0;
+    if (nan < one) return 1;
+    if (nan <= one) return 2;
+    if (nan > one) return 3;
+    if (nan >= one) return 4;
+    if (nan == one) return 5;
+    if (!(nan != one)) return 6;
+
+    float64 positive_infinity = 1.0 / 0.0;
+    float64 negative_infinity = -1.0 / 0.0;
+    if (!(positive_infinity > one)) return 7;
+    if (positive_infinity <= one) return 8;
+    if (!(negative_infinity < one)) return 9;
+    if (negative_infinity >= one) return 10;
+
+    float64 negative_zero = -0.0;
+    float64 zero = 0.0;
+    if (negative_zero != zero) return 11;
+    if (!(negative_zero >= zero)) return 12;
+    if (!(negative_zero <= zero)) return 13;
+    if (negative_zero < zero) return 14;
+    if (negative_zero > zero) return 15;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0
