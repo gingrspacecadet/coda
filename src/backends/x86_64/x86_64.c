@@ -531,6 +531,20 @@ static void emit_addr_add(X86Function *function, const LirInstruction *instructi
     store_register(function, X86_RAX, instruction->result, 8);
 }
 
+static void emit_addr_diff(X86Function *function, const LirInstruction *instruction) {
+    LirOperand *operands = instruction->operands.data;
+
+    load_operand(function, &operands[0], X86_RAX);
+    load_operand(function, &operands[1], X86_RCX);
+    fprintf(function->out, "    sub rax, rcx\n");
+
+    load_operand(function, &operands[2], X86_RCX);
+    fprintf(function->out, "    cqo\n");
+    fprintf(function->out, "    idiv rcx\n");
+
+    store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
+}
+
 static void emit_addr(X86Function *function, const LirInstruction *instruction) {
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
 
@@ -723,6 +737,10 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
 
         case LIR_OP_ADDR_ADD:
             emit_addr_add(function, instruction);
+            break;
+
+        case LIR_OP_ADDR_DIFF:
+            emit_addr_diff(function, instruction);
             break;
 
         case LIR_OP_CALL:
