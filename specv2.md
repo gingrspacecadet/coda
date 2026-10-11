@@ -1976,3 +1976,24 @@ PROPOSAL: struct inheritance
 type T = struct: Foo {...};
 ```
 `T` inherits all methods on `Foo`, overridable, and all of `Foo`'s members. 
+
+NEW!!! Named default arguments to functions.
+
+Example:
+```rs
+fn none connect(string host, uint16 port = 443, uint32 timeout_ms = 5000) {
+    // ...
+}
+
+connect("example.com");
+connect("example.com", .port = 8443);
+connect("example.com", .timeout_ms = 1000);
+```
+
+This goes hand-in-hand with their positional counterpart (`connect("example.com", 1234);`) by providing a way to skip over arguments you wish to keep default.
+
+Rules:
+* Positional arguments must precede named arguments
+* Named arguments must follow parameter declaration order
+* A parameter may be specified only once
+* Any omitted parameter must have a default
