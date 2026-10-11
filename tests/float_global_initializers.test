@@ -1,0 +1,37 @@
+name: float32 and float64 global initialisers
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Pair = struct {
+    float32 small;
+    float64 large;
+};
+
+float32 small_global = 1.5;
+float64 large_global = 3.141592653589793;
+mut float32 mutable_global = 2.5;
+Pair pair_global = {4.5, 6.25};
+float32 zero32 = 0.0;
+float64 zero64 = 0.0;
+
+fn int64 main() {
+    if (small_global != 1.5) return 1;
+    if (large_global != 3.141592653589793) return 2;
+    if (mutable_global != 2.5) return 3;
+    mutable_global = mutable_global + 0.5;
+    if (mutable_global != 3.0) return 4;
+    if (pair_global.small != 4.5) return 5;
+    if (pair_global.large != 6.25) return 6;
+    if (zero32 != 0.0) return 7;
+    if (zero64 != 0.0) return 8;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

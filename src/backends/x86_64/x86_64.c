@@ -1176,9 +1176,25 @@ static void emit_global(FILE *out, const LirGlobal *global) {
                 offset = data->offset + 1;
                 break;
 
-            case LIR_DATA_FLOAT:
-                assert(!"global floating-point emission not implemented yet");
+            case LIR_DATA_FLOAT: {
+                size_t size = type_size(data->type);
+
+                if (size == sizeof(float)) {
+                    float value = (float)data->floating;
+                    uint32_t bits;
+                    memcpy(&bits, &value, sizeof(bits));
+                    fprintf(out, "    .long 0x%08" PRIx32 "\n", bits);
+                } else if (size == sizeof(double)) {
+                    uint64_t bits;
+                    memcpy(&bits, &data->floating, sizeof(bits));
+                    fprintf(out, "    .quad 0x%016" PRIx64 "\n", bits);
+                } else {
+                    assert(!"invalid floating-point global size");
+                }
+
+                offset = data->offset + size;
                 break;
+            }
 
             case LIR_DATA_BYTES:
                 for (size_t j = 0; j < data->bytes.length; j++)

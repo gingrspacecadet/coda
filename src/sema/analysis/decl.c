@@ -153,7 +153,7 @@ static bool expr_is_static(HirExpr *expr) {
             return true;
 
         case HIR_EXPR_CAST:
-            return expr_is_static(expr->cast.operand);
+            return false;
 
         default:
             return false;
@@ -176,6 +176,11 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     if (ast->init != NULL) {
         init = sema_expr(sema, ast->init, type);
 
+        if (init == NULL || init->kind == HIR_EXPR_ERROR)
+            return false;
+
+        CompContext context = {.sema = sema, .frame = NULL};
+        init = comp_eval_expr(&context, init);
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
             return false;
 

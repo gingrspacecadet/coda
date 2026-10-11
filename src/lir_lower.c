@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 
 #include "lir_lower.h"
@@ -1479,7 +1480,7 @@ static void lir_collect_static_data(LirModule *module, Array(LirData) *data, Hir
                     break;
 
                 case HIR_LITERAL_FLOAT:
-                    if (expr->literal.floating == 0.0)
+                    if (expr->literal.floating == 0.0 && !signbit(expr->literal.floating))
                         return;
 
                     value.kind = LIR_DATA_FLOAT;

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include "common.h"
 
 static bool comp_same_symbol(Symbol *a, Symbol *b) {
@@ -93,6 +94,97 @@ static int64_t integer_signed(HirType *type, uint64_t value) {
     return (int64_t)value;
 }
 
+static HirType *comp_unwrap_type(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+    return type;
+}
+
+static bool comp_type_is_float(HirType *type) {
+    type = comp_unwrap_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
+}
+
+static double comp_round_float(HirType *type, double value) {
+    type = comp_unwrap_type(type);
+    return type != NULL && type->size == sizeof(float) ? (double)(float)value : value;
+}
+
+static bool comp_literal_float_value(HirExpr *expr, double *value) {
+    if (expr == NULL || expr->kind != HIR_EXPR_LITERAL || !comp_type_is_float(expr->type))
+        return false;
+
+    if (expr->literal.kind == HIR_LITERAL_FLOAT) {
+        *value = comp_round_float(expr->type, expr->literal.floating);
+        return true;
+    }
+
+    if (expr->literal.kind == HIR_LITERAL_INTEGER) {
+        *value = comp_round_float(expr->type, (double)expr->literal.integer);
+        return true;
+    }
+
+    return false;
+}
+
+static bool comp_eval_float_binary(AstBinaryOp op, HirType *type, double left, double right, HirLiteral *result) {
+    type = comp_unwrap_type(type);
+    if (type == NULL || (type->size != sizeof(float) && type->size != sizeof(double)))
+        return false;
+
+    if (type->size == sizeof(float)) {
+        float a = (float)left;
+        float b = (float)right;
+        float value;
+
+        switch (op) {
+            case AST_BINARY_ADD: value = a + b; break;
+            case AST_BINARY_SUB: value = a - b; break;
+            case AST_BINARY_MUL: value = a * b; break;
+            case AST_BINARY_DIV:
+                if (b == 0.0f) return false;
+                value = a / b;
+                break;
+            case AST_BINARY_EQUAL:     *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a == b}; return true;
+            case AST_BINARY_NOT_EQUAL: *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a != b}; return true;
+            case AST_BINARY_LT:        *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a < b}; return true;
+            case AST_BINARY_LTE:       *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a <= b}; return true;
+            case AST_BINARY_GT:        *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a > b}; return true;
+            case AST_BINARY_GTE:       *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a >= b}; return true;
+            default: return false;
+        }
+
+        *result = (HirLiteral){.kind = HIR_LITERAL_FLOAT, .floating = (double)value};
+        return true;
+    }
+
+    double a = left;
+    double b = right;
+    double value;
+
+    switch (op) {
+        case AST_BINARY_ADD: value = a + b; break;
+        case AST_BINARY_SUB: value = a - b; break;
+        case AST_BINARY_MUL: value = a * b; break;
+        case AST_BINARY_DIV:
+            if (b == 0.0) return false;
+            value = a / b;
+            break;
+        case AST_BINARY_EQUAL:     *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a == b}; return true;
+        case AST_BINARY_NOT_EQUAL: *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a != b}; return true;
+        case AST_BINARY_LT:        *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a < b}; return true;
+        case AST_BINARY_LTE:       *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a <= b}; return true;
+        case AST_BINARY_GT:        *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a > b}; return true;
+        case AST_BINARY_GTE:       *result = (HirLiteral){.kind = HIR_LITERAL_BOOL, .boolean = a >= b}; return true;
+        default: return false;
+    }
+
+    *result = (HirLiteral){.kind = HIR_LITERAL_FLOAT, .floating = value};
+    return true;
+}
+
+
 static HirExpr *eval_binary(CompContext *context, HirExpr *expr) {
     AstBinaryOp op = expr->binary.op;
 
@@ -126,6 +218,15 @@ static HirExpr *eval_binary(CompContext *context, HirExpr *expr) {
 
     if (left->kind != HIR_EXPR_LITERAL || right->kind != HIR_EXPR_LITERAL)
         return expr;
+
+    double float_left;
+    double float_right;
+    if (comp_literal_float_value(left, &float_left) && comp_literal_float_value(right, &float_right)) {
+        HirLiteral result;
+        if (!comp_eval_float_binary(op, left->type, float_left, float_right, &result))
+            return expr;
+        return literal(context->sema, expr, result, expr->type);
+    }
 
     if (left->literal.kind == HIR_LITERAL_BOOL &&
         right->literal.kind == HIR_LITERAL_BOOL) {
@@ -313,6 +414,15 @@ static HirExpr *eval_unary(CompContext *context, HirExpr *expr) {
 
     if (operand->kind != HIR_EXPR_LITERAL)
         return expr;
+
+    double float_operand;
+    if (comp_literal_float_value(operand, &float_operand)) {
+        if (expr->unary.op == AST_UNARY_POS || expr->unary.op == AST_UNARY_NEG)
+            return literal(context->sema, expr, (HirLiteral){
+                .kind = HIR_LITERAL_FLOAT,
+                .floating = comp_round_float(expr->type, expr->unary.op == AST_UNARY_NEG ? -float_operand : float_operand),
+            }, expr->type);
+    }
 
     switch (expr->unary.op) {
         case AST_UNARY_POS:
@@ -917,17 +1027,79 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
 
         case HIR_EXPR_CAST: {
             HirExpr *operand = comp_eval_expr(context, expr->cast.operand);
+            HirType *source = operand != NULL ? operand->type : NULL;
+            HirType *target = expr->type;
 
-            if (operand->kind != HIR_EXPR_LITERAL)
+            if (operand == NULL || operand->kind != HIR_EXPR_LITERAL || target == NULL)
+                return expr;
+            if (source == NULL && operand->literal.kind == HIR_LITERAL_FLOAT)
+                source = builtin_type(context->sema, BUILTIN_FLOAT64);
+            if (source == NULL)
                 return expr;
 
-            if (operand->literal.kind == HIR_LITERAL_INTEGER &&
-                expr->type->kind == HIR_TYPE_BUILTIN &&
-                is_integer(expr->type)) {
+            if (operand->literal.kind == HIR_LITERAL_INTEGER && is_integer(source) && is_integer(target)) {
                 return literal(context->sema, expr, (HirLiteral){
                     .kind = HIR_LITERAL_INTEGER,
-                    .integer = integer_wrap(expr->type, operand->literal.integer),
-                }, expr->type);
+                    .integer = integer_wrap(target, operand->literal.integer),
+                }, target);
+            }
+
+            if (operand->literal.kind == HIR_LITERAL_INTEGER && comp_type_is_float(target)) {
+                if (comp_type_is_float(source)) {
+                    double value = comp_round_float(source, (double)operand->literal.integer);
+                    return literal(context->sema, expr, (HirLiteral){
+                        .kind = HIR_LITERAL_FLOAT,
+                        .floating = comp_round_float(target, value),
+                    }, target);
+                }
+                if (is_integer(source)) {
+                    long double number = is_signed(source)
+                        ? (long double)integer_signed(source, operand->literal.integer)
+                        : (long double)operand->literal.integer;
+                    double value = (double)number;
+                    return literal(context->sema, expr, (HirLiteral){
+                        .kind = HIR_LITERAL_FLOAT,
+                        .floating = comp_round_float(target, value),
+                    }, target);
+                }
+            }
+
+            if (operand->literal.kind == HIR_LITERAL_FLOAT && comp_type_is_float(source)) {
+                double value = comp_round_float(source, operand->literal.floating);
+                if (comp_type_is_float(target)) {
+                    return literal(context->sema, expr, (HirLiteral){
+                        .kind = HIR_LITERAL_FLOAT,
+                        .floating = comp_round_float(target, value),
+                    }, target);
+                }
+
+                if (is_integer(target) && isfinite(value)) {
+                    unsigned bits = integer_bits(target);
+                    long double number = (long double)value;
+
+                    if (is_signed(target)) {
+                        long double limit = bits == 64
+                            ? 9223372036854775808.0L
+                            : (long double)(UINT64_C(1) << (bits - 1));
+                        if (number < -limit || number >= limit)
+                            return expr;
+                        int64_t converted = (int64_t)number;
+                        return literal(context->sema, expr, (HirLiteral){
+                            .kind = HIR_LITERAL_INTEGER,
+                            .integer = integer_wrap(target, (uint64_t)converted),
+                        }, target);
+                    }
+
+                    long double limit = bits == 64
+                        ? 18446744073709551616.0L
+                        : (long double)(UINT64_C(1) << bits);
+                    if (number < 0.0L || number >= limit)
+                        return expr;
+                    return literal(context->sema, expr, (HirLiteral){
+                        .kind = HIR_LITERAL_INTEGER,
+                        .integer = integer_wrap(target, (uint64_t)number),
+                    }, target);
+                }
             }
 
             return expr;
@@ -951,7 +1123,7 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
         case HIR_EXPR_CALL: {
             HirFunction *function = find_function(context, expr->call.function);
 
-            if (function == NULL)
+            if (function == NULL || !function->is_comptime)
                 return expr;
 
             Array args = array_create(context->sema->arena, sizeof(HirExpr *));
