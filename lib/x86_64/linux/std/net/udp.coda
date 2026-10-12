@@ -37,7 +37,7 @@ fn (none | SocketError) UdpSocket.connect(mut UdpSocket *this, Endpoint endpoint
 
 @export
 fn (uint64 | SocketError) UdpSocket.send(mut UdpSocket *this, uint8[] src) {
-    int n = syscall(44, this.socket.fd, &src[0], src.len, 0);
+    int n = syscall(SysNums::Sendto, this.socket.fd, &src[0], src.len, 0);
 
     if (n < 0) return socket_error(-n);
 
@@ -49,7 +49,7 @@ fn (uint64 | SocketError) UdpSocket.send_to(UdpSocket *this, Endpoint endpoint, 
     SockAddrStorage storage;
     uint64 len = sockaddr_from_endpoint(endpoint, &storage);
 
-    int n = syscall(44, this.socket.fd, src.ptr, src.len, 0, &storage, len);
+    int n = syscall(SysNums::Sendto, this.socket.fd, src.ptr, src.len, 0, &storage, len);
 
     if (n < 0) {
         return socket_error(-n);
@@ -60,7 +60,7 @@ fn (uint64 | SocketError) UdpSocket.send_to(UdpSocket *this, Endpoint endpoint, 
 
 @export
 fn (uint64 | SocketError) UdpSocket.recv(mut UdpSocket *this, mut uint8[] dst) {
-    int n = syscall(45, this.socket.fd, &dst[0], dst.len, 0);
+    int n = syscall(SysNums::Recvfrom, this.socket.fd, &dst[0], dst.len, 0);
 
     if (n < 0) return socket_error(-n);
 
@@ -72,7 +72,7 @@ fn (uint64 | SocketError) UdpSocket.recv_from(mut UdpSocket *this, mut uint8[] d
     SockAddrStorage storage;
     uint32 len = #sizeof(SockAddrStorage);
 
-    int n = syscall(45, this.socket.fd, dst.ptr, dst.len, 0, &storage, &len);
+    int n = syscall(SysNums::Recvfrom, this.socket.fd, dst.ptr, dst.len, 0, &storage, &len);
 
     if (n < 0) {
         return socket_error(-n);

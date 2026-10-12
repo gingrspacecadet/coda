@@ -52,7 +52,7 @@ fn (Socket | SocketError) Socket.create(SocketKind skind) {
         SocketType::UDP kind = 2;
     };
 
-    int fd = syscall(41, domain, kind, 0);
+    int fd = syscall(Socket, domain, kind, 0);
 
     if (fd < 0) {
         return socket_error(-fd);
@@ -74,7 +74,7 @@ fn (none | SocketError) Socket.bind(mut Socket *this, Endpoint endpoint) {
                 .zero = { 0, 0, 0, 0, 0, 0, 0, 0 },
             };
 
-            int result = syscall(49, this.fd, &addr, #sizeof(SockAddrIn));
+            int result = syscall(SysNums::Bind, this.fd, &addr, #sizeof(SockAddrIn));
             if (result < 0) return socket_error(-result);
         }
 
@@ -87,7 +87,7 @@ fn (none | SocketError) Socket.bind(mut Socket *this, Endpoint endpoint) {
                 .scope_id = 0,
             };
 
-            int result = syscall(49, this.fd, &addr, #sizeof(SockAddrIn6));
+            int result = syscall(SysNums::Bind, this.fd, &addr, #sizeof(SockAddrIn6));
             if (result < 0) return socket_error(-result);
         }
     }
@@ -98,7 +98,7 @@ fn (none | SocketError) Socket.close(mut Socket *this) {
         return;
     }
 
-    int result = syscall(3, this.fd);
+    int result = syscall(SysNums::Close, this.fd);
 
     if (result < 0) {
         return socket_error(-result);
@@ -108,7 +108,7 @@ fn (none | SocketError) Socket.close(mut Socket *this) {
 }
 
 fn (none | SocketError) Socket.listen(mut Socket *this, uint32 backlog) {
-    int result = syscall(50, this.fd, backlog);
+    int result = syscall(SysNums::Listen, this.fd, backlog);
 
     if (result < 0) {
         return socket_error(-result);
@@ -116,7 +116,7 @@ fn (none | SocketError) Socket.listen(mut Socket *this, uint32 backlog) {
 }
 
 fn (Socket | SocketError) Socket.accept(mut Socket *this) {
-    int fd = syscall(43, this.fd, 0, 0);
+    int fd = syscall(SysNums::Accept, this.fd, 0, 0);
 
     if (fd < 0) {
         return socket_error(-fd);
@@ -138,7 +138,7 @@ fn (none | SocketError) Socket.connect(mut Socket *this, Endpoint endpoint) {
                 .zero = { 0, 0, 0, 0, 0, 0, 0, 0 },
             };
 
-            int result = syscall(42, this.fd, &addr, #sizeof(SockAddrIn));
+            int result = syscall(SysNums::Connect this.fd, &addr, #sizeof(SockAddrIn));
             if (result < 0) return socket_error(-result);
         }
 
@@ -151,7 +151,7 @@ fn (none | SocketError) Socket.connect(mut Socket *this, Endpoint endpoint) {
                 .scope_id = 0,
             };
 
-            int result = syscall(42, this.fd, &addr, #sizeof(SockAddrIn6));
+            int result = syscall(SysNums::Connect, this.fd, &addr, #sizeof(SockAddrIn6));
             if (result < 0) return socket_error(-result);
         }
     }

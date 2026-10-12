@@ -47,7 +47,7 @@ fn (uint64 | IOError) TcpStream.read(mut TcpStream *this, mut uint8[] dst) {
     uint64 total = 0;
 
     while (total < dst.len) {
-        int n = syscall(0, this.socket.fd, &dst[total], dst.len - total);
+        int n = syscall(SysNums::Read, this.socket.fd, &dst[total], dst.len - total);
 
         if (n == 0) {
             return IOError::EOS;
@@ -68,7 +68,7 @@ fn (uint64 | IOError) TcpStream.write(mut TcpStream *this, uint8[] src) {
     uint64 total = 0;
 
     while (total < src.len) {
-        int n = syscall(1, this.socket.fd, &src[total], src.len - total);
+        int n = syscall(SysNums::Write, this.socket.fd, &src[total], src.len - total);
 
         if (n < 0) {
             return IOError::UNKNOWN;

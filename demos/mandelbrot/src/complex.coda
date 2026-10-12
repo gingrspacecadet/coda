@@ -2,25 +2,32 @@ module complex;
 
 include fixed;
 
-struct Complex {
+@export
+type Complex = struct {
     fixed::Fixed real;
     fixed::Fixed imag;
-}
+};
 
+@export
 fn Complex add(Complex a, Complex b) {
-
-}
-
-fn Complex square(Complex z) {
-    fixed::Fixed real = fixed::square(z.real);
-    fixed::Fixed imag = fixed::square(z.imag);
-
-    return (Complex){
-        .real = real - imag,
-        .imag = 2 * fixed::mul(z.real, z.imag)
+    return {
+        .real = .add(a.real, b.real),
+        .imag = .add(a.imag, b.imag)
     };
 }
 
-fn fixed::Fixed magnitude_squared(Complex z) {
-    return fixed::square(z.real) + fixed::square(z.imag);
+@export
+fn Complex square(Complex z) {
+    fixed::Fixed real = .square(z.real);
+    fixed::Fixed imag = .square(z.imag);
+
+    return {
+        .real = real - imag,
+        .imag = 2 * Fixed.mul(z.real, z.imag)
+    };
+}
+
+@export,inline
+fn fixed::Fixed Complex.magnitude_squared(Complex z) {
+    return .square(z.real) + .square(z.imag);
 }

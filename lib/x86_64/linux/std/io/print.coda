@@ -4,7 +4,7 @@ include std::system;
 
 @export
 fn int print(string s) {
-    return std::system::syscall(1, 1u, (uint64)s.ptr, (uint64)s.len);
+    return std::system::syscall(Write, 1, (uint64)s.ptr, (uint64)s.len);
 }
 
 @export

@@ -1,4 +1,4 @@
 module std::system;
 
 @export,extern
-fn int syscall(int num, uint64 a1 = 0u, uint64 a2 = 0u, uint64 a3 = 0u, uint64 a4 = 0u, uint64 a5 = 0u, uint64 a6 = 0u);
+fn int32 syscall(SysNums num, uint64 a1 = 0, uint64 a2 = 0, uint64 a3 = 0, uint64 a4 = 0, uint64 a5 = 0, uint64 a6 = 0);
