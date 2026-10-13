@@ -1,0 +1,45 @@
+module humanise::int;
+
+include std::math : _;
+
+type ConfigComma = struct {
+    uint8 space;
+};
+
+type ConfigWord = struct {
+    none;
+};
+
+type ConfigAlpha = struct {
+    none;
+};
+
+type Config = (ConfigComma | ConfigWord | ConfigAlpha | none);
+
+fn string intdefault(Integer int, any<Allocator> allocator, Config config) {
+    Integer m = int;
+    String out = .create(a, 128);
+
+    $if (#constrains(int, Signed))
+        out.push('-');
+
+    for (ssize i = 0; m > 0 && m <= n; i += 1) {
+        out.push(((uint8)m % 10).to_char());
+        m /= 10;
+
+        $match (config) {
+            ConfigComma: if (i % config.space == (config.space - 1)) out.push(',');
+        }
+    }
+
+    return out.to_string();
+}
+
+@export
+fn string int(Integer int, any<Allocator> allocator = global_heap, Config config = (none){}) {
+    $match (config) {
+        ConfigWord: return intword(int, allocator, config);
+        ConfigAlpha: return intalpha(int, allocator, config);
+        _: return intdefault(int, allocator, config);
+    }
+}

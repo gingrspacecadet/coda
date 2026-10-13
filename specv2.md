@@ -1997,3 +1997,5 @@ Rules:
 * Named arguments must follow parameter declaration order
 * A parameter may be specified only once
 * Any omitted parameter must have a default
+
+PROPOSAL: `#constrains(O|T, C)` - returns `true` if `O|T` passes constraints `C`.
