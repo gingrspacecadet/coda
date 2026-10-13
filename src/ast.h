@@ -251,6 +251,7 @@ typedef enum {
     AST_EXPR_BINARY,
 
     AST_EXPR_CALL,
+    AST_EXPR_INFERRED_METHOD_CALL,
     AST_EXPR_INDEX,
     AST_EXPR_MEMBER,
     AST_EXPR_CAST,
@@ -292,6 +293,12 @@ struct AstExpr {
             Array(AstType *) generic_args;
             Array(AstCallArg) args;
         } call;
+
+        struct {
+            AstName name;
+            Array(AstType *) generic_args;
+            Array(AstCallArg) args;
+        } inferred_method_call;
 
         struct {
             AstExpr *object;

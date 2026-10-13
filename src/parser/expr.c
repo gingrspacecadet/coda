@@ -1,5 +1,7 @@
 #include "common.h"
 
+static AstExpr *parse_inferred_method_call(Parser *p);
+
 int binary_binding_power(TokenType type, bool *right_assoc, AstBinaryOp *op) {
     *right_assoc = false;
 
@@ -245,6 +247,9 @@ bool token_to_unary(TokenType type, AstUnaryOp *op) {
 }
 
 AstExpr *parse_expression_prefix(Parser *p) {
+    if (at(p, TK_DOT))
+        return parse_inferred_method_call(p);
+
     if (at(p, TK_DOLLAR)) {
         advance(p);
 
@@ -527,13 +532,51 @@ static AstCallArg parse_call_argument(Parser *p) {
         .name = {.kind = AST_NAME_ERROR},
     };
 
+    Checkpoint c = checkpoint(p);
     if (match(p, TK_DOT)) {
-        arg.name = parse_name(p);
-        expect(p, TK_EQ);
+        AstName name = parse_name(p);
+        if (!match(p, TK_EQ))
+            restore(p, c);
+        else
+            arg.name = name;
     }
 
     arg.value = parse_expression(p);
     return arg;
+}
+
+static AstExpr *parse_inferred_method_call(Parser *p) {
+    Token start = p->current;
+    advance(p);
+
+    AstName name = parse_name(p);
+    Array generic_args = array_create(p->arena, sizeof(AstType *));
+    if (at(p, TK_LT))
+        (void)try_parse_generic_arguments(p, &generic_args);
+
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
+    expr->span = start.span;
+    expr->kind = AST_EXPR_INFERRED_METHOD_CALL;
+    expr->inferred_method_call.name = name;
+    expr->inferred_method_call.generic_args = generic_args;
+    expr->inferred_method_call.args = array_create(p->arena, sizeof(AstCallArg));
+
+    if (!expect(p, TK_LPAREN)) {
+        expr->kind = AST_EXPR_ERROR;
+        return expr;
+    }
+
+    if (!at(p, TK_RPAREN)) {
+        for (;;) {
+            AstCallArg arg = parse_call_argument(p);
+            array_push(&expr->inferred_method_call.args, &arg);
+            if (!match(p, TK_COMMA))
+                break;
+        }
+    }
+
+    expect(p, TK_RPAREN);
+    return expr;
 }
 
 AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {

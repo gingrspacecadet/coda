@@ -63,6 +63,7 @@ static const char *expr_kind_name(AstExprKind kind) {
     case AST_EXPR_UNARY:      return "unary";
     case AST_EXPR_BINARY:     return "binary";
     case AST_EXPR_CALL:       return "call";
+    case AST_EXPR_INFERRED_METHOD_CALL: return "inferred-method-call";
     case AST_EXPR_INDEX:      return "index";
     case AST_EXPR_MEMBER:     return "member";
     case AST_EXPR_CAST:       return "cast";
@@ -235,6 +236,33 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
         fprintf(out, "op %s\n", binary_op_name(expr->binary.op));
         print_expr(out, expr->binary.left, depth + 1);
         print_expr(out, expr->binary.right, depth + 1);
+        break;
+
+    case AST_EXPR_INFERRED_METHOD_CALL:
+        indent(out, depth + 1);
+        fputs("method ", out);
+        print_name(out, &expr->inferred_method_call.name);
+        fputc('\n', out);
+
+        if (expr->inferred_method_call.generic_args.len != 0) {
+            indent(out, depth + 1);
+            fputs("generic-args\n", out);
+            for (size_t i = 0; i < expr->inferred_method_call.generic_args.len; i++) {
+                AstType **arg = array_at((Array *)&expr->inferred_method_call.generic_args, i);
+                print_type(out, *arg, depth + 2);
+            }
+        }
+
+        for (size_t i = 0; i < expr->inferred_method_call.args.len; i++) {
+            AstCallArg *arg = array_at((Array *)&expr->inferred_method_call.args, i);
+            if (arg->name.kind != AST_NAME_ERROR) {
+                indent(out, depth + 1);
+                fputs("argument ", out);
+                print_name(out, &arg->name);
+                fputc('\n', out);
+            }
+            print_expr(out, arg->value, depth + 1);
+        }
         break;
 
     case AST_EXPR_CALL:

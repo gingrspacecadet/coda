@@ -969,6 +969,113 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     return call;
 }
 
+static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *expected) {
+    AstName name = ast->inferred_method_call.name;
+    if (expected == NULL) {
+        DiagBuilder diagnostic = diag_begin(
+            sema->diags,
+            DIAG_ERROR,
+            E_UNEXPECTED_TOKEN,
+            ast->span,
+            STRING("cannot infer the target type for this method call")
+        );
+        diag_note(&diagnostic, STRING("use this call where an expected type is available, such as a typed initializer, return expression, or typed argument"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (expected->kind == HIR_TYPE_ERROR)
+        return sema_method_error(sema, ast->span);
+
+    if (name.kind != AST_NAME_IDENT) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, ast->span, STRING("type-inferred method names must be identifiers"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (ast->inferred_method_call.generic_args.len != 0) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("explicit generic arguments are not supported for type-inferred method calls"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    Symbol *method = sema_find_method(sema, expected, name);
+    if (method == NULL || method->decl == NULL || method->decl->kind != AST_DECL_FN) {
+        DiagBuilder diagnostic = diag_begin(
+            sema->diags,
+            DIAG_ERROR,
+            E_UNKNOWN_NAME,
+            ast->span,
+            format(sema->diags->arena, "no method '.%.*s' exists for the expected type", string_fmt(name.ident))
+        );
+        diag_note(&diagnostic, STRING("the expected type determines which method the leading-dot call refers to"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    HirType *function_type = sema_symbol_type(sema, method);
+    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION)
+        return sema_method_error(sema, ast->span);
+
+    if (method->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
+        error_cant_call_comptime(sema->diags, ast->span);
+        return sema_method_error(sema, ast->span);
+    }
+
+    AstExpr call_ast = {
+        .span = ast->span,
+        .kind = AST_EXPR_CALL,
+        .call = {
+            .callee = NULL,
+            .generic_args = ast->inferred_method_call.generic_args,
+            .args = ast->inferred_method_call.args,
+        },
+    };
+
+    size_t param_count = method->decl->fn.params.len;
+    size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->inferred_method_call.args.len);
+    bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
+    HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
+    if (!sema_map_call_arguments(sema, &call_ast, &method->decl->fn, 0, arg_params, provided))
+        return sema_method_error(sema, ast->span);
+
+    for (size_t i = 0; i < ast->inferred_method_call.args.len; i++) {
+        AstCallArg *arg = array_at(&ast->inferred_method_call.args, i);
+        size_t parameter = arg_params[i];
+        HirType *param_type = ((HirType **)function_type->function.params.data)[parameter];
+        HirExpr *value = sema_expr(sema, arg->value, param_type);
+        if (value == NULL || value->kind == HIR_EXPR_ERROR)
+            return sema_method_error(sema, ast->span);
+        values[parameter] = value;
+    }
+
+    if (!sema_complete_call_arguments(sema, method, 0, provided, values))
+        return sema_method_error(sema, ast->span);
+
+    HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
+    *call = (HirExpr) {
+        .span = ast->span,
+        .kind = HIR_EXPR_CALL,
+        .type = function_type->function.ret,
+        .call = {
+            .function = method,
+            .args = array_create(sema->arena, sizeof(HirExpr *)),
+        },
+    };
+
+    for (size_t i = 0; i < param_count; i++) {
+        HirExpr *value = values[i];
+        array_push(&call->call.args, &value);
+    }
+
+    if (expected != NULL) {
+        HirExpr *coerced = sema_coerce(sema, call, expected);
+        return coerced != NULL ? coerced : sema_method_error(sema, ast->span);
+    }
+
+    return call;
+}
+
 static HirField *sema_layout_field(HirType *type, AstName name) {
     type = sema_unwrap_type(type);
     if (type == NULL)
@@ -1228,6 +1335,9 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             return hir;
         }
+
+        case AST_EXPR_INFERRED_METHOD_CALL:
+            return sema_inferred_method_call(sema, ast, expected);
 
         case AST_EXPR_CALL: {
             bool method_handled = false;
