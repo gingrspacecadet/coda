@@ -868,6 +868,10 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         return sema_method_error(sema, ast->span);
     }
 
+    bool has_implicit_receiver = !(receiver->kind == HIR_EXPR_VALUE &&
+                                   receiver->value.symbol != NULL &&
+                                   receiver->value.symbol->kind == SYMBOL_TYPE);
+
     HirType *dispatch_type = receiver_type;
     if (dispatch_type->kind == HIR_TYPE_POINTER)
         dispatch_type = dispatch_type->pointer.pointee;
@@ -880,7 +884,8 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
 
     *handled = true;
     HirType *function_type = sema_symbol_type(sema, method);
-    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION || function_type->function.params.len == 0)
+    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION ||
+        (has_implicit_receiver && function_type->function.params.len == 0))
         return sema_method_error(sema, ast->span);
 
     if (ast->call.generic_args.len != 0) {
@@ -894,27 +899,29 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         return sema_method_error(sema, ast->span);
     }
 
-    HirType *receiver_param = ((HirType **)function_type->function.params.data)[0];
+    if (has_implicit_receiver) {
+        HirType *receiver_param = ((HirType **)function_type->function.params.data)[0];
 
-    if (receiver_param->kind == HIR_TYPE_POINTER &&
-        type_equal(receiver->type, receiver_param->pointer.pointee) &&
-        is_place(receiver)) {
-        HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
-        *address = (HirExpr){
-            .span = receiver->span,
-            .kind = HIR_EXPR_UNARY,
-            .type = pointer_type(sema, receiver->type, false),
-            .unary = {
-                .op = AST_UNARY_ADDRESS,
-                .operand = receiver,
-            },
-        };
-        receiver = address;
+        if (receiver_param->kind == HIR_TYPE_POINTER &&
+            type_equal(receiver->type, receiver_param->pointer.pointee) &&
+            is_place(receiver)) {
+            HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
+            *address = (HirExpr){
+                .span = receiver->span,
+                .kind = HIR_EXPR_UNARY,
+                .type = pointer_type(sema, receiver->type, false),
+                .unary = {
+                    .op = AST_UNARY_ADDRESS,
+                    .operand = receiver,
+                },
+            };
+            receiver = address;
+        }
+
+        receiver = sema_coerce(sema, receiver, receiver_param);
+        if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
+            return sema_method_error(sema, ast->span);
     }
-
-    receiver = sema_coerce(sema, receiver, receiver_param);
-    if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
-        return sema_method_error(sema, ast->span);
 
     HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
     *call = (HirExpr){
@@ -927,13 +934,15 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         },
     };
     size_t param_count = method->decl->fn.params.len;
+    size_t receiver_offset = has_implicit_receiver ? 1 : 0;
     size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
     bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
     HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
-    if (!sema_map_call_arguments(sema, ast, &method->decl->fn, 1, arg_params, provided))
+    if (!sema_map_call_arguments(sema, ast, &method->decl->fn, receiver_offset, arg_params, provided))
         return sema_method_error(sema, ast->span);
 
-    values[0] = receiver;
+    if (has_implicit_receiver)
+        values[0] = receiver;
     for (size_t i = 0; i < ast->call.args.len; i++) {
         AstCallArg *arg = array_at(&ast->call.args, i);
         size_t parameter = arg_params[i];
@@ -944,7 +953,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         values[parameter] = value;
     }
 
-    if (!sema_complete_call_arguments(sema, method, 1, provided, values))
+    if (!sema_complete_call_arguments(sema, method, receiver_offset, provided, values))
         return sema_method_error(sema, ast->span);
 
     for (size_t i = 0; i < param_count; i++) {

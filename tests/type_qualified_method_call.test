@@ -1,0 +1,22 @@
+name: type-qualified method call
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Foo = struct {
+    uint8 a;
+};
+
+fn uint8 Foo.get(Foo f) {
+    return f.a;
+}
+
+fn uint8 type_qualified() {
+    Foo f = {8};
+    return Foo.get(f);
+}
+
+fn uint8 object_qualified(Foo f) {
+    return f.get();
+}
