@@ -23,6 +23,10 @@ bool comp_expr_is_evaluable(HirExpr *expr);
 
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type);
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected);
+bool sema_validate_param_defaults(Sema *sema, AstFnDecl *decl);
+bool sema_prepare_function_defaults(Sema *sema, Symbol *symbol, bool declaration_context);
+bool sema_map_call_arguments(Sema *sema, AstExpr *call, AstFnDecl *decl, size_t first_param, size_t *arg_params, bool *provided);
+bool sema_complete_call_arguments(Sema *sema, Symbol *symbol, size_t first_param, bool *provided, HirExpr **values);
 
 HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable);
 HirType *builtin_type(Sema *sema, BuiltinType builtin);

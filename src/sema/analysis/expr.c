@@ -889,12 +889,6 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         return sema_method_error(sema, ast->span);
     }
 
-    size_t expected_arguments = function_type->function.params.len - 1;
-    if (expected_arguments != ast->call.args.len) {
-        error_wrong_argument_count(sema->diags, expected_arguments, ast->call.args.len, ast->span);
-        return sema_method_error(sema, ast->span);
-    }
-
     if (method->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
         error_cant_call_comptime(sema->diags, ast->span);
         return sema_method_error(sema, ast->span);
@@ -932,13 +926,29 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
             .args = array_create(sema->arena, sizeof(HirExpr *)),
         },
     };
-    array_push(&call->call.args, &receiver);
+    size_t param_count = method->decl->fn.params.len;
+    size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
+    bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
+    HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
+    if (!sema_map_call_arguments(sema, ast, &method->decl->fn, 1, arg_params, provided))
+        return sema_method_error(sema, ast->span);
 
+    values[0] = receiver;
     for (size_t i = 0; i < ast->call.args.len; i++) {
-        HirType *param_type = ((HirType **)function_type->function.params.data)[i + 1];
-        HirExpr *value = sema_expr(sema, ((AstExpr **)ast->call.args.data)[i], param_type);
+        AstCallArg *arg = array_at(&ast->call.args, i);
+        size_t parameter = arg_params[i];
+        HirType *param_type = ((HirType **)function_type->function.params.data)[parameter];
+        HirExpr *value = sema_expr(sema, arg->value, param_type);
         if (value == NULL || value->kind == HIR_EXPR_ERROR)
             return sema_method_error(sema, ast->span);
+        values[parameter] = value;
+    }
+
+    if (!sema_complete_call_arguments(sema, method, 1, provided, values))
+        return sema_method_error(sema, ast->span);
+
+    for (size_t i = 0; i < param_count; i++) {
+        HirExpr *value = values[i];
         array_push(&call->call.args, &value);
     }
 
@@ -1253,19 +1263,29 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            if (function_type->function.params.len != ast->call.args.len) {
-                error_wrong_argument_count(sema->diags, function_type->function.params.len, ast->call.args.len, ast->span);
-                hir->kind = HIR_EXPR_ERROR;
-                return hir;
-            }
-
-            if (callee->kind != HIR_EXPR_VALUE || callee->value.symbol->kind != SYMBOL_FN) {
+            if (callee->kind != HIR_EXPR_VALUE || callee->value.symbol->kind != SYMBOL_FN ||
+                callee->value.symbol->decl == NULL || callee->value.symbol->decl->kind != AST_DECL_FN) {
+                for (size_t i = 0; i < ast->call.args.len; i++) {
+                    AstCallArg *arg = array_at(&ast->call.args, i);
+                    if (arg->name.kind != AST_NAME_ERROR) {
+                        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, arg->span, STRING("named arguments require a statically resolved function"));
+                        diag_finish(&diagnostic);
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
+                }
+                if (function_type->function.params.len != ast->call.args.len) {
+                    error_wrong_argument_count(sema->diags, function_type->function.params.len, ast->call.args.len, ast->span);
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
                 //! TODO: function pointers / callable values
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            hir->call.function = callee->value.symbol;
+            Symbol *function = callee->value.symbol;
+            hir->call.function = function;
 
             if (callee->value.symbol->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
                 error_cant_call_comptime(sema->diags, callee->span);
@@ -1273,16 +1293,36 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            size_t param_count = function->decl->fn.params.len;
+            size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
+            bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
+            HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
+            if (!sema_map_call_arguments(sema, ast, &function->decl->fn, 0, arg_params, provided)) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             for (size_t i = 0; i < ast->call.args.len; i++) {
-                AstExpr *arg = ((AstExpr **)ast->call.args.data)[i];
-                HirType *param_type = ((HirType **)function_type->function.params.data)[i];
-                HirExpr *value = sema_expr(sema, arg, param_type);
+                AstCallArg *arg = array_at(&ast->call.args, i);
+                size_t parameter = arg_params[i];
+                HirType *param_type = ((HirType **)function_type->function.params.data)[parameter];
+                HirExpr *value = sema_expr(sema, arg->value, param_type);
 
                 if (value == NULL || value->kind == HIR_EXPR_ERROR) {
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }
 
+                values[parameter] = value;
+            }
+
+            if (!sema_complete_call_arguments(sema, function, 0, provided, values)) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            for (size_t i = 0; i < param_count; i++) {
+                HirExpr *value = values[i];
                 array_push(&hir->call.args, &value);
             }
 

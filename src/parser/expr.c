@@ -521,6 +521,21 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
     return true;
 }
 
+static AstCallArg parse_call_argument(Parser *p) {
+    AstCallArg arg = {
+        .span = p->current.span,
+        .name = {.kind = AST_NAME_ERROR},
+    };
+
+    if (match(p, TK_DOT)) {
+        arg.name = parse_name(p);
+        expect(p, TK_EQ);
+    }
+
+    arg.value = parse_expression(p);
+    return arg;
+}
+
 AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
     for (;;) {
         if (match(p, TK_LPAREN)) {
@@ -532,11 +547,11 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             call->call.generic_args =
                 array_create(p->arena, sizeof(AstType *));
             call->call.args =
-                array_create(p->arena, sizeof(AstExpr *));
+                array_create(p->arena, sizeof(AstCallArg));
 
             if (!at(p, TK_RPAREN)) {
                 for (;;) {
-                    AstExpr *arg = parse_expression(p);
+                    AstCallArg arg = parse_call_argument(p);
                     array_push(&call->call.args, &arg);
 
                     if (!match(p, TK_COMMA))
@@ -563,11 +578,11 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             call->call.callee = left;
             call->call.generic_args = generic_args;
             call->call.args =
-                array_create(p->arena, sizeof(AstExpr *));
+                array_create(p->arena, sizeof(AstCallArg));
 
             if (!at(p, TK_RPAREN)) {
                 for (;;) {
-                    AstExpr *arg = parse_expression(p);
+                    AstCallArg arg = parse_call_argument(p);
                     array_push(&call->call.args, &arg);
 
                     if (!match(p, TK_COMMA))

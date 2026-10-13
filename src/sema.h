@@ -21,6 +21,18 @@ typedef struct {
     bool complete;
 } GenericTypeInstance;
 
+typedef enum {
+    FUNCTION_DEFAULTS_RESOLVING,
+    FUNCTION_DEFAULTS_RESOLVED,
+    FUNCTION_DEFAULTS_FAILED,
+} FunctionDefaultsState;
+
+typedef struct {
+    AstFnDecl *decl;
+    Array(HirExpr *) values;
+    FunctionDefaultsState state;
+} FunctionDefaults;
+
 typedef struct {
     AstModule *module;
 
@@ -36,6 +48,7 @@ typedef struct {
     ModuleIndex modules;
 
     Array(GenericInstance) generic_instances;
+    Array(FunctionDefaults) function_defaults;
     size_t next_generic_instance;
     Array(GenericTypeInstance) generic_type_instances;
     size_t type_indirection_depth;
@@ -54,6 +67,7 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .scopes = array_create(arena, sizeof(Scope)),
         .current_fn = NULL,
         .generic_instances = array_create(arena, sizeof(GenericInstance)),
+        .function_defaults = array_create(arena, sizeof(FunctionDefaults)),
         .next_generic_instance = 0,
         .generic_type_instances = array_create(arena, sizeof(GenericTypeInstance)),
         .type_indirection_depth = 0,

@@ -8,6 +8,16 @@ void recover_declaration(Parser *p) {
     }
 }
 
+static inline AstParam parse_function_param(Parser *p) {
+    AstParam param = parse_param(p);
+
+    if (match(p, TK_EQ))
+        param.default_value = parse_expression(p);
+
+    return param;
+}
+
+
 bool try_parse_fn_decl(Parser *p, AstFnDecl *fn) {
     Checkpoint cp = checkpoint(p);
 
@@ -52,7 +62,7 @@ bool try_parse_fn_decl(Parser *p, AstFnDecl *fn) {
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            AstParam param = parse_param(p);
+            AstParam param = parse_function_param(p);
             array_push(&fn->params, &param);
 
             if (!match(p, TK_COMMA))
@@ -118,7 +128,7 @@ void parse_fn_decl(Parser *p, AstFnDecl *fn, Array attrs) {
 
     if (!at(p, TK_RPAREN)) {
         for (;;) {
-            AstParam param = parse_param(p);
+            AstParam param = parse_function_param(p);
             array_push(&fn->params, &param);
 
             if (!match(p, TK_COMMA))

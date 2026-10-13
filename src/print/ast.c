@@ -251,8 +251,14 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
         }
 
         for (size_t i = 0; i < expr->call.args.len; i++) {
-            AstExpr **arg = array_at((Array *)&expr->call.args, i);
-            print_expr(out, *arg, depth + 1);
+            AstCallArg *arg = array_at((Array *)&expr->call.args, i);
+            if (arg->name.kind != AST_NAME_ERROR) {
+                indent(out, depth + 1);
+                fputs("argument ", out);
+                print_name(out, &arg->name);
+                fputc('\n', out);
+            }
+            print_expr(out, arg->value, depth + 1);
         }
         break;
 
@@ -611,6 +617,9 @@ static void print_param(FILE *out, const AstParam *param, unsigned depth) {
     fputc('\n', out);
 
     print_type(out, param->type, depth + 1);
+
+    if (param->default_value != NULL)
+        print_expr(out, param->default_value, depth + 1);
 }
 
 static void print_constraint_item(FILE *out, const AstConstraintItem *item, unsigned depth) {

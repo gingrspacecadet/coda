@@ -1,0 +1,9 @@
+name: default arguments must be trailing
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn int64 invalid(int64 first = 1, int64 required) {
+    return first + required;
+}

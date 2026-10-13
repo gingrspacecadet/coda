@@ -68,6 +68,7 @@ typedef struct {
     Span span;
     AstType *type;
     AstName name;
+    AstExpr *default_value;
 } AstParam;
 
 typedef struct {
@@ -213,9 +214,15 @@ typedef enum {
 
 typedef struct {
     Span span;
-    AstName name; /* NULL = positional */
+    AstName name; /* AST_NAME_ERROR = positional */
     AstExpr *value;
 } AstInitField;
+
+typedef struct {
+    Span span;
+    AstName name; // AST_NAME_ERROR = positional
+    AstExpr *value;
+} AstCallArg;
 
 typedef enum {
     AST_INTRINSIC_ARG_EXPR,
@@ -283,7 +290,7 @@ struct AstExpr {
             AstExpr *callee;
 
             Array(AstType *) generic_args;
-            Array(AstExpr *) args;
+            Array(AstCallArg) args;
         } call;
 
         struct {

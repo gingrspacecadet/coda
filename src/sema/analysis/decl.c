@@ -1,8 +1,10 @@
 #include "common.h"
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
-    if (ast->generics.len != 0)
+    if (ast->generics.len != 0) {
+        sema_validate_param_defaults(sema, ast);
         return;
+    }
 
     Symbol *symbol = sema_lookup(sema, ast->name);
 
@@ -41,6 +43,9 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
 
         symbol->type = type;
     }
+
+    if (!sema_prepare_function_defaults(sema, symbol, true))
+        return;
 
     if (ast->body == NULL)
         return;

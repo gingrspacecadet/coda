@@ -324,10 +324,11 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
 HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic) {
     AstFnDecl *template = &generic->decl->fn;
 
-    if (template->params.len != ast->call.args.len) {
-        error_wrong_argument_count(sema->diags, template->params.len, ast->call.args.len, ast->span);
+    size_t param_count = template->params.len;
+    size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
+    bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
+    if (!sema_map_call_arguments(sema, ast, template, 0, arg_params, provided))
         return generic_error_expr(sema, ast);
-    }
 
     Array arguments = array_create(sema->arena, sizeof(HirType *));
     for (size_t i = 0; i < template->generics.len; i++) {
@@ -335,11 +336,7 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
         array_push(&arguments, &type);
     }
 
-    Array inferred_values = array_create(sema->arena, sizeof(HirExpr *));
-    for (size_t i = 0; i < ast->call.args.len; i++) {
-        HirExpr *value = NULL;
-        array_push(&inferred_values, &value);
-    }
+    HirExpr **inferred_values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
 
     if (ast->call.generic_args.len != 0) {
         if (ast->call.generic_args.len != template->generics.len)
@@ -353,16 +350,17 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
             *(HirType **)array_at(&arguments, i) = type;
         }
     } else {
-        for (size_t i = 0; i < template->params.len; i++) {
-            AstParam *param = array_at(&template->params, i);
+        for (size_t i = 0; i < ast->call.args.len; i++) {
+            AstCallArg *ast_arg = array_at(&ast->call.args, i);
+            size_t parameter = arg_params[i];
+            AstParam *param = array_at(&template->params, parameter);
             if (!generic_type_contains(template, param->type))
                 continue;
 
-            AstExpr *ast_arg = ((AstExpr **)ast->call.args.data)[i];
-            HirExpr *value = sema_expr(sema, ast_arg, NULL);
+            HirExpr *value = sema_expr(sema, ast_arg->value, NULL);
             if (value == NULL || value->kind == HIR_EXPR_ERROR)
                 return generic_error_expr(sema, ast);
-            *(HirExpr **)array_at(&inferred_values, i) = value;
+            inferred_values[parameter] = value;
 
             bool reported_error = false;
             if (!generic_infer_type(sema, template, param->type, value->type, arguments, ast_arg->span, &reported_error)) {
@@ -401,20 +399,31 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
         },
     };
 
+    HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
     for (size_t i = 0; i < ast->call.args.len; i++) {
-        HirType *param_type = ((HirType **)instance->type->function.params.data)[i];
-        HirExpr *value = ((HirExpr **)inferred_values.data)[i];
+        AstCallArg *ast_arg = array_at(&ast->call.args, i);
+        size_t parameter = arg_params[i];
+        HirType *param_type = ((HirType **)instance->type->function.params.data)[parameter];
+        HirExpr *value = inferred_values[parameter];
         if (value != NULL) {
             if (value->type == NULL || !type_equal(value->type, param_type)) {
                 error_type_mismatch(sema->diags, param_type, value->type, value->span);
                 return generic_error_expr(sema, ast);
             }
         } else {
-            value = sema_expr(sema, ((AstExpr **)ast->call.args.data)[i], param_type);
+            value = sema_expr(sema, ast_arg->value, param_type);
             if (value == NULL || value->kind == HIR_EXPR_ERROR)
                 return generic_error_expr(sema, ast);
         }
 
+        values[parameter] = value;
+    }
+
+    if (!sema_complete_call_arguments(sema, instance, 0, provided, values))
+        return generic_error_expr(sema, ast);
+
+    for (size_t i = 0; i < param_count; i++) {
+        HirExpr *value = values[i];
         array_push(&call->call.args, &value);
     }
 
