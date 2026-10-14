@@ -1117,6 +1117,21 @@ static bool sema_layout_member_offset(Sema *sema, HirType *type, Array(AstName) 
     return true;
 }
 
+static HirEnumItem *sema_enum_item_for_symbol(Symbol *symbol) {
+    if (symbol == NULL || symbol->kind != SYMBOL_ENUM_ITEM ||
+        symbol->type == NULL || symbol->type->kind != HIR_TYPE_ENUM)
+        return NULL;
+
+    HirType *type = symbol->type;
+    for (size_t i = 0; i < type->_enum.items.len; i++) {
+        HirEnumItem *item = array_at(&type->_enum.items, i);
+        if (item->symbol == symbol)
+            return item;
+    }
+
+    return NULL;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     if (ast->comptime) {
         AstExpr copy = *ast;
@@ -1233,6 +1248,19 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (symbol->kind == SYMBOL_NAMESPACE) {
                 error_namespace_value(sema->diags, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            if (symbol->kind == SYMBOL_ENUM_ITEM) {
+                HirEnumItem *item = sema_enum_item_for_symbol(symbol);
+                if (item == NULL || item->value == NULL) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                *hir = *item->value;
+                hir->span = ast->span;
+                hir->type = symbol->type;
                 return hir;
             }
 

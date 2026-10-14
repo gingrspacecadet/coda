@@ -178,6 +178,15 @@ static LirOpcode lir_lower_binary_op(AstBinaryOp op) {
 }
 
 static bool hir_type_is_signed_integer(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+
+    if (type != NULL && type->kind == HIR_TYPE_ENUM) {
+        type = type->_enum.underlying;
+        while (type != NULL && type->base != NULL)
+            type = type->base;
+    }
+
     if (!type || type->kind != HIR_TYPE_BUILTIN)
         return false;
 

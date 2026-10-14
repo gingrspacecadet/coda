@@ -5,6 +5,7 @@
 
 typedef struct {
     void **blocks;
+    size_t *block_sizes;
     size_t block_count;
     size_t block_size;
     size_t current_index;

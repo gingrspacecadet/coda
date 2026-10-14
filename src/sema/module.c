@@ -1,5 +1,6 @@
 #include <sys/stat.h>
 #include <dirent.h>
+#include <stdlib.h>
 #include "common.h"
 #include "../lexer.h"
 #include "../parser.h"
@@ -28,6 +29,32 @@ static ModuleEntry *module_index_lookup(ModuleIndex *index, Path path) {
     }
 
     return NULL;
+}
+
+static bool module_filename_equal(String a, String b) {
+    return a.length == b.length && memcmp(a.data, b.data, a.length) == 0;
+}
+
+static void module_entry_add_filename(ModuleEntry *entry, String filename) {
+    for (size_t i = 0; i < entry->filenames.len; i++) {
+        String *existing = array_at(&entry->filenames, i);
+        if (module_filename_equal(*existing, filename))
+            return;
+    }
+
+    array_push(&entry->filenames, &filename);
+}
+
+static int module_filename_compare(const void *left, const void *right) {
+    const String *a = left;
+    const String *b = right;
+    size_t length = a->length < b->length ? a->length : b->length;
+    int result = memcmp(a->data, b->data, length);
+
+    if (result != 0)
+        return result;
+
+    return (a->length > b->length) - (a->length < b->length);
 }
 
 static Symbol *sema_make_namespace_symbol(Sema *sema, Scope *scope, AstName name, Scope *target) {
@@ -247,9 +274,15 @@ static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) 
         if (!peek_module_decl(arena, filename, &path))
             continue;
 
+        ModuleEntry *existing = module_index_lookup(index, path);
+        if (existing != NULL) {
+            module_entry_add_filename(existing, filename);
+            continue;
+        }
+
         ModuleEntry module = {
             .path = path,
-            .filename = filename,
+            .filenames = array_create(arena, sizeof(String)),
             .ast = NULL,
             .scope = module_make_scope(arena),
             .export_scope = module_make_scope(arena),
@@ -260,11 +293,7 @@ static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) 
             .analysis_failed = false,
         };
 
-        if (module_index_lookup(index, module.path) != NULL) {
-            // TODO: duplicate module diagnostic
-            continue;
-        }
-
+        module_entry_add_filename(&module, filename);
         array_push(&index->entries, &module);
     }
 
@@ -282,21 +311,42 @@ static bool module_entry_parse(ModuleEntry *entry, Arena *arena, Diags *diags) {
     if (entry->parsed)
         return true;
 
-    Source *source = arena_calloc(arena, sizeof(Source));
-
-    if (!module_read_source(arena, entry->filename, source))
+    if (entry->filenames.len == 0)
         return false;
 
-    Lexer *lexer = arena_calloc(arena, sizeof(Lexer));
-    *lexer = (Lexer) {
-        .source = source,
-        .diags = diags,
-    };
+    qsort(entry->filenames.data, entry->filenames.len, sizeof(String), module_filename_compare);
+    AstModule *module = NULL;
 
-    Parser *parser = arena_calloc(arena, sizeof(Parser));
-    parser_init(parser, lexer, arena);
+    for (size_t i = 0; i < entry->filenames.len; i++) {
+        String filename = *(String *)array_at(&entry->filenames, i);
+        Source *source = arena_calloc(arena, sizeof(Source));
+        if (!module_read_source(arena, filename, source))
+            return false;
 
-    AstModule *module = parser_parse_module(parser);
+        Lexer *lexer = arena_calloc(arena, sizeof(Lexer));
+        *lexer = (Lexer) {
+            .source = source,
+            .diags = diags,
+        };
+
+        Parser *parser = arena_calloc(arena, sizeof(Parser));
+        parser_init(parser, lexer, arena);
+
+        AstModule *part = parser_parse_module(parser);
+        if (part == NULL)
+            return false;
+
+        if (module == NULL) {
+            module = part;
+            continue;
+        }
+
+        for (size_t j = 0; j < part->decls.len; j++) {
+            AstDecl *decl = *(AstDecl **)array_at(&part->decls, j);
+            array_push(&module->decls, &decl);
+        }
+    }
+
     if (module == NULL)
         return false;
 
@@ -334,13 +384,8 @@ static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
 
     bool success = sema_resolve_includes(sema, entry->ast);
     entry->scope = sema->global_scope;
-    if (success) {
-        for (size_t i = 0; i < entry->ast->decls.len; i++) {
-            AstDecl *decl = ((AstDecl **)entry->ast->decls.data)[i];
-            if (decl != NULL)
-                sema_decl(sema, decl);
-        }
-    }
+    if (success)
+        sema_decls(sema, entry->ast->decls);
 
     entry->scope = sema->global_scope;
     entry->export_scope = module_make_scope(sema->arena);

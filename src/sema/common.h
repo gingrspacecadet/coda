@@ -12,6 +12,7 @@ static inline bool ast_name_equal(AstName *a, AstName *b) {
 }
 
 void collect_decls(Sema *sema, Array(AstDecl *) decls);
+void sema_decls(Sema *sema, Array(AstDecl *) decls);
 void sema_decl(Sema *sema, AstDecl *ast);
 
 static inline Scope sema_make_scope(Sema *sema) {
@@ -122,7 +123,7 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol);
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type);
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast);
 void sema_fn_decl(Sema *sema, AstFnDecl *ast);
-void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed);
+void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed, bool alias);
 bool sema_var_decl(Sema *sema, AstVarDecl *ast);
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);
 void sema_include_decl(Sema *sema, AstIncludeDecl *ast);

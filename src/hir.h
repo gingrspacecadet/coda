@@ -110,8 +110,7 @@ struct HirField {
 
 struct HirEnumItem {
     Symbol *symbol;
-    HirType *type;
-    size_t value;
+    HirExpr *value;
 };
 
 typedef enum {
@@ -348,7 +347,7 @@ static inline Symbol *symbol_canonical(Symbol *symbol) {
 
 typedef struct {
     Path path;
-    String filename;
+    Array(String) filenames;
     AstModule *ast;
     Scope scope;
     Scope export_scope;

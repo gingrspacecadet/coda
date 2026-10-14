@@ -1,0 +1,15 @@
+name: multi-file module declarations
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+include multifile::parts;
+
+fn int64 imported_first() {
+    return multifile::parts::first();
+}
+
+fn int64 imported_second() {
+    return multifile::parts::second();
+}

@@ -1,6 +1,66 @@
 #include <assert.h>
 #include "common.h"
 
+static HirType *enum_integer_base(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+    return type;
+}
+
+static bool enum_integer_type(HirType *type) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    switch (type->builtin) {
+        case BUILTIN_INT8:
+        case BUILTIN_INT16:
+        case BUILTIN_INT32:
+        case BUILTIN_INT64:
+        case BUILTIN_UINT8:
+        case BUILTIN_UINT16:
+        case BUILTIN_UINT32:
+        case BUILTIN_UINT64:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static bool enum_integer_signed(HirType *type) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    return type->builtin == BUILTIN_INT8 || type->builtin == BUILTIN_INT16 ||
+           type->builtin == BUILTIN_INT32 || type->builtin == BUILTIN_INT64;
+}
+
+static bool enum_value_fits(HirType *type, uint64_t value, bool value_signed) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    int64_t signed_value = (int64_t)value;
+    switch (type->builtin) {
+        case BUILTIN_INT8: return value_signed ? signed_value >= INT8_MIN && signed_value <= INT8_MAX : value <= INT8_MAX;
+        case BUILTIN_INT16: return value_signed ? signed_value >= INT16_MIN && signed_value <= INT16_MAX : value <= INT16_MAX;
+        case BUILTIN_INT32: return value_signed ? signed_value >= INT32_MIN && signed_value <= INT32_MAX : value <= INT32_MAX;
+        case BUILTIN_INT64: return value_signed || value <= INT64_MAX;
+        case BUILTIN_UINT8: return (!value_signed || signed_value >= 0) && value <= UINT8_MAX;
+        case BUILTIN_UINT16: return (!value_signed || signed_value >= 0) && value <= UINT16_MAX;
+        case BUILTIN_UINT32: return (!value_signed || signed_value >= 0) && value <= UINT32_MAX;
+        case BUILTIN_UINT64: return !value_signed || signed_value >= 0;
+        default: return false;
+    }
+}
+
+static void enum_type_error(Sema *sema, Span span, String message) {
+    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, span, message);
+    diag_finish(&diagnostic);
+}
+
 HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
     HirType *copy = arena_calloc(sema->arena, sizeof(HirType));
     *copy = *type;
@@ -436,25 +496,140 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             break;
         }
 
-        case AST_TYPE_ENUM:
+        case AST_TYPE_ENUM: {
             hir->kind = HIR_TYPE_ENUM;
-            hir->_enum.underlying = sema_type(sema, ast->_enum.underlying);
-            hir->size = hir->_enum.underlying->size;
-            hir->align = hir->_enum.underlying->align;
+            HirType *underlying = ast->_enum.underlying != NULL
+                ? sema_type(sema, ast->_enum.underlying)
+                : builtin_type(sema, BUILTIN_INT32);
 
+            if (underlying == NULL || underlying->kind == HIR_TYPE_ERROR) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            hir->_enum.underlying = underlying;
+            hir->size = underlying->size;
+            hir->align = underlying->align;
             hir->_enum.items = array_create(sema->arena, sizeof(HirEnumItem));
 
-            for (size_t i = 0; i < ast->_enum.items.len; i++) {
-                AstEnumItem *item = ((AstEnumItem *)ast->_enum.items.data) + i;
+            bool integer_underlying = enum_integer_type(underlying);
+            bool underlying_signed = integer_underlying && enum_integer_signed(underlying);
+            uint64_t next_value = 0;
+            bool next_value_overflow = false;
 
-                //! TODO: resolve enum item name/value
-                HirEnumItem hir_item = {
+            for (size_t i = 0; i < ast->_enum.items.len; i++) {
+                AstEnumItem *item = array_at(&ast->_enum.items, i);
+
+                for (size_t j = 0; j < hir->_enum.items.len; j++) {
+                    HirEnumItem *previous = array_at(&hir->_enum.items, j);
+                    if (ast_name_equal(&previous->symbol->name, &item->name)) {
+                        error_duplicate_symbol(sema->diags, item->name.ident, item->span, previous->symbol->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                }
+
+                HirExpr *value = NULL;
+                uint64_t integer_value = 0;
+                bool integer_value_signed = underlying_signed;
+
+                if (item->value != NULL) {
+                    value = sema_expr(sema, item->value, integer_underlying ? NULL : underlying);
+                    if (value == NULL || value->kind == HIR_EXPR_ERROR) {
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    CompContext context = {.sema = sema, .frame = NULL};
+                    value = comp_eval_expr(&context, value);
+
+                    if (!comp_expr_is_evaluable(value)) {
+                        enum_type_error(sema, item->span, STRING("enum member value must be a compile-time constant"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    if (integer_underlying) {
+                        if (value->kind != HIR_EXPR_LITERAL || value->literal.kind != HIR_LITERAL_INTEGER) {
+                            enum_type_error(sema, item->span, STRING("integer enum member value must evaluate to an integer"));
+                            hir->kind = HIR_TYPE_ERROR;
+                            return hir;
+                        }
+
+                        HirType *value_type = enum_integer_base(value->type);
+                        if (value_type == NULL || value_type->kind != HIR_TYPE_BUILTIN || !enum_integer_type(value_type)) {
+                            enum_type_error(sema, item->span, STRING("integer enum member value must have an integer type"));
+                            hir->kind = HIR_TYPE_ERROR;
+                            return hir;
+                        }
+
+                        integer_value = value->literal.integer;
+                        integer_value_signed = enum_integer_signed(value->type);
+                    } else if (!type_equal(value->type, underlying)) {
+                        error_type_mismatch(sema->diags, underlying, value->type, item->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                } else {
+                    if (!integer_underlying) {
+                        enum_type_error(sema, item->span, STRING("enum members with non-integer underlying types require explicit values"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    if (next_value_overflow) {
+                        enum_type_error(sema, item->span, STRING("implicit enum member value overflows its underlying integer type"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    integer_value = next_value;
+                    value = arena_calloc(sema->arena, sizeof(*value));
+                    *value = (HirExpr) {
+                        .span = item->span,
+                        .kind = HIR_EXPR_LITERAL,
+                        .type = underlying,
+                        .literal = {
+                            .kind = HIR_LITERAL_INTEGER,
+                            .integer = integer_value,
+                        },
+                    };
+                }
+
+                if (integer_underlying) {
+                    if (!enum_value_fits(underlying, integer_value, integer_value_signed)) {
+                        enum_type_error(sema, item->span, STRING("enum member value does not fit its underlying integer type"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    value->type = underlying;
+                    next_value_overflow = underlying_signed
+                        ? (int64_t)integer_value == INT64_MAX
+                        : integer_value == UINT64_MAX;
+                    next_value = integer_value + 1;
+                }
+
+                Symbol *enum_symbol = arena_calloc(sema->arena, sizeof(*enum_symbol));
+                *enum_symbol = (Symbol) {
+                    .kind = SYMBOL_ENUM_ITEM,
+                    .name = item->name,
+                    .type = hir,
+                    .span = item->span,
+                    .canonical = enum_symbol,
+                    .owner_module = sema->module,
+                    .owner_scope = sema->module_scope,
                 };
 
+                HirEnumItem hir_item = {
+                    .symbol = enum_symbol,
+                    .value = value,
+                };
                 array_push(&hir->_enum.items, &hir_item);
             }
             break;
-
+        }
+        
         // this can't be resolved until comptime eval
         case AST_TYPE_SPLICE:
             hir->kind = HIR_TYPE_ERROR;

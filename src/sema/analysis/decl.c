@@ -107,7 +107,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     array_push(&sema->hir_module->functions, fn);
 }
 
-void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed) {
+void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed, bool alias) {
     if (ast->generics.len != 0)
         return;
 
@@ -130,6 +130,11 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed) {
     if (base == NULL || base->kind == HIR_TYPE_ERROR)
         return;
 
+    if (alias) {
+        symbol->type = base;
+        return;
+    }
+
     if (packed && ast->type->kind == AST_TYPE_STRUCT && base->kind == HIR_TYPE_STRUCT) {
         size_t offset = 0;
         for (size_t i = 0; i < base->structure.fields.len; i++) {
@@ -148,6 +153,27 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed) {
     type->base = base;
 
     symbol->type = type;
+
+    if (type->kind == HIR_TYPE_ENUM) {
+        Array(HirEnumItem) inherited_items = type->_enum.items;
+        type->_enum.items = array_create(sema->arena, sizeof(HirEnumItem));
+
+        for (size_t i = 0; i < inherited_items.len; i++) {
+            HirEnumItem *inherited = array_at(&inherited_items, i);
+            Symbol *enum_symbol = arena_calloc(sema->arena, sizeof(*enum_symbol));
+            *enum_symbol = *inherited->symbol;
+            enum_symbol->type = type;
+            enum_symbol->canonical = enum_symbol;
+            enum_symbol->owner_module = sema->module;
+            enum_symbol->owner_scope = sema->module_scope;
+
+            HirEnumItem item = {
+                .symbol = enum_symbol,
+                .value = inherited->value,
+            };
+            array_push(&type->_enum.items, &item);
+        }
+    }
 }
 
 static bool expr_is_static(HirExpr *expr) {
@@ -267,15 +293,18 @@ void sema_decl(Sema *sema, AstDecl *ast) {
             break;
 
         case AST_DECL_TYPE: {
-            bool packed = false;
+            bool packed = false, alias = false;
             for (size_t i = 0; i < ast->attrs.len; i++) {
                 AstAttribute *attribute = array_at(&ast->attrs, i);
                 if (string_eq(attribute->name, STRING("packed"))) {
                     packed = true;
                     break;
+                } else if (string_eq(attribute->name, STRING("alias"))) {
+                    alias = true;
+                    break;
                 }
             }
-            sema_type_decl(sema, &ast->type, packed);
+            sema_type_decl(sema, &ast->type, packed, alias);
             break;
         }
 
@@ -371,6 +400,17 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
             }
 
             scope_insert(&sema->global_scope, sym);
+        }
+    }
+}
+
+void sema_decls(Sema *sema, Array(AstDecl *) decls) {
+    for (size_t pass = 0; pass < 2; pass++) {
+        for (size_t i = 0; i < decls.len; i++) {
+            AstDecl *decl = *(AstDecl **)array_at(&decls, i);
+            if ((decl->kind == AST_DECL_TYPE) != (pass == 0))
+                continue;
+            sema_decl(sema, decl);
         }
     }
 }

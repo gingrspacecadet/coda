@@ -37,10 +37,15 @@ AstConstraintItem parse_constraint_item(Parser *p) {
     return item;
 }
 
-void parse_constraint_items(Parser *p, Array *items ) {
+void parse_constraint_items(Parser *p, Array *items) {
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
         AstConstraintItem item = parse_constraint_item(p);
         array_push(items, &item);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
     }
 }
 
@@ -141,10 +146,15 @@ AstType *parse_struct_type(Parser *p) {
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
         AstField field = parse_field(p);
         array_push(&type->structure.fields, &field);
 
         expect(p, TK_SEMICOLON);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
     }
 
     expect(p, TK_RBRACE);
@@ -164,10 +174,15 @@ AstType *parse_union_type(Parser *p) {
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
         AstField field = parse_field(p);
         array_push(&type->union_.fields, &field);
 
         expect(p, TK_SEMICOLON);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
     }
 
     expect(p, TK_RBRACE);
@@ -192,19 +207,15 @@ AstType *parse_enum_type(Parser *p) {
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        AstEnumItem item = {
-            .span = p->current.span,
-            .name = parse_name(p),
-            .value = NULL,
-        };
+        size_t before = p->lexer->index;
 
-        if (match(p, TK_EQ))
-            item.value = parse_expression(p);
+        AstField field = parse_field(p);
+        array_push(&type->structure.fields, &field);
 
-        array_push(&type->_enum.items, &item);
+        expect(p, TK_SEMICOLON);
 
-        if (!match(p, TK_COMMA) && !at(p, TK_RBRACE))
-            error_expected_token(p->diags, TK_COMMA, p->current.span);
+        if (p->lexer->index == before && !at(p, TK_RBRACE) && !at(p, TK_EOF))
+            advance(p);
     }
 
     expect(p, TK_RBRACE);

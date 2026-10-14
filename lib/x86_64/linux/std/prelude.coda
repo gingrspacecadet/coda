@@ -1,0 +1,13 @@
+module std::prelude;
+
+@export
+include std::collections : _;
+
+@export,alias
+type int = int32;
+
+@export,alias
+type char = uint8;
+
+@export,alias
+type string = char[];

@@ -1,0 +1,30 @@
+name: enum members and values
+expect: pass
+stop: run
+errors: 0
+
+[source]
+include enumtest::values;
+
+type DefaultCode = enum {
+    Zero,
+    One,
+};
+
+type SignedCode = enum : int32 {
+    Negative = -1,
+    Zero,
+    Positive = 1,
+};
+
+fn uint8 main() {
+    if (enumtest::values::Code::First == enumtest::values::Code::Second) return 1;
+    if (enumtest::values::Code::Second < enumtest::values::Code::First) return 2;
+    if (enumtest::values::Code::Third <= enumtest::values::Code::Second) return 3;
+    if (enumtest::values::Code::Fourth <= enumtest::values::Code::Third) return 4;
+    if (DefaultCode::Zero == DefaultCode::One) return 5;
+    if (DefaultCode::One < DefaultCode::Zero) return 6;
+    if (SignedCode::Negative >= SignedCode::Zero) return 7;
+    if (SignedCode::Zero <= SignedCode::Negative) return 8;
+    return 0;
+}

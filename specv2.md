@@ -821,6 +821,10 @@ type Colour = enum : uint8 {
 
 The underlying type determines the representation and available value range.
 
+If an enum does not specify an underlying type, its underlying type is `int32`.
+
+An enum member without an explicit value has value `0` when it is the first member, or one greater than the preceding member otherwise. An explicit value must be an integer constant expression representable by the underlying type. Member names must be unique within an enum.
+
 Enum members may have explicitly specified values:
 
 ```coda

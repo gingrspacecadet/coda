@@ -33,6 +33,23 @@ Symbol *sema_lookup(Sema *sema, AstName name) {
     return scope_lookup(&sema->builtin_scope, name);
 }
 
+static Symbol *sema_lookup_enum_item(Symbol *symbol, AstName name) {
+    if (symbol == NULL || symbol->kind != SYMBOL_TYPE || symbol->type == NULL)
+        return NULL;
+
+    HirType *type = symbol->type;
+    if (type->kind != HIR_TYPE_ENUM)
+        return NULL;
+
+    for (size_t i = 0; i < type->_enum.items.len; i++) {
+        HirEnumItem *item = array_at(&type->_enum.items, i);
+        if (item->symbol != NULL && ast_name_equal(&item->symbol->name, &name))
+            return item->symbol;
+    }
+
+    return NULL;
+}
+
 Symbol *sema_lookup_path(Sema *sema, Path path) {
     if (path.parts.len == 0)
         return NULL;
@@ -44,11 +61,15 @@ Symbol *sema_lookup_path(Sema *sema, Path path) {
         return NULL;
 
     for (size_t i = 1; i < path.parts.len; i++) {
-        if (symbol->kind != SYMBOL_NAMESPACE)
-            return NULL;
-
         part = (AstName *)array_at(&path.parts, i);
-        symbol = scope_lookup(symbol->namespace_scope, *part);
+
+        if (symbol->kind == SYMBOL_NAMESPACE) {
+            symbol = scope_lookup(symbol->namespace_scope, *part);
+        } else if (i == path.parts.len - 1) {
+            symbol = sema_lookup_enum_item(symbol, *part);
+        } else {
+            return NULL;
+        }
 
         if (symbol == NULL)
             return NULL;

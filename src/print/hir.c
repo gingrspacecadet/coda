@@ -77,6 +77,8 @@ static const char *builtin_name(BuiltinType builtin) {
     return "?";
 }
 
+static void print_expr(FILE *out, const HirExpr *expr, unsigned depth);
+
 static void print_type(FILE *out, const HirType *type, unsigned depth) {
     indent(out, depth);
 
@@ -175,15 +177,13 @@ static void print_type(FILE *out, const HirType *type, unsigned depth) {
         print_type(out, type->_enum.underlying, depth + 2);
 
         for (size_t i = 0; i < type->_enum.items.len; i++) {
-            HirEnumItem *item =
-                ((HirEnumItem *)type->_enum.items.data) + i;
+            HirEnumItem *item = array_at((Array *)&type->_enum.items, i);
 
             indent(out, depth + 1);
-            fprintf(out, "item ");
+            fputs("item ", out);
             print_symbol(out, item->symbol);
-            fprintf(out, " = %zu\n", item->value);
-
-            print_type(out, item->type, depth + 2);
+            fputs(" =\n", out);
+            print_expr(out, item->value, depth + 2);
         }
         break;
 

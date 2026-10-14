@@ -62,6 +62,9 @@ static HirType *base_type(HirType *type) {
 static bool type_is_signed(HirType *type) {
     type = base_type(type);
 
+    if (type != NULL && type->kind == HIR_TYPE_ENUM)
+        type = base_type(type->_enum.underlying);
+
     if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
         return false;
 
@@ -1003,6 +1006,10 @@ static void emit_aggregate_return(X86Function *function, const LirOperand *opera
 
 static bool type_is_integer_numeric(HirType *type) {
     type = base_type(type);
+
+    if (type != NULL && type->kind == HIR_TYPE_ENUM)
+        type = base_type(type->_enum.underlying);
+
     if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
         return false;
 

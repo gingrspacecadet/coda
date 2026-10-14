@@ -28,10 +28,7 @@ HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes) {
         return NULL;
     *sema->root_scope = sema->global_scope;
 
-    for (size_t i = 0; i < module->decls.len; i++) {
-        AstDecl *decl = *(AstDecl **)array_at(&module->decls, i);
-        sema_decl(sema, decl);
-    }
+    sema_decls(sema, module->decls);
 
     if (diags_has_errors(sema->diags))
         return NULL;

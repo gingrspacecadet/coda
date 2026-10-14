@@ -1,0 +1,9 @@
+module enumtest::values;
+
+@export
+type Code = enum : uint8 {
+    First = 1,
+    Second,
+    Third = 3 + 4,
+    Fourth,
+};
