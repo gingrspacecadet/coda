@@ -393,10 +393,15 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
                 if (string_eq(attribute->name, STRING("export")))
                     sym->is_exported = true;
             }
-            Symbol *s = sema_lookup(sema, sym->name);
-            if (s != NULL) {
-                error_duplicate_symbol(sema->diags, sym->name.ident, d->span, s->span);
-                continue;
+
+            bool is_method = d->kind == AST_DECL_FN && d->fn.receiver != NULL;
+
+            if (!is_method) {
+                Symbol *s = sema_lookup(sema, sym->name);
+                if (s != NULL) {
+                    error_duplicate_symbol(sema->diags, sym->name.ident, d->span, s->span);
+                    continue;
+                }
             }
 
             scope_insert(&sema->global_scope, sym);

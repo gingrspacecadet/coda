@@ -88,7 +88,76 @@ static Scope *sema_namespace_child(Sema *sema, Scope *scope, AstName name) {
     return child;
 }
 
+static bool sema_include_is_wildcard(AstIncludeDecl *include) {
+    if (include->alias.parts.len != 1)
+        return false;
+
+    AstName *alias = array_at(&include->alias.parts, 0);
+    return alias->kind == AST_NAME_IDENT && string_eq(alias->ident, STRING("_"));
+}
+
+static bool sema_symbol_is_method(Symbol *symbol) {
+    return symbol->kind == SYMBOL_FN && symbol->decl != NULL &&
+           symbol->decl->kind == AST_DECL_FN && symbol->decl->fn.receiver != NULL;
+}
+
+static bool sema_same_imported_symbol(Symbol *a, Symbol *b) {
+    if (a->canonical != NULL && a->canonical == b->canonical)
+        return true;
+
+    if (a->decl != NULL && a->decl == b->decl)
+        return true;
+
+    return a->kind == SYMBOL_NAMESPACE && b->kind == SYMBOL_NAMESPACE &&
+           a->namespace_scope == b->namespace_scope;
+}
+
+static bool sema_install_wildcard_include(Sema *sema, Scope *owner, AstIncludeDecl *include, ModuleEntry *entry) {
+    Scope *exports = &entry->export_scope;
+
+    for (size_t i = 0; i < exports->syms.len; i++) {
+        Symbol *imported = array_at(&exports->syms, i);
+
+        for (size_t j = 0; j < owner->syms.len; j++) {
+            Symbol *existing = array_at(&owner->syms, j);
+
+            if (sema_same_imported_symbol(existing, imported))
+                continue;
+
+            if (sema_symbol_is_method(existing) || sema_symbol_is_method(imported))
+                continue;
+
+            if (ast_name_equal(&existing->name, &imported->name)) {
+                error_duplicate_symbol(sema->diags, imported->name.ident, include->span, existing->span);
+                return false;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < exports->syms.len; i++) {
+        Symbol *imported = array_at(&exports->syms, i);
+        bool already_imported = false;
+
+        for (size_t j = 0; j < owner->syms.len; j++) {
+            Symbol *existing = array_at(&owner->syms, j);
+
+            if (sema_same_imported_symbol(existing, imported)) {
+                already_imported = true;
+                break;
+            }
+        }
+
+        if (!already_imported)
+            scope_insert(owner, imported);
+    }
+
+    return true;
+}
+
 static bool sema_install_include(Sema *sema, Scope *owner, AstIncludeDecl *include, ModuleEntry *entry) {
+    if (sema_include_is_wildcard(include))
+        return sema_install_wildcard_include(sema, owner, include, entry);
+
     Path *target = &include->path;
 
     if (include->alias.parts.len != 0)
@@ -110,8 +179,13 @@ static bool sema_install_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     AstName *leaf = (AstName *)array_at(&target->parts, target->parts.len - 1);
 
     Symbol *existing = scope_lookup(scope, *leaf);
-    if (existing != NULL)
+    if (existing != NULL) {
+        if (existing->kind == SYMBOL_NAMESPACE &&
+            existing->namespace_scope == &entry->export_scope)
+            return true;
+
         return false;
+    }
 
     sema_make_namespace_symbol(sema, scope, *leaf, &entry->export_scope);
     return true;
@@ -491,6 +565,12 @@ Symbol *sema_find_method(Sema *sema, HirType *receiver, AstName name) {
         Symbol *symbol = sema_find_method_in_module(sema, entry->ast, &entry->scope, receiver, name, true);
         if (symbol != NULL)
             return symbol;
+    }
+
+    if (receiver->super != NULL) {
+        Symbol *inherited = sema_find_method(sema, receiver->super, name);
+        if (inherited != NULL)
+            return inherited;
     }
 
     return NULL;

@@ -167,14 +167,22 @@ void parse_type_decl(Parser *p, AstTypeDecl *decl) {
 
     decl->name = parse_name(p);
     decl->generics = parse_generic_params(p);
+    decl->constraints = array_create(p->arena, sizeof(AstConstraintRef));
 
-    if (at(p, TK_COLON))
-        decl->constraint = parse_name(p);
+    if (match(p, TK_COLON)) {
+        for (;;) {
+            size_t before = p->current.span.offset;
+            AstConstraintRef constraint = parse_constraint_ref(p);
+            array_push(&decl->constraints, &constraint);
+            if (!match(p, TK_PLUS))
+                break;
+            if (p->current.span.offset == before)
+                advance(p);
+        }
+    }
 
     expect(p, TK_EQ);
-
     decl->type = parse_type(p);
-
     expect(p, TK_SEMICOLON);
 }
 
@@ -224,18 +232,13 @@ bool try_parse_var_decl(Parser *p, AstVarDecl *var) {
 //! TODO: we need to allow constraints of the form `Constraint<T, ...>`
 void parse_constraint_decl(Parser *p, AstConstraintDecl *decl) {
     decl->span = p->current.span;
-
     expect(p, TK_KW_CONSTRAINT);
-
     decl->name = parse_name(p);
-
+    decl->generics = parse_generic_params(p);
     decl->items = array_create(p->arena, sizeof(AstConstraintItem));
-
-    expect(p, TK_EQ);
+    match(p, TK_EQ);
     expect(p, TK_LBRACE);
-
     parse_constraint_items(p, &decl->items);
-
     expect(p, TK_RBRACE);
 }
 

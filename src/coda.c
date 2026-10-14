@@ -49,8 +49,11 @@ bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage) {
 
     HirModule *hm = sema_analyse(&sema, m, includes);
 
-    if (compiler->diags->diags.len != 0)
+    if (hm == NULL || diags_has_errors(compiler->diags)) {
+        if (hm == NULL && !diags_has_errors(compiler->diags))
+            fprintf(stderr, "Internal compiler error: semantic analysis failed without diagnostics\n");
         return false;
+    }
 
     compiler->compilation.hir = hm;
 

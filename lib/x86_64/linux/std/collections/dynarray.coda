@@ -1,6 +1,6 @@
 module std::collections;
 
-include std::allocator;
+include std::allocator : _;
 
 @export
 type DynArray<T>: Sequence<T> = struct {
@@ -53,10 +53,10 @@ fn (none | AllocatorError) DynArray<T>.try_reserve(mut DynArray<T> *arr, usize c
 @export
 fn (none | AllocatorError) DynArray<T>.try_push(mut DynArray<T> *arr, T value) {
     if (arr.len == arr.cap) {
-        match (arr.try_reserve(arr.cap * 2) {
-            null {}
-            AllocatorError::OutOfMemory return AllocatorError::OutOfMemory;
-        };
+        match (arr.try_reserve(arr.cap * 2)) {
+            null: {}
+            AllocatorError::OutOfMemory: return AllocatorError::OutOfMemory;
+        }
     }
     arr.ptr[arr.len] = value;
     arr.len += 1;

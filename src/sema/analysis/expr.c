@@ -841,6 +841,14 @@ static HirType *sema_string_literal_type(Sema *sema, Span span) {
     return type;
 }
 
+static bool sema_type_has_super(HirType *derived, HirType *base) {
+    for (HirType *type = derived; type != NULL; type = type->super) {
+        if (type_equal(type, base))
+            return true;
+    }
+    return false;
+}
+
 static HirExpr *sema_method_error(Sema *sema, Span span) {
     HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr){.span = span, .kind = HIR_EXPR_ERROR};
@@ -901,26 +909,53 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
 
     if (has_implicit_receiver) {
         HirType *receiver_param = ((HirType **)function_type->function.params.data)[0];
+        HirType *receiver_object = receiver->type;
+        if (receiver_object != NULL && receiver_object->kind == HIR_TYPE_POINTER)
+            receiver_object = receiver_object->pointer.pointee;
 
-        if (receiver_param->kind == HIR_TYPE_POINTER &&
-            type_equal(receiver->type, receiver_param->pointer.pointee) &&
-            is_place(receiver)) {
-            HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
-            *address = (HirExpr){
+        bool inherited_receiver = receiver_param->kind == HIR_TYPE_POINTER &&
+            receiver_object != NULL &&
+            !type_equal(receiver_object, receiver_param->pointer.pointee) &&
+            sema_type_has_super(receiver_object, receiver_param->pointer.pointee);
+
+        if (inherited_receiver) {
+            if (receiver->type->kind != HIR_TYPE_POINTER && is_place(receiver)) {
+                HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
+                *address = (HirExpr){
+                    .span = receiver->span,
+                    .kind = HIR_EXPR_UNARY,
+                    .type = pointer_type(sema, receiver->type, false),
+                    .unary = {.op = AST_UNARY_ADDRESS, .operand = receiver},
+                };
+                receiver = address;
+            }
+
+            HirExpr *cast = arena_calloc(sema->arena, sizeof(*cast));
+            *cast = (HirExpr){
                 .span = receiver->span,
-                .kind = HIR_EXPR_UNARY,
-                .type = pointer_type(sema, receiver->type, false),
-                .unary = {
-                    .op = AST_UNARY_ADDRESS,
-                    .operand = receiver,
-                },
+                .kind = HIR_EXPR_CAST,
+                .type = receiver_param,
+                .cast = {.type = receiver_param, .operand = receiver},
             };
-            receiver = address;
-        }
+            receiver = cast;
+        } else {
+            if (receiver_param->kind == HIR_TYPE_POINTER &&
+                type_equal(receiver->type, receiver_param->pointer.pointee) &&
+                is_place(receiver)) {
+                HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
+                *address = (HirExpr){
+                    .span = receiver->span,
+                    .kind = HIR_EXPR_UNARY,
+                    .type = pointer_type(sema, receiver->type, false),
+                    .unary = {.op = AST_UNARY_ADDRESS, .operand = receiver},
+                };
+                receiver = address;
+            }
 
-        receiver = sema_coerce(sema, receiver, receiver_param);
-        if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
-            return sema_method_error(sema, ast->span);
+            receiver = sema_coerce(sema, receiver, receiver_param);
+            if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
+                return sema_method_error(sema, ast->span);
+        }
     }
 
     HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
@@ -1271,6 +1306,21 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (expected != NULL)
                 return expr_coerce(sema, hir, expected);
 
+            return hir;
+        }
+
+        case AST_EXPR_TYPE_VALUE: {
+            HirType *type = sema_type(sema, ast->type_value.type);
+
+            if (type == NULL || type->kind == HIR_TYPE_ERROR ||
+                type->nominal == NULL || type->nominal->kind != SYMBOL_TYPE) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            hir->kind = HIR_EXPR_VALUE;
+            hir->value.symbol = type->nominal;
+            hir->type = type;
             return hir;
         }
 

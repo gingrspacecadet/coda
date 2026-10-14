@@ -483,7 +483,7 @@ AstExpr *parse_lambda_expression(Parser *p) {
     return expr;
 }
 
-bool try_parse_generic_arguments(Parser *p, Array *args) {
+static bool try_parse_generic_argument_list(Parser *p, Array *args) {
     Checkpoint cp = checkpoint(p);
 
     if (!match(p, TK_LT)) {
@@ -512,18 +512,58 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
             break;
     }
 
-    if (!match(p, TK_GT)) {
-        restore(p, cp);
-        return false;
-    }
-
-    if (!at(p, TK_LPAREN)) {
+    if (!match_type_gt(p)) {
         restore(p, cp);
         return false;
     }
 
     *args = parsed;
     return true;
+}
+
+bool try_parse_generic_arguments(Parser *p, Array *args) {
+    Checkpoint cp = checkpoint(p);
+
+    if (!try_parse_generic_argument_list(p, args) || !at(p, TK_LPAREN)) {
+        restore(p, cp);
+        return false;
+    }
+
+    return true;
+}
+
+static AstExpr *make_generic_type_value(Parser *p, AstExpr *left, Array args) {
+    Path path = {0};
+
+    if (left->kind == AST_EXPR_IDENT) {
+        path.parts = array_create(p->arena, sizeof(AstName));
+        array_push(&path.parts, &left->ident);
+    } else if (left->kind == AST_EXPR_PATH) {
+        path = left->path;
+    } else {
+        return NULL;
+    }
+
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
+    *type = (AstType){
+        .kind = AST_TYPE_NAMED,
+        .span = left->span,
+        .named = {
+            .path = path,
+            .args = args,
+        },
+    };
+
+    AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
+    *expr = (AstExpr){
+        .span = left->span,
+        .kind = AST_EXPR_TYPE_VALUE,
+        .type_value = {
+            .type = type,
+        },
+    };
+
+    return expr;
 }
 
 static AstCallArg parse_call_argument(Parser *p) {
@@ -637,6 +677,24 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
 
             left = call;
             continue;
+        }
+
+        if (at(p, TK_LT) &&
+            (left->kind == AST_EXPR_IDENT || left->kind == AST_EXPR_PATH)) {
+            Checkpoint cp = checkpoint(p);
+            Array generic_args;
+
+            if (try_parse_generic_argument_list(p, &generic_args) &&
+                at(p, TK_DOT)) {
+                AstExpr *type_value = make_generic_type_value(p, left, generic_args);
+
+                if (type_value != NULL) {
+                    left = type_value;
+                    continue;
+                }
+            }
+
+            restore(p, cp);
         }
 
         if (match(p, TK_LBRACK)) {

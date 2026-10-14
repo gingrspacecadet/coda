@@ -17,6 +17,18 @@ Symbol *scope_lookup(Scope *scope, AstName name) {
     return NULL;
 }
 
+Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl) {
+    for (size_t i = scope->syms.len; i > 0; i--) {
+        Symbol *symbol = array_at(&scope->syms, i - 1);
+
+        if (symbol->kind == SYMBOL_FN && symbol->decl != NULL &&
+            symbol->decl->kind == AST_DECL_FN && &symbol->decl->fn == decl)
+            return symbol;
+    }
+
+    return NULL;
+}
+
 Symbol *sema_lookup(Sema *sema, AstName name) {
     for (size_t i = sema->scopes.len; i > 0; --i) {
         Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);

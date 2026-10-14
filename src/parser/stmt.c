@@ -282,7 +282,15 @@ AstPattern *parse_pattern(Parser *p) {
     }
 
     if (at(p, TK_IDENT)) {
+        Checkpoint cp = checkpoint(p);
         AstName name = parse_name(p);
+
+        if (at(p, TK_COLON_COLON)) {
+            restore(p, cp);
+            pattern->kind = AST_PATTERN_EXPR;
+            pattern->expr = parse_expression(p);
+            return pattern;
+        }
 
         if (at(p, TK_IDENT)) {
             pattern->kind = AST_PATTERN_VARIANT;
@@ -307,6 +315,7 @@ AstMatchCase parse_match_case(Parser *p) {
     };
 
     case_.pattern = parse_pattern(p);
+    expect(p, TK_COLON);
     case_.body = parse_statement(p);
 
     return case_;
@@ -382,6 +391,9 @@ AstStmt *parse_statement(Parser *p) {
 
     if (at(p, TK_KW_CONTINUE))
         return parse_continue_stmt(p);
+
+    if (at(p, TK_KW_MATCH))
+        return parse_match_stmt(p);
 
     if (at(p, TK_LBRACE))
         return parse_block(p);

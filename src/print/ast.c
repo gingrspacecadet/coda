@@ -60,6 +60,7 @@ static const char *expr_kind_name(AstExprKind kind) {
     case AST_EXPR_LITERAL:    return "literal";
     case AST_EXPR_IDENT:      return "ident";
     case AST_EXPR_PATH:       return "path";
+    case AST_EXPR_TYPE_VALUE: return "type-value";
     case AST_EXPR_UNARY:      return "unary";
     case AST_EXPR_BINARY:     return "binary";
     case AST_EXPR_CALL:       return "call";
@@ -223,6 +224,10 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
         indent(out, depth + 1);
         print_path(out, &expr->path);
         fputc('\n', out);
+        break;
+
+    case AST_EXPR_TYPE_VALUE:
+        print_type(out, expr->type_value.type, depth + 1);
         break;
 
     case AST_EXPR_UNARY:

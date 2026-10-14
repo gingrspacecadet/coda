@@ -5,19 +5,19 @@ include std::constraints;
 
 @export
 type HashMap<K, V> = struct: DynArray<Bucket<K, V>> {
-    fn uint64(K *key) hash;
+    fn uint64(K*) hash;
 };
 
 @export
-type Bucket<K; Comparable, V> = struct {
+type Bucket<K: Comparable, V> = struct {
     K key;
     V value;
     Bucket<K, V> *? next;
 };
 
 @export
-fn HashMap<K, V> HashMap<K, V>.create(Allocator allocator, fn uint64(K *key) hash = K.hash) {
-    HashMap<K, V> map = DynArray<Bucket<K, V>>.create(allocator);
+fn HashMap<K, V> HashMap<K, V>.create(Allocator allocator, fn uint64(K*) hash = K.hash) {
+    HashMap<K, V> map = .create(allocator);
     map.hash = hash;
     return map;
 }

@@ -56,6 +56,7 @@ typedef struct {
         Path path;
         AstConstraintDecl *_inline;
     };
+    Array(AstType *) args;
 } AstConstraintRef;
 
 typedef struct {
@@ -122,6 +123,7 @@ struct AstType {
         } sum;
 
         struct {
+            AstType *base;
             Array(AstField) fields;
         } structure;
 
@@ -246,6 +248,7 @@ typedef enum {
     AST_EXPR_LITERAL,
     AST_EXPR_IDENT,
     AST_EXPR_PATH,
+    AST_EXPR_TYPE_VALUE,
 
     AST_EXPR_UNARY,
     AST_EXPR_BINARY,
@@ -275,6 +278,9 @@ struct AstExpr {
         AstLiteral literal;
         AstName ident;
         Path path;
+        struct {
+            AstType *type;
+        } type_value;
 
         struct {
             AstUnaryOp op;
@@ -463,6 +469,7 @@ struct AstTypeDecl {
     
     AstName name;
     Array(AstGenericParam) generics;
+    Array(AstConstraintRef) constraints;
     AstType *type;
 };
 
@@ -502,6 +509,8 @@ struct AstConstraintDecl {
     Span span;
 
     AstName name;
+
+    Array(AstGenericParam) generics;
 
     Array(AstConstraintItem) items;
 };

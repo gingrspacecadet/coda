@@ -68,6 +68,27 @@ static inline bool match(Parser *p, TokenType type) {
     return true;
 }
 
+static inline bool match_type_gt(Parser *p) {
+    if (match(p, TK_GT))
+        return true;
+
+    if (!at(p, TK_SHR))
+        return false;
+
+    Span span = p->current.span;
+    p->previous = (Token){.type = TK_GT, .span = {.source = span.source, .offset = span.offset, .length = 1}};
+    p->current = (Token){.type = TK_GT, .span = {.source = span.source, .offset = span.offset + 1, .length = 1}};
+    return true;
+}
+
+static inline bool expect_type_gt(Parser *p) {
+    if (match_type_gt(p))
+        return true;
+
+    error_expected_token(p->diags, TK_GT, p->current.span);
+    return false;
+}
+
 static inline bool expect(Parser *p, TokenType type) {
     if (match(p, type))
         return true;

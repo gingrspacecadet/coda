@@ -141,6 +141,7 @@ static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional)
 
 void scope_insert(Scope *scope, Symbol *sym);
 Symbol *scope_lookup(Scope *scope, AstName name);
+Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);
 Symbol *sema_lookup(Sema *sema, AstName name);
 Symbol *sema_lookup_path(Sema *sema, Path path);
 

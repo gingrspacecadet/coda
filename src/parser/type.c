@@ -66,7 +66,8 @@ AstConstraintDecl *parse_inline_constraint(Parser *p) {
 
 AstConstraintRef parse_constraint_ref(Parser *p) {
     AstConstraintRef ref = {
-        .span = p->current.span
+        .span = p->current.span,
+        .args = array_create(p->arena, sizeof(AstType *)),
     };
 
     if (at(p, TK_LBRACE)) {
@@ -75,6 +76,19 @@ AstConstraintRef parse_constraint_ref(Parser *p) {
     } else {
         ref.kind = AST_CONSTRAINTREF_NAMED;
         ref.path = parse_path(p);
+
+        if (match(p, TK_LT)) {
+            while (!at(p, TK_GT) && !at(p, TK_EOF)) {
+                size_t before = p->current.span.offset;
+                AstType *arg = parse_type(p);
+                array_push(&ref.args, &arg);
+                if (!match(p, TK_COMMA))
+                    break;
+                if (p->current.span.offset == before)
+                    advance(p);
+            }
+            expect_type_gt(p);
+        }
     }
 
     return ref;
@@ -108,7 +122,7 @@ Array parse_generic_params(Parser *p) {
     if (!match(p, TK_LT))
         return params;
 
-    if (!at(p, TK_GT)) {
+    if (!at(p, TK_GT) || !at(p, TK_SHR)) {
         for (;;) {
             AstGenericParam param = parse_generic_param(p);
             array_push(&params, &param);
@@ -118,7 +132,7 @@ Array parse_generic_params(Parser *p) {
         }
     }
 
-    expect(p, TK_GT);
+    expect_type_gt(p);
 
     return params;
 }
@@ -139,9 +153,13 @@ AstType *parse_struct_type(Parser *p) {
 
     type->kind = AST_TYPE_STRUCT;
     type->span = p->current.span;
+    type->structure.base = NULL;
     type->structure.fields = array_create(p->arena, sizeof(AstField));
 
     advance(p); /* struct */
+
+    if (match(p, TK_COLON))
+        type->structure.base = parse_type(p);
 
     expect(p, TK_LBRACE);
 
@@ -196,8 +214,7 @@ AstType *parse_enum_type(Parser *p) {
     type->kind = AST_TYPE_ENUM;
     type->span = p->current.span;
     type->_enum.underlying = NULL;
-    type->_enum.items =
-        array_create(p->arena, sizeof(AstEnumItem));
+    type->_enum.items = array_create(p->arena, sizeof(AstEnumItem));
 
     advance(p);
 
@@ -207,19 +224,26 @@ AstType *parse_enum_type(Parser *p) {
     expect(p, TK_LBRACE);
 
     while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
-        size_t before = p->lexer->index;
+        size_t before = p->current.span.offset;
+        AstEnumItem item = {
+            .span = p->current.span,
+            .name = parse_name(p),
+            .value = NULL,
+        };
 
-        AstField field = parse_field(p);
-        array_push(&type->structure.fields, &field);
+        if (match(p, TK_EQ))
+            item.value = parse_expression(p);
 
-        expect(p, TK_SEMICOLON);
+        array_push(&type->_enum.items, &item);
 
-        if (p->lexer->index == before && !at(p, TK_RBRACE) && !at(p, TK_EOF))
+        if (!match(p, TK_COMMA) && !at(p, TK_RBRACE))
+            error_expected_token(p->diags, TK_COMMA, p->current.span);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
             advance(p);
     }
 
     expect(p, TK_RBRACE);
-
     return type;
 }
 
@@ -228,7 +252,11 @@ AstType *parse_type_single(Parser *p) {
 
     AstType *base = NULL;
 
-    if (at(p, TK_KW_FN)) {
+    if (at(p, TK_LPAREN)) {
+        advance(p);
+        base = parse_type(p);
+        expect(p, TK_RPAREN);
+    } else if (at(p, TK_KW_FN)) {
         Token start = p->current;
         advance(p);
 
@@ -289,7 +317,7 @@ AstType *parse_type_single(Parser *p) {
                 }
             }
 
-            expect(p, TK_GT);
+            expect_type_gt(p);
         }
     } else {
         error_expected_type_symbol(p->diags, p->current.span);

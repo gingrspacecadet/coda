@@ -58,6 +58,7 @@ struct HirType {
 
     Symbol *nominal;
     HirType *base;
+    HirType *super;
 
     union {
         BuiltinType builtin;

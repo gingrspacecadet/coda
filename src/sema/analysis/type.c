@@ -427,30 +427,67 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
             size_t offset = 0;
             size_t align = 1;
+            HirType *super = NULL;
+
+            if (ast->structure.base != NULL) {
+                super = sema_type(sema, ast->structure.base);
+                if (super == NULL || super->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
+                if (super->kind == HIR_TYPE_STRUCT) {
+                    for (size_t i = 0; i < super->structure.fields.len; i++) {
+                        HirField field = *(HirField *)array_at(&super->structure.fields, i);
+                        array_push(&hir->structure.fields, &field);
+                    }
+                } else if (super->kind == HIR_TYPE_UNION) {
+                    for (size_t i = 0; i < super->union_.fields.len; i++) {
+                        HirField field = *(HirField *)array_at(&super->union_.fields, i);
+                        array_push(&hir->structure.fields, &field);
+                    }
+                } else {
+                    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_INVALID, ast->structure.base->span, STRING("struct base type must be a struct or union"));
+                    diag_finish(&diagnostic);
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
+                hir->super = super;
+                offset = super->size;
+                align = super->align;
+            }
 
             for (size_t i = 0; i < ast->structure.fields.len; i++) {
                 AstField *field = array_at(&ast->structure.fields, i);
+                for (size_t j = 0; j < hir->structure.fields.len; j++) {
+                    HirField *previous = array_at(&hir->structure.fields, j);
+                    if (ast_name_equal(&previous->symbol->name, &field->name)) {
+                        error_duplicate_symbol(sema->diags, field->name.ident, field->span, previous->symbol->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                }
+
                 Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
                 *symbol = (Symbol) {
                     .kind = SYMBOL_FIELD,
                     .name = field->name,
                     .decl = NULL,
-                    .span = ast->span,
+                    .span = field->span,
                 };
                 symbol->type = sema_type(sema, field->type);
+                if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
 
-                HirField hir_field = {
-                    .symbol = symbol,
-                    .type = symbol->type,
-                };
-
+                HirField hir_field = {.symbol = symbol, .type = symbol->type};
                 offset = align_up(offset, hir_field.type->align);
                 hir_field.offset = offset;
                 offset += hir_field.type->size;
-
                 if (hir_field.type->align > align)
                     align = hir_field.type->align;
-
                 array_push(&hir->structure.fields, &hir_field);
             }
 
