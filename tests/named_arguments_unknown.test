@@ -1,0 +1,13 @@
+name: unknown named argument
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn int64 value(int64 first = 1) {
+    return first;
+}
+
+fn int64 main() {
+    return value(.missing = 2);
+}

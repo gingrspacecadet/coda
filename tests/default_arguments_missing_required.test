@@ -1,0 +1,13 @@
+name: omitted required argument
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn int64 value(int64 required, int64 optional = 2) {
+    return required + optional;
+}
+
+fn int64 main() {
+    return value();
+}

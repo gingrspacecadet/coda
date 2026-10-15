@@ -1,0 +1,93 @@
+module std::collections;
+
+include std::allocator;
+include std::constraints;
+
+@export
+type HashMap<K, V> = struct: DynArray<Bucket<K, V>> {
+    fn uint64(K*) hash;
+};
+
+@export
+type Bucket<K: Comparable, V> = struct {
+    K key;
+    V value;
+    Bucket<K, V> *? next;
+};
+
+@export
+fn HashMap<K, V> HashMap<K, V>.create(Allocator allocator, fn uint64(K*) hash = K.hash) {
+    HashMap<K, V> map = .create(allocator);
+    map.hash = hash;
+    return map;
+}
+
+@export
+fn none HashMap<K, V>.insert(mut HashMap<K, V> *map, K key, V value) {
+    uint64 hash = key.hash(map.cap());
+    
+    Bucket<K, V> *? bucket = map.at(hash);
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            bucket.value = value;
+            return;
+        }
+        bucket = bucket.next;
+    }
+
+    Bucket<K, V> *new_bucket = map.allocator.alloc<Bucket<K, V>>();
+    new_bucket.key = key;
+    new_bucket.value = value;
+    new_bucket.next = map.at(hash);
+    map.set(hash, new_bucket);
+}
+
+@export
+fn V *? HashMap<K, V>.try_get(HashMap<K, V> *map, K key) {
+    uint64 hash = key.hash(map.cap());
+    
+    Bucket<K, V> *? bucket = map.at(hash);
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            return &bucket.value;
+        }
+        bucket = bucket.next;
+    }
+    
+    return null;
+}
+
+@export
+fn bool HashMap<K, V>.contains(HashMap<K, V> *map, K key) {
+    return map.try_get(key) != null;
+}
+
+@export
+fn bool HashMap<K, V>.try_remove(mut HashMap<K, V> *map, K key) {
+    uint64 hash = key.hash(map.cap());
+    
+    Bucket<K, V> *? bucket = map.at(hash);
+    if (bucket == null) {
+        return false;
+    }
+
+    Bucket<K, V> *? prev = null;
+    
+    while (bucket != null) {
+        if (bucket.key.eq(&key)) {
+            if (prev == null) {
+                map.set(hash, bucket.next);
+            } else {
+                prev.next = bucket.next;
+            }
+            map.allocator.free(bucket);
+            return true;
+        }
+        prev = bucket;
+        bucket = bucket.next;
+    }
+    
+    return false;
+}

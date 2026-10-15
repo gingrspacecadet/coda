@@ -1,0 +1,15 @@
+name: lir shift
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn uint64 shift(uint64 a, uint64 b) {
+    return a << b;
+}
+
+[lir]
+shift:
+    block0(%0, %1):
+        %2 = shl %0, %1
+        return %2

@@ -1,0 +1,30 @@
+name: compile-time-only functions
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn int64 only_comptime() {
+    return 42;
+}
+
+fn int64 normal() {
+    return 10;
+}
+
+$fn int64 compile() {
+    only_comptime(); // valid
+    normal();        // valid
+    return normal();
+}
+
+fn int64 runtime() {
+    $only_comptime(); // valid
+    normal();         // valid
+    return normal();
+}
+
+fn int64 invalid() {
+    only_comptime(); // error
+    return 0;
+}

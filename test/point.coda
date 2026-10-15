@@ -1,8 +1,0 @@
-module pointer;
-
-fn int main() {
-    int x = 42;
-    mut int *p = &x;
-    *p = 21;
-    return x;
-}

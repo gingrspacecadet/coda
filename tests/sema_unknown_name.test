@@ -1,0 +1,9 @@
+name: unknown identifier
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn int64 bad() {
+    return missing;
+}

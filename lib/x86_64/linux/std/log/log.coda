@@ -1,0 +1,62 @@
+module std::log;
+
+include std::io : io;
+include std::collections : _;
+
+@export
+type Level = enum {
+    TRACE,
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+};
+
+@export
+fn none debug(io::Writer *writer, string message) {
+    writer.write("[DEBUG] ");
+    writer.writeln(message);
+}
+
+@export
+fn none info(io::Writer *writer, string message) {
+    writer.write("[INFO] ");
+    writer.writeln(message);
+}
+
+@export
+fn none warn(io::Writer *writer, string message) {
+    writer.write("[WARN] ");
+    writer.writeln(message);
+}
+
+@export
+fn none error(io::Writer *writer, string message) {
+    writer.write("[ERROR] ");
+    writer.writeln(message);
+}
+
+@export
+type Logger = struct {
+    // TODO: this should be an array of vtables
+    // but i haven't decided how we're doing that yet
+    DynArray<io::Writer *> writers;
+};
+
+@export
+fn none Logger.log(Logger *logger, Level level, string message) {
+    logger.writers.foreach(fn none (io::Writer *writer) {
+        match (level) {
+            Level::TRACE   trace(writer, message);
+            Level::DEBUG   debug(writer, message);
+            Level::INFO    info(writer, message);
+            Level::WARNING warning(writer, message);
+            Level::ERROR   error(writer, message);
+        }
+    });
+}
+
+@export
+fn none Logger.add_sink(mut Logger *logger, io::Writer *writer) {
+    logger.writers.push(writer);
+}

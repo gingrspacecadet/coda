@@ -1,0 +1,29 @@
+name: generic type field layout
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Box<T> = struct {
+    uint8 tag;
+    T value;
+};
+
+fn uint64 read_u64(Box<uint64> box) {
+    return box.value;
+}
+
+fn uint8 read_u8(Box<uint8> box) {
+    return box.value;
+}
+
+[lir]
+read_u64:
+    block0(%0):
+        %1 = extract %0, $8
+        return %1
+
+read_u8:
+    block0(%0):
+        %1 = extract %0, $1
+        return %1

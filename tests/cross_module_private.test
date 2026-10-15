@@ -1,0 +1,11 @@
+name: cross-module private declarations are hidden
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+include crossmod::private_test;
+
+fn int64 leak_private() {
+    return crossmod::private_test::secret();
+}

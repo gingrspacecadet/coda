@@ -676,7 +676,7 @@ The included module is then referred to through the alias:
 io::println("hello");
 ```
 
-The exact rules governing symbol lookup, re-export, cycles, and module initialization are defined later in this specification.
+The exact rules governing symbol lookup, re-export, cycles, and module initialisation are defined later in this specification.
 
 ### 4.3 Name Resolution
 
@@ -820,6 +820,10 @@ type Colour = enum : uint8 {
 ```
 
 The underlying type determines the representation and available value range.
+
+If an enum does not specify an underlying type, its underlying type is `int32`.
+
+An enum member without an explicit value has value `0` when it is the first member, or one greater than the preceding member otherwise. An explicit value must be an integer constant expression representable by the underlying type. Member names must be unique within an enum.
 
 Enum members may have explicitly specified values:
 
@@ -1691,20 +1695,20 @@ An incomplete match is rejected unless an explicit catch-all pattern is present.
 
 ## 8.8 Break Statements
 
-`break` terminates the nearest enclosing loop.
+`break` terminates the `N`th enclosing loop. If `N` is not provided, it defaults to `1`.
 
 ```coda
-break;
+break N;
 ```
 
 A `break` may not appear outside a loop.
 
 ## 8.9 Continue Statements
 
-`continue` skips the remainder of the current iteration of the nearest enclosing loop.
+`continue` skips the remainder of the current iteration of the `N`th enclosing loop. If `N` is not provided, it defaults to `1`.
 
 ```coda
-continue;
+continue N;
 ```
 
 A `continue` may not appear outside a loop.
@@ -1954,3 +1958,48 @@ Compiler intrinsics may expose additional low-level operations without constitut
 ## 25. Standard Library
 
 
+## scratchpad
+
+NEW!!! type decls can impose that the type must satisfay constraint C:
+```
+type T: C;
+```
+which also adds `C`'s default methods if applicable.
+NEW!!! methods on types can have their target types omitted if easily inferrable.
+Example:
+```rs
+// both are equivalent
+BigInt a = BigInt.create(420_000_000_000_000_000_000);
+BigInt a = .create(420_000_000_000_000_000_000);
+```
+
+PROPOSAL: `..` "range" operator?
+
+PROPOSAL: struct inheritance
+```
+type T = struct: Foo {...};
+```
+`T` inherits all methods on `Foo`, overridable, and all of `Foo`'s members. 
+
+NEW!!! Named default arguments to functions.
+
+Example:
+```rs
+fn none connect(string host, uint16 port = 443, uint32 timeout_ms = 5000) {
+    // ...
+}
+
+connect("example.com");
+connect("example.com", .port = 8443);
+connect("example.com", .timeout_ms = 1000);
+```
+
+This goes hand-in-hand with their positional counterpart (`connect("example.com", 1234);`) by providing a way to skip over arguments you wish to keep default.
+
+Rules:
+* Positional arguments must precede named arguments
+* Named arguments must follow parameter declaration order
+* A parameter may be specified only once
+* Any omitted parameter must have a default
+
+PROPOSAL: `#constrains(O|T, C)` - returns `true` if `O|T` passes constraints `C`.

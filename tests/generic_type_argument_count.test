@@ -1,0 +1,14 @@
+name: generic type argument count
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type Pair<T, U> = struct {
+    T first;
+    U second;
+};
+
+fn int64 invalid(Pair<int64> value) {
+    return 0;
+}

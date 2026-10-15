@@ -1289,6 +1289,29 @@ add(1, 2)
 
 Arguments are evaluated in source order unless otherwise specified.
 
+A parameter may provide a default expression:
+
+```coda
+fn none connect(string host, uint16 port = 443, uint32 timeout_ms = 5000) {
+    ...
+}
+```
+
+Parameters with defaults must form a trailing sequence. A call may omit these arguments, in which case the corresponding default expressions are evaluated at the call site, once per omitted argument.
+
+A call may supply an argument by name using `.name = expression`:
+
+```coda
+connect("example.com", .timeout_ms = 1000);
+connect(.host = "example.com", .port = 8443);
+```
+
+Positional arguments must precede named arguments. Named arguments must follow parameter declaration order, and a parameter may be supplied at most once. Every omitted parameter must have a default.
+
+Default expressions are resolved in the declaration's environment and must not refer to the function's parameters. Once a call is analysed, its arguments are represented in parameter order with all defaults supplied. Defaults and parameter names do not change the function type or calling convention. Named arguments and defaults are available only for statically resolved function calls; indirect function-value calls remain positional and require every argument.
+
+The compiler evaluates supplied argument expressions and inserted defaults in parameter order. Because named arguments follow declaration order, the relative order of explicitly supplied expressions is preserved.
+
 ### 6.7 Member Access
 
 Member access selects a field or method-like member.
@@ -1986,9 +2009,9 @@ Coda provides intrinsics for inspecting types at compile time.
 
 Examples include:
 
-* `#typeid(value)` — obtains the type identifier of a value or type
-* `#typestr(value)` — obtains a string representation of a type
-* `#enumstr(value)` — obtains the name of an enum variant as a string
+* `#typeid(value)` - obtains the type identifier of a value or type
+* `#typestr(value)` - obtains a string representation of a type
+* `#enumstr(value)` - obtains the name of an enum variant as a string
 
 The exact representation of type identifiers is defined in typeid.md
 
@@ -1998,10 +2021,10 @@ Coda provides intrinsics for obtaining source information.
 
 Examples include:
 
-* `#file()` — the current source file
-* `#line()` — the current line number
-* `#column()` — the current column number
-* `#module()` — the current module name
+* `#file()` - the current source file
+* `#line()` - the current line number
+* `#column()` - the current column number
+* `#module()` - the current module name
 
 These intrinsics are useful for diagnostics, logging, and compile-time generation.
 
@@ -2011,13 +2034,21 @@ Coda provides intrinsics for querying type layout.
 
 Examples include:
 
-* `#sizeof(T)` — the size of `T` in bytes
-* `#alignof(T)` — the alignment of `T` in bytes
-* `#offsetof(T, member)` — the byte offset of a member within a type
+* `#sizeof(T)` - the size of `T` in bytes
+* `#alignof(T)` - the alignment of `T` in bytes
+* `#offsetof(T, member)` - the byte offset of a member within a type
 
 Layout intrinsics reflect the layout rules of the target platform and the type system.
 
-### 11.6 Restrictions
+### 11.6 Miscellaneous Intrinsics
+
+There are some other intrinsics that dont fit into the categories above.
+
+Examples include:
+
+* `#inline(F)` - forces the function `F` to get inlined. Will fail if impossible
+
+### 11.7 Restrictions
 
 Intrinsics are not first-class values.
 

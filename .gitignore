@@ -7,3 +7,5 @@ a.out
 *.s
 !lib/
 !lib/**/*.s
+*.vsix
+e.coda

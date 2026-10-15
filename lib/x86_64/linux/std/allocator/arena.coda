@@ -1,0 +1,6 @@
+module std::allocator;
+
+@export
+type AllocatorError = enum {
+
+};

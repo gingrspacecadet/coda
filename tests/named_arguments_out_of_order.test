@@ -1,0 +1,13 @@
+name: named arguments must follow declaration order
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn int64 value(int64 first = 1, int64 second = 2, int64 third = 3) {
+    return first + second + third;
+}
+
+fn int64 main() {
+    return value(.third = 3, .second = 2);
+}

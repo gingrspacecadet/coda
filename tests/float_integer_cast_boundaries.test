@@ -1,0 +1,58 @@
+name: float-to-integer casts saturate consistently
+expect: pass
+stop: run
+errors: 0
+
+[source]
+int8 folded_i8_high = (int8) 128.0;
+int8 folded_i8_low = (int8) -129.0;
+uint8 folded_u8_high = (uint8) 256.0;
+uint8 folded_u8_low = (uint8) -1.0;
+int64 folded_i64_high = (int64) 9223372036854775808.0;
+uint64 folded_u64_high = (uint64) 18446744073709551616.0;
+
+fn int64 main() {
+    if (folded_i8_high != 127) return 1;
+    if (folded_i8_low != -128) return 2;
+    if (folded_u8_high != 255) return 3;
+    if (folded_u8_low != 0) return 4;
+    if (folded_i64_high < 0) return 5;
+    if (folded_u64_high != 18446744073709551615) return 6;
+
+    float64 nan = 0.0 / 0.0;
+    float64 positive_infinity = 1.0 / 0.0;
+    float64 negative_infinity = -1.0 / 0.0;
+
+    if ((int8) 128.0 != 127) return 7;
+    if ((int8) -129.0 != -128) return 8;
+    if ((uint8) 256.0 != 255) return 9;
+    if ((uint8) -1.0 != 0) return 10;
+    if ((int16) 32768.0 != 32767) return 11;
+    if ((int16) -32769.0 != -32768) return 12;
+    if ((uint16) 65536.0 != 65535) return 13;
+    if ((int32) 2147483648.0 != 2147483647) return 14;
+    if ((int32) -2147483649.0 != -2147483648) return 15;
+    if ((uint32) 4294967296.0 != 4294967295) return 16;
+    if ((int64) 9223372036854775808.0 != 9223372036854775807) return 17;
+    if ((int64) -9223372036854775808.0 != -9223372036854775807 - 1) return 18;
+    if ((uint64) 18446744073709551616.0 != 18446744073709551615) return 19;
+
+    if ((int8) nan != 0) return 20;
+    if ((int64) nan != 0) return 21;
+    if ((int8) positive_infinity != 127) return 22;
+    if ((int8) negative_infinity != -128) return 23;
+    if ((uint8) positive_infinity != 255) return 24;
+    if ((uint8) negative_infinity != 0) return 25;
+    if ((int64) positive_infinity != 9223372036854775807) return 26;
+    if ((int64) negative_infinity != -9223372036854775807 - 1) return 27;
+    if ((uint64) positive_infinity != 18446744073709551615) return 28;
+    if ((uint64) negative_infinity != 0) return 29;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

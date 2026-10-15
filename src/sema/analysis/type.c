@@ -1,0 +1,804 @@
+#include <assert.h>
+#include "common.h"
+
+static HirType *enum_integer_base(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+    return type;
+}
+
+static bool enum_integer_type(HirType *type) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    switch (type->builtin) {
+        case BUILTIN_INT8:
+        case BUILTIN_INT16:
+        case BUILTIN_INT32:
+        case BUILTIN_INT64:
+        case BUILTIN_UINT8:
+        case BUILTIN_UINT16:
+        case BUILTIN_UINT32:
+        case BUILTIN_UINT64:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static bool enum_integer_signed(HirType *type) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    return type->builtin == BUILTIN_INT8 || type->builtin == BUILTIN_INT16 ||
+           type->builtin == BUILTIN_INT32 || type->builtin == BUILTIN_INT64;
+}
+
+static bool enum_value_fits(HirType *type, uint64_t value, bool value_signed) {
+    type = enum_integer_base(type);
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    int64_t signed_value = (int64_t)value;
+    switch (type->builtin) {
+        case BUILTIN_INT8: return value_signed ? signed_value >= INT8_MIN && signed_value <= INT8_MAX : value <= INT8_MAX;
+        case BUILTIN_INT16: return value_signed ? signed_value >= INT16_MIN && signed_value <= INT16_MAX : value <= INT16_MAX;
+        case BUILTIN_INT32: return value_signed ? signed_value >= INT32_MIN && signed_value <= INT32_MAX : value <= INT32_MAX;
+        case BUILTIN_INT64: return value_signed || value <= INT64_MAX;
+        case BUILTIN_UINT8: return (!value_signed || signed_value >= 0) && value <= UINT8_MAX;
+        case BUILTIN_UINT16: return (!value_signed || signed_value >= 0) && value <= UINT16_MAX;
+        case BUILTIN_UINT32: return (!value_signed || signed_value >= 0) && value <= UINT32_MAX;
+        case BUILTIN_UINT64: return !value_signed || signed_value >= 0;
+        default: return false;
+    }
+}
+
+static void enum_type_error(Sema *sema, Span span, String message) {
+    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, span, message);
+    diag_finish(&diagnostic);
+}
+
+HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable) {
+    HirType *copy = arena_calloc(sema->arena, sizeof(HirType));
+    *copy = *type;
+    copy->mutable = mutable;
+    return copy;
+}
+
+HirType *builtin_type(Sema *sema, BuiltinType builtin) {
+    for (size_t i = 0; i < sema->builtin_scope.syms.len; i++) {
+        Symbol *symbol = (Symbol *)array_at(&sema->builtin_scope.syms, i);
+
+        if (symbol->kind == SYMBOL_TYPE &&
+            symbol->type != NULL &&
+            symbol->type->kind == HIR_TYPE_BUILTIN &&
+            symbol->type->builtin == builtin)
+            return symbol->type;
+    }
+
+    return NULL;
+}
+
+bool type_equal(HirType *a, HirType *b) {
+    if (a == b)
+        return true;
+
+    if (a == NULL || b == NULL)
+        return false;
+
+    if (a->kind != b->kind)
+        return false;
+        
+    if (a->nominal != NULL || b->nominal != NULL)
+        return a->nominal == b->nominal;
+
+    switch (a->kind) {
+        case HIR_TYPE_ERROR:
+            return true;
+
+        case HIR_TYPE_BUILTIN:
+            return a->builtin == b->builtin;
+
+        case HIR_TYPE_POINTER:
+            return a->pointer.optional == b->pointer.optional &&
+                   type_equal(a->pointer.pointee,
+                                   b->pointer.pointee);
+
+        case HIR_TYPE_SLICE:
+            return type_equal(a->slice.element,
+                                   b->slice.element);
+
+        case HIR_TYPE_ARRAY:
+            return a->array.length == b->array.length &&
+                   type_equal(a->array.element,
+                                   b->array.element);
+
+        case HIR_TYPE_FUNCTION:
+            if (!type_equal(a->function.ret, b->function.ret))
+                return false;
+
+            if (a->function.params.len != b->function.params.len)
+                return false;
+
+            for (size_t i = 0; i < a->function.params.len; i++) {
+                HirType *ap = ((HirType **)a->function.params.data)[i];
+                HirType *bp = ((HirType **)b->function.params.data)[i];
+
+                if (!type_equal(ap, bp))
+                    return false;
+            }
+
+            return true;
+
+        case HIR_TYPE_SUM:
+            if (a->sum.members.len != b->sum.members.len)
+                return false;
+
+            for (size_t i = 0; i < a->sum.members.len; i++) {
+                HirType *am = ((HirType **)a->sum.members.data)[i];
+                HirType *bm = ((HirType **)b->sum.members.data)[i];
+
+                if (!type_equal(am, bm))
+                    return false;
+            }
+
+            return true;
+
+        case HIR_TYPE_STRUCT:
+            if (a->structure.fields.len != b->structure.fields.len)
+                return false;
+
+            for (size_t i = 0; i < a->structure.fields.len; i++) {
+                HirField *af = ((HirField *)a->structure.fields.data) + i;
+                HirField *bf = ((HirField *)b->structure.fields.data) + i;
+
+                if (af->symbol != bf->symbol)
+                    return false;
+
+                if (!type_equal(af->type, bf->type))
+                    return false;
+            }
+
+            return true;
+
+        case HIR_TYPE_UNION:
+            if (a->union_.fields.len != b->union_.fields.len)
+                return false;
+
+            for (size_t i = 0; i < a->union_.fields.len; i++) {
+                HirField *af = ((HirField *)a->union_.fields.data) + i;
+                HirField *bf = ((HirField *)b->union_.fields.data) + i;
+
+                if (af->symbol != bf->symbol)
+                    return false;
+
+                if (!type_equal(af->type, bf->type))
+                    return false;
+            }
+
+            return true;
+
+        case HIR_TYPE_ENUM:
+            if (!type_equal(a->_enum.underlying, b->_enum.underlying))
+                return false;
+
+            if (a->_enum.items.len != b->_enum.items.len)
+                return false;
+
+            for (size_t i = 0; i < a->_enum.items.len; i++) {
+                HirEnumItem *ai = ((HirEnumItem *)a->_enum.items.data) + i;
+                HirEnumItem *bi = ((HirEnumItem *)b->_enum.items.data) + i;
+
+                if (ai->symbol != bi->symbol)
+                    return false;
+
+                if (ai->value != bi->value)
+                    return false;
+            }
+
+            return true;
+    }
+
+    return false;
+}
+
+static size_t align_up(size_t value, size_t align) {
+    assert(align != 0);
+    size_t remainder = value % align;
+    return remainder == 0 ? value : value + align - remainder;
+}
+
+static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t offset, Span span) {
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+    *symbol = (Symbol) {
+        .kind = SYMBOL_FIELD,
+        .name = (AstName) {
+            .kind = AST_NAME_IDENT,
+            .ident = name,
+        },
+        .decl = NULL,
+        .type = type,
+        .span = span,
+    };
+
+    return (HirField) {
+        .symbol = symbol,
+        .type = type,
+        .offset = offset,
+    };
+}
+
+HirType *sema_type(Sema *sema, AstType *ast) {
+    HirType *hir = arena_calloc(sema->arena, sizeof(HirType));
+
+    hir->mutable = ast->mutable;
+
+    switch (ast->kind) {
+        case AST_TYPE_NAMED: {
+            Symbol *symbol = sema_lookup_path(sema, ast->named.path);
+
+            if (symbol == NULL) {
+                error_unknown_type(sema->diags, ast->named.path, ast->span);
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            if (symbol->kind != SYMBOL_TYPE) {
+                AstName *name = array_at(&ast->named.path.parts, ast->named.path.parts.len - 1);
+                error_expected_type_symbol(sema->diags, name->ident, ast->span);
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            if (symbol->decl != NULL && symbol->decl->kind == AST_DECL_TYPE && symbol->decl->type.generics.len != 0)
+                return sema_generic_type(sema, ast, symbol);
+
+            if (ast->named.args.len != 0) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("type arguments supplied to a non-generic type"));
+                diag_note(&diagnostic, STRING("remove the type arguments from this type"));
+                diag_finish(&diagnostic);
+                hir->kind = HIR_TYPE_ERROR;
+                hir->align = 1;
+                return hir;
+            }
+
+            if (symbol->type == NULL) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            *hir = *symbol->type;
+            hir->mutable = ast->mutable;
+            return hir;
+        }
+
+        case AST_TYPE_POINTER:
+            hir->kind = HIR_TYPE_POINTER;
+            sema->type_indirection_depth++;
+            hir->pointer.pointee = sema_type(sema, ast->pointer.pointee);
+            sema->type_indirection_depth--;
+            hir->pointer.optional = ast->pointer.optional;
+            hir->size = sema->target->pointer.size;
+            hir->align = sema->target->pointer.align;
+            break;
+
+        case AST_TYPE_ARRAY: {
+            if (!ast->array.sized)
+                sema->type_indirection_depth++;
+            HirType *element = sema_type(sema, ast->array.element);
+            if (!ast->array.sized)
+                sema->type_indirection_depth--;
+            HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
+            assert(length_type != NULL);
+
+            if (!ast->array.sized) {
+                HirType *pointer = pointer_type(sema, element, false);
+
+                hir->kind = HIR_TYPE_SLICE;
+                hir->slice.element = element;
+                hir->slice.fields = array_create(sema->arena, sizeof(HirField));
+
+                Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
+                *length_symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = (AstName) {
+                        .kind = AST_NAME_IDENT,
+                        .ident = STRING("len"),
+                    },
+                    .type = length_type,
+                    .span = ast->span,
+                };
+
+                HirField length_field = {
+                    .symbol = length_symbol,
+                    .type = length_type,
+                    .offset = 0,
+                };
+                array_push(&hir->slice.fields, &length_field);
+
+                size_t pointer_offset = align_up(length_type->size, pointer->align);
+
+                Symbol *pointer_symbol = arena_calloc(sema->arena, sizeof(*pointer_symbol));
+                *pointer_symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = (AstName) {
+                        .kind = AST_NAME_IDENT,
+                        .ident = STRING("ptr"),
+                    },
+                    .type = pointer,
+                    .span = ast->span,
+                };
+
+                HirField pointer_field = {
+                    .symbol = pointer_symbol,
+                    .type = pointer,
+                    .offset = pointer_offset,
+                };
+                array_push(&hir->slice.fields, &pointer_field);
+
+                hir->align = length_type->align > pointer->align ? length_type->align : pointer->align;
+                hir->size = align_up(pointer_offset + pointer->size, hir->align);
+                break;
+            }
+
+            HirExpr *length = sema_expr(sema, ast->array.length, NULL);
+            CompContext context = {
+                .sema = sema,
+                .frame = NULL
+            };
+            length = comp_eval_expr(&context, length);
+
+            if (length->kind != HIR_EXPR_LITERAL) {
+                //! TODO: expected comptime integer
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            hir->kind = HIR_TYPE_ARRAY;
+            hir->array.element = element;
+            hir->array.length = length->literal.integer;
+            hir->array.fields = array_create(sema->arena, sizeof(HirField));
+
+            Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
+            *length_symbol = (Symbol) {
+                .kind = SYMBOL_FIELD,
+                .name = (AstName) {
+                    .kind = AST_NAME_IDENT,
+                    .ident = STRING("len"),
+                },
+                .type = length_type,
+                .span = ast->span,
+            };
+
+            HirField length_field = {
+                .symbol = length_symbol,
+                .type = length_type,
+                .offset = 0,
+            };
+            array_push(&hir->array.fields, &length_field);
+
+            size_t data_offset = align_up(length_type->size, element->align);
+
+            if (element->size != 0 && hir->array.length > (uint64_t)(SIZE_MAX - data_offset) / element->size) {
+                //! TODO: array is too large
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            size_t data_size = (size_t)hir->array.length * element->size;
+            hir->align = length_type->align > element->align ? length_type->align : element->align;
+            hir->size = align_up(data_offset + data_size, hir->align);
+            break;
+        }
+
+        case AST_TYPE_FN:
+            hir->kind = HIR_TYPE_FUNCTION;
+            hir->size = 0;
+            hir->align = 0;
+            hir->function.ret = sema_type(sema, ast->fn.ret);
+            hir->function.params = array_create(sema->arena, sizeof(HirType *));
+
+            for (size_t i = 0; i < ast->fn.params.len; i++) {
+                AstType *param = ((AstType **)ast->fn.params.data)[i];
+
+                HirType *type = sema_type(sema, param);
+                array_push(&hir->function.params, &type);
+            }
+            break;
+
+        case AST_TYPE_SUM:
+            hir->kind = HIR_TYPE_SUM;
+            hir->sum.members = array_create(sema->arena, sizeof(HirType *));
+
+            for (size_t i = 0; i < ast->sum.members.len; i++) {
+                AstType *member = ((AstType **)ast->sum.members.data)[i];
+
+                HirType *type = sema_type(sema, member);
+                array_push(&hir->sum.members, &type);
+            }
+            break;
+
+        case AST_TYPE_STRUCT: {
+            hir->kind = HIR_TYPE_STRUCT;
+            hir->structure.fields = array_create(sema->arena, sizeof(HirField));
+
+            size_t offset = 0;
+            size_t align = 1;
+            HirType *super = NULL;
+
+            if (ast->structure.base != NULL) {
+                super = sema_type(sema, ast->structure.base);
+                if (super == NULL || super->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
+                if (super->kind == HIR_TYPE_STRUCT) {
+                    for (size_t i = 0; i < super->structure.fields.len; i++) {
+                        HirField field = *(HirField *)array_at(&super->structure.fields, i);
+                        array_push(&hir->structure.fields, &field);
+                    }
+                } else if (super->kind == HIR_TYPE_UNION) {
+                    for (size_t i = 0; i < super->union_.fields.len; i++) {
+                        HirField field = *(HirField *)array_at(&super->union_.fields, i);
+                        array_push(&hir->structure.fields, &field);
+                    }
+                } else {
+                    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_INVALID, ast->structure.base->span, STRING("struct base type must be a struct or union"));
+                    diag_finish(&diagnostic);
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
+                hir->super = super;
+                offset = super->size;
+                align = super->align;
+            }
+
+            for (size_t i = 0; i < ast->structure.fields.len; i++) {
+                AstField *field = array_at(&ast->structure.fields, i);
+                for (size_t j = 0; j < hir->structure.fields.len; j++) {
+                    HirField *previous = array_at(&hir->structure.fields, j);
+                    if (ast_name_equal(&previous->symbol->name, &field->name)) {
+                        error_duplicate_symbol(sema->diags, field->name.ident, field->span, previous->symbol->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                }
+
+                Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+                *symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = field->name,
+                    .decl = NULL,
+                    .span = field->span,
+                };
+                symbol->type = sema_type(sema, field->type);
+                if (symbol->type == NULL || symbol->type->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
+                HirField hir_field = {.symbol = symbol, .type = symbol->type};
+                offset = align_up(offset, hir_field.type->align);
+                hir_field.offset = offset;
+                offset += hir_field.type->size;
+                if (hir_field.type->align > align)
+                    align = hir_field.type->align;
+                array_push(&hir->structure.fields, &hir_field);
+            }
+
+            hir->align = align;
+            hir->size = align_up(offset, align);
+            break;
+        }
+
+        case AST_TYPE_UNION: {
+            hir->kind = HIR_TYPE_UNION;
+            hir->union_.fields = array_create(sema->arena, sizeof(HirField));
+
+            size_t size = 0;
+            size_t align = 1;
+
+            for (size_t i = 0; i < ast->union_.fields.len; i++) {
+                AstField *field = array_at(&ast->union_.fields, i);
+                Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+                *symbol = (Symbol) {
+                    .kind = SYMBOL_FIELD,
+                    .name = field->name,
+                    .decl = NULL,
+                    .span = ast->span,
+                };
+                symbol->type = sema_type(sema, field->type);
+
+                HirField hir_field = {
+                    .symbol = symbol,
+                    .type = symbol->type,
+                    .offset = 0,
+                };
+
+                if (hir_field.type->size > size)
+                    size = hir_field.type->size;
+                if (hir_field.type->align > align)
+                    align = hir_field.type->align;
+
+                array_push(&hir->union_.fields, &hir_field);
+            }
+
+            hir->align = align;
+            hir->size = align_up(size, align);
+            break;
+        }
+
+        case AST_TYPE_ENUM: {
+            hir->kind = HIR_TYPE_ENUM;
+            HirType *underlying = ast->_enum.underlying != NULL
+                ? sema_type(sema, ast->_enum.underlying)
+                : builtin_type(sema, BUILTIN_INT32);
+
+            if (underlying == NULL || underlying->kind == HIR_TYPE_ERROR) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            hir->_enum.underlying = underlying;
+            hir->size = underlying->size;
+            hir->align = underlying->align;
+            hir->_enum.items = array_create(sema->arena, sizeof(HirEnumItem));
+
+            bool integer_underlying = enum_integer_type(underlying);
+            bool underlying_signed = integer_underlying && enum_integer_signed(underlying);
+            uint64_t next_value = 0;
+            bool next_value_overflow = false;
+
+            for (size_t i = 0; i < ast->_enum.items.len; i++) {
+                AstEnumItem *item = array_at(&ast->_enum.items, i);
+
+                for (size_t j = 0; j < hir->_enum.items.len; j++) {
+                    HirEnumItem *previous = array_at(&hir->_enum.items, j);
+                    if (ast_name_equal(&previous->symbol->name, &item->name)) {
+                        error_duplicate_symbol(sema->diags, item->name.ident, item->span, previous->symbol->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                }
+
+                HirExpr *value = NULL;
+                uint64_t integer_value = 0;
+                bool integer_value_signed = underlying_signed;
+
+                if (item->value != NULL) {
+                    value = sema_expr(sema, item->value, integer_underlying ? NULL : underlying);
+                    if (value == NULL || value->kind == HIR_EXPR_ERROR) {
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    CompContext context = {.sema = sema, .frame = NULL};
+                    value = comp_eval_expr(&context, value);
+
+                    if (!comp_expr_is_evaluable(value)) {
+                        enum_type_error(sema, item->span, STRING("enum member value must be a compile-time constant"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    if (integer_underlying) {
+                        if (value->kind != HIR_EXPR_LITERAL || value->literal.kind != HIR_LITERAL_INTEGER) {
+                            enum_type_error(sema, item->span, STRING("integer enum member value must evaluate to an integer"));
+                            hir->kind = HIR_TYPE_ERROR;
+                            return hir;
+                        }
+
+                        HirType *value_type = enum_integer_base(value->type);
+                        if (value_type == NULL || value_type->kind != HIR_TYPE_BUILTIN || !enum_integer_type(value_type)) {
+                            enum_type_error(sema, item->span, STRING("integer enum member value must have an integer type"));
+                            hir->kind = HIR_TYPE_ERROR;
+                            return hir;
+                        }
+
+                        integer_value = value->literal.integer;
+                        integer_value_signed = enum_integer_signed(value->type);
+                    } else if (!type_equal(value->type, underlying)) {
+                        error_type_mismatch(sema->diags, underlying, value->type, item->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                } else {
+                    if (!integer_underlying) {
+                        enum_type_error(sema, item->span, STRING("enum members with non-integer underlying types require explicit values"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    if (next_value_overflow) {
+                        enum_type_error(sema, item->span, STRING("implicit enum member value overflows its underlying integer type"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    integer_value = next_value;
+                    value = arena_calloc(sema->arena, sizeof(*value));
+                    *value = (HirExpr) {
+                        .span = item->span,
+                        .kind = HIR_EXPR_LITERAL,
+                        .type = underlying,
+                        .literal = {
+                            .kind = HIR_LITERAL_INTEGER,
+                            .integer = integer_value,
+                        },
+                    };
+                }
+
+                if (integer_underlying) {
+                    if (!enum_value_fits(underlying, integer_value, integer_value_signed)) {
+                        enum_type_error(sema, item->span, STRING("enum member value does not fit its underlying integer type"));
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+
+                    value->type = underlying;
+                    next_value_overflow = underlying_signed
+                        ? (int64_t)integer_value == INT64_MAX
+                        : integer_value == UINT64_MAX;
+                    next_value = integer_value + 1;
+                }
+
+                Symbol *enum_symbol = arena_calloc(sema->arena, sizeof(*enum_symbol));
+                *enum_symbol = (Symbol) {
+                    .kind = SYMBOL_ENUM_ITEM,
+                    .name = item->name,
+                    .type = hir,
+                    .span = item->span,
+                    .canonical = enum_symbol,
+                    .owner_module = sema->module,
+                    .owner_scope = sema->module_scope,
+                };
+
+                HirEnumItem hir_item = {
+                    .symbol = enum_symbol,
+                    .value = value,
+                };
+                array_push(&hir->_enum.items, &hir_item);
+            }
+            break;
+        }
+        
+        // this can't be resolved until comptime eval
+        case AST_TYPE_SPLICE:
+            hir->kind = HIR_TYPE_ERROR;
+            //! TODO: mark/defer comptime type resolution
+            break;
+
+        default:
+            hir->kind = HIR_TYPE_ERROR;
+            //! TODO: internal compiler error
+            fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
+            break;
+    }
+
+    return hir;
+}
+
+HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
+    if (symbol->type != NULL)
+        return symbol->type;
+
+    switch (symbol->kind) {
+        case SYMBOL_GLOBAL:
+            if (symbol->type == NULL)
+                symbol->type = sema_type(sema, symbol->decl->var.type);
+
+            return symbol->type;
+
+        case SYMBOL_FN: {
+            AstFnDecl *fn = &symbol->decl->fn;
+            if (fn->generics.len != 0)
+                return NULL;
+
+            HirType *type = arena_calloc(sema->arena, sizeof(HirType));
+
+            type->kind = HIR_TYPE_FUNCTION;
+            type->mutable = false;
+            type->function.ret = sema_type(sema, fn->ret);
+            type->function.params = array_create(sema->arena, sizeof(HirType *));
+
+            for (size_t i = 0; i < fn->params.len; i++) {
+                AstParam *param = ((AstParam *)fn->params.data) + i;
+
+                HirType *param_type = sema_type(sema, param->type);
+                array_push(&type->function.params, &param_type);
+            }
+
+            symbol->type = type;
+            return type;
+        }
+
+        case SYMBOL_TYPE:
+        case SYMBOL_LOCAL:
+        case SYMBOL_PARAMETER:
+        case SYMBOL_FIELD:
+        case SYMBOL_ENUM_ITEM:
+        case SYMBOL_CONSTRAINT:
+        case SYMBOL_ERROR:
+            return NULL;
+    }
+
+    return NULL;
+}
+
+static void builtin_layout(BuiltinType builtin, size_t *size, size_t *align) {
+    switch (builtin) {
+        case BUILTIN_UINT8:
+        case BUILTIN_INT8:
+        case BUILTIN_BOOL:
+            *size = 1;
+            *align = 1;
+            return;
+        case BUILTIN_UINT16:
+        case BUILTIN_INT16:
+            *size = 2;
+            *align = 2;
+            return;
+        case BUILTIN_UINT32:
+        case BUILTIN_INT32:
+        case BUILTIN_FLOAT32:
+            *size = 4;
+            *align = 4;
+            return;
+        case BUILTIN_UINT64:
+        case BUILTIN_INT64:
+        case BUILTIN_FLOAT64:
+            *size = 8;
+            *align = 8;
+            return;
+        case BUILTIN_NONE:
+            *size = 0;
+            *align = 1;
+            return;
+    }
+    assert(!"unhandled builtin type");
+}
+
+static void insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
+    *type = (HirType) {
+        .kind = HIR_TYPE_BUILTIN,
+        .mutable = false,
+        .builtin = builtin,
+    };
+    builtin_layout(builtin, &type->size, &type->align);
+    *symbol = (Symbol) {
+        .kind = SYMBOL_TYPE,
+        .name = (AstName) {
+            .kind = AST_NAME_IDENT,
+            .ident = name,
+        },
+        .decl = NULL,
+        .type = type,
+    };
+    scope_insert(&sema->builtin_scope, symbol);
+}
+
+void sema_insert_builtin_types(Sema *sema) {
+    insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
+    insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
+    insert_builtin_type(sema, STRING("int32"), BUILTIN_INT32);
+    insert_builtin_type(sema, STRING("int64"), BUILTIN_INT64);
+
+    insert_builtin_type(sema, STRING("uint8"), BUILTIN_UINT8);
+    insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
+    insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
+    insert_builtin_type(sema, STRING("uint64"), BUILTIN_UINT64);
+
+    insert_builtin_type(sema, STRING("float32"), BUILTIN_FLOAT32);
+    insert_builtin_type(sema, STRING("float64"), BUILTIN_FLOAT64);
+
+    insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
+
+    insert_builtin_type(sema, STRING("none"), BUILTIN_NONE);
+}

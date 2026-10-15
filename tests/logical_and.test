@@ -1,0 +1,20 @@
+name: logical and
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn bool logical_and(bool a, bool b) {
+    return a && b;
+}
+
+[lir]
+logical_and:
+    block0(%0, %1):
+        branch %0, block1, block2(false)
+
+    block1:
+        branch %1, block2(true), block2(false)
+
+    block2(%2):
+        return %2

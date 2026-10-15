@@ -1,0 +1,85 @@
+name: System V AMD64 aggregate arguments and returns from Coda to C
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Pair = struct {
+    int64 x;
+    int64 y;
+};
+type Floats = struct {
+    float64 x;
+    float64 y;
+};
+type Mixed = struct {
+    int64 x;
+    float64 y;
+};
+type Large = struct {
+    int64 x;
+    int64 y;
+    int64 z;
+};
+
+@extern
+fn Pair c_abi_pair_roundtrip(Pair value);
+@extern
+fn Floats c_abi_floats_roundtrip(Floats value);
+@extern
+fn Mixed c_abi_mixed_roundtrip(Mixed value);
+@extern
+fn Large c_abi_large_roundtrip(Large value);
+@extern
+fn Pair c_abi_pair_after_five(int64 a, int64 b, int64 c, int64 d, int64 e, Pair value);
+@extern
+fn Floats c_abi_floats_after_eight(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, float64 h, Floats value);
+
+fn int64 main() {
+    Pair pair = {.x = 10, .y = 20};
+    Floats floats = {.x = 1.25, .y = 2.5};
+    Mixed mixed = {.x = 30, .y = 3.5};
+    Large large = {.x = 1, .y = 2, .z = 3};
+    Pair pair_result = c_abi_pair_roundtrip(pair);
+    if (pair_result.x != 11) return 1;
+    if (pair_result.y != 22) return 1;
+    Floats floats_result = c_abi_floats_roundtrip(floats);
+    if (floats_result.x != 2.25) return 2;
+    if (floats_result.y != 4.5) return 2;
+    Mixed mixed_result = c_abi_mixed_roundtrip(mixed);
+    if (mixed_result.x != 40) return 3;
+    if (mixed_result.y != 7.5) return 3;
+    Large large_result = c_abi_large_roundtrip(large);
+    if (large_result.x != 2) return 4;
+    if (large_result.y != 4) return 4;
+    if (large_result.z != 6) return 4;
+    Pair spilled_pair = c_abi_pair_after_five(1, 2, 3, 4, 5, pair);
+    if (spilled_pair.x != 11) return 5;
+    if (spilled_pair.y != 25) return 5;
+    Floats spilled_floats = c_abi_floats_after_eight(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, floats);
+    if (spilled_floats.x != 2.25) return 6;
+    if (spilled_floats.y != 4.5) return 6;
+    return 0;
+}
+
+[c_source]
+#include <stdint.h>
+
+typedef struct { int64_t x, y; } Pair;
+typedef struct { double x, y; } Floats;
+typedef struct { int64_t x; double y; } Mixed;
+typedef struct { int64_t x, y, z; } Large;
+
+Pair c_abi_pair_roundtrip(Pair value) { value.x += 1; value.y += 2; return value; }
+Floats c_abi_floats_roundtrip(Floats value) { value.x += 1.0; value.y += 2.0; return value; }
+Mixed c_abi_mixed_roundtrip(Mixed value) { value.x += 10; value.y += 4.0; return value; }
+Large c_abi_large_roundtrip(Large value) { value.x += 1; value.y += 2; value.z += 3; return value; }
+Pair c_abi_pair_after_five(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, Pair value) { value.x += a + b + c + d + e - 14; value.y += e; return value; }
+Floats c_abi_floats_after_eight(double a, double b, double c, double d, double e, double f, double g, double h, Floats value) { value.x += a + b + c + d + e + f + g + h - 35.0; value.y += h - 6.0; return value; }
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

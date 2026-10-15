@@ -232,7 +232,7 @@
             "patterns": [
                 {
                     "name": "keyword.operator.coda",
-                    "match": "@[a-zA-Z]+(\\([\\(]*\\))?"
+                    "match": "@[A-Za-z]+(\\([^()]*\\))?(,\\s*[A-Za-z]+(\\([^()]*\\))?)*"
                 }
             ]
         },

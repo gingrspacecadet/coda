@@ -1,0 +1,15 @@
+name: lir multiplication
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 mul(int64 a, int64 b) {
+    return a * b;
+}
+
+[lir]
+mul:
+    block0(%0, %1):
+        %2 = mul %0, %1
+        return %2

@@ -1,0 +1,13 @@
+name: positional arguments must precede named arguments
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn int64 value(int64 first = 1, int64 second = 2) {
+    return first + second;
+}
+
+fn int64 main() {
+    return value(.first = 1, 2);
+}

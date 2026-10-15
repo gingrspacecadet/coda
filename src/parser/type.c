@@ -1,0 +1,409 @@
+#include "common.h"
+
+AstConstraintItem parse_constraint_item(Parser *p) {
+    AstConstraintItem item = {
+        .span = p->current.span,
+    };
+
+    Checkpoint cp = checkpoint(p);
+
+    AstFnDecl *fn = arena_calloc(p->arena, sizeof(*fn));
+
+    if (try_parse_fn_decl(p, fn)) {
+        item.kind = AST_CONSTRAINT_METHOD;
+        item.method = fn;
+        return item;
+    }
+
+    restore(p, cp);
+
+    cp = checkpoint(p);
+
+    AstField field = parse_field(p);
+
+    if (match(p, TK_SEMICOLON)) {
+        item.kind = AST_CONSTRAINT_FIELD;
+        item.field = field;
+        return item;
+    }
+
+    restore(p, cp);
+
+    item.kind = AST_CONSTRAINT_EXPR;
+    item.expr = parse_expression(p);
+
+    expect(p, TK_SEMICOLON);
+
+    return item;
+}
+
+void parse_constraint_items(Parser *p, Array *items) {
+    while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
+        AstConstraintItem item = parse_constraint_item(p);
+        array_push(items, &item);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
+    }
+}
+
+AstConstraintDecl *parse_inline_constraint(Parser *p) {
+    AstConstraintDecl *constraint = arena_calloc(p->arena, sizeof(*constraint));
+
+    constraint->span = p->current.span;
+    constraint->items = array_create(p->arena, sizeof(AstConstraintItem));
+
+    expect(p, TK_LBRACE);
+
+    parse_constraint_items(p, &constraint->items);
+
+    expect(p, TK_RBRACE);
+
+    return constraint;
+}
+
+AstConstraintRef parse_constraint_ref(Parser *p) {
+    AstConstraintRef ref = {
+        .span = p->current.span,
+        .args = array_create(p->arena, sizeof(AstType *)),
+    };
+
+    if (at(p, TK_LBRACE)) {
+        ref.kind = AST_CONSTRAINTREF_INLINE;
+        ref._inline = parse_inline_constraint(p);
+    } else {
+        ref.kind = AST_CONSTRAINTREF_NAMED;
+        ref.path = parse_path(p);
+
+        if (match(p, TK_LT)) {
+            while (!at(p, TK_GT) && !at(p, TK_EOF)) {
+                size_t before = p->current.span.offset;
+                AstType *arg = parse_type(p);
+                array_push(&ref.args, &arg);
+                if (!match(p, TK_COMMA))
+                    break;
+                if (p->current.span.offset == before)
+                    advance(p);
+            }
+            expect_type_gt(p);
+        }
+    }
+
+    return ref;
+}
+
+AstGenericParam parse_generic_param(Parser *p) {
+    AstGenericParam param = {
+        .span = p->current.span,
+        .constraints = array_create(p->arena, sizeof(AstConstraintRef))
+    };
+
+    param.name = parse_name(p);
+
+    if (!match(p, TK_COLON))
+        return param;
+
+    for (;;) {
+        AstConstraintRef ref = parse_constraint_ref(p);
+        array_push(&param.constraints, &ref);
+
+        if (!match(p, TK_PLUS))
+            break;
+    }
+
+    return param;
+}
+
+Array parse_generic_params(Parser *p) {
+    Array params = array_create(p->arena, sizeof(AstGenericParam));
+
+    if (!match(p, TK_LT))
+        return params;
+
+    if (!at(p, TK_GT) || !at(p, TK_SHR)) {
+        for (;;) {
+            AstGenericParam param = parse_generic_param(p);
+            array_push(&params, &param);
+
+            if (!match(p, TK_COMMA))
+                break;
+        }
+    }
+
+    expect_type_gt(p);
+
+    return params;
+}
+
+AstField parse_field(Parser *p) {
+    AstField field = {
+        .span = p->current.span,
+    };
+
+    field.type = parse_type(p);
+    field.name = parse_name(p);
+
+    return field;
+}
+
+AstType *parse_struct_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
+
+    type->kind = AST_TYPE_STRUCT;
+    type->span = p->current.span;
+    type->structure.base = NULL;
+    type->structure.fields = array_create(p->arena, sizeof(AstField));
+
+    advance(p); /* struct */
+
+    if (match(p, TK_COLON))
+        type->structure.base = parse_type(p);
+
+    expect(p, TK_LBRACE);
+
+    while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
+        AstField field = parse_field(p);
+        array_push(&type->structure.fields, &field);
+
+        expect(p, TK_SEMICOLON);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
+    }
+
+    expect(p, TK_RBRACE);
+
+    return type;
+}
+
+AstType *parse_union_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
+
+    type->kind = AST_TYPE_UNION;
+    type->span = p->current.span;
+    type->union_.fields = array_create(p->arena, sizeof(AstField));
+
+    advance(p);
+
+    expect(p, TK_LBRACE);
+
+    while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+
+        AstField field = parse_field(p);
+        array_push(&type->union_.fields, &field);
+
+        expect(p, TK_SEMICOLON);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
+    }
+
+    expect(p, TK_RBRACE);
+
+    return type;
+}
+
+AstType *parse_enum_type(Parser *p) {
+    AstType *type = arena_calloc(p->arena, sizeof(*type));
+
+    type->kind = AST_TYPE_ENUM;
+    type->span = p->current.span;
+    type->_enum.underlying = NULL;
+    type->_enum.items = array_create(p->arena, sizeof(AstEnumItem));
+
+    advance(p);
+
+    if (match(p, TK_COLON))
+        type->_enum.underlying = parse_type(p);
+
+    expect(p, TK_LBRACE);
+
+    while (!at(p, TK_RBRACE) && !at(p, TK_EOF)) {
+        size_t before = p->current.span.offset;
+        AstEnumItem item = {
+            .span = p->current.span,
+            .name = parse_name(p),
+            .value = NULL,
+        };
+
+        if (match(p, TK_EQ))
+            item.value = parse_expression(p);
+
+        array_push(&type->_enum.items, &item);
+
+        if (!match(p, TK_COMMA) && !at(p, TK_RBRACE))
+            error_expected_token(p->diags, TK_COMMA, p->current.span);
+
+        if (!at(p, TK_EOF) && p->current.span.offset == before)
+            advance(p);
+    }
+
+    expect(p, TK_RBRACE);
+    return type;
+}
+
+AstType *parse_type_single(Parser *p) {
+    bool prefix_mut = match(p, TK_KW_MUT);
+
+    AstType *base = NULL;
+
+    if (at(p, TK_LPAREN)) {
+        advance(p);
+        base = parse_type(p);
+        expect(p, TK_RPAREN);
+    } else if (at(p, TK_KW_FN)) {
+        Token start = p->current;
+        advance(p);
+
+        AstType *ret = parse_type(p);
+
+        expect(p, TK_LPAREN);
+
+        base = arena_calloc(p->arena, sizeof(*base));
+        base->kind = AST_TYPE_FN;
+        base->span = start.span;
+        base->fn.ret = ret;
+        base->fn.params = array_create(p->arena, sizeof(AstType *));
+
+        if (!at(p, TK_RPAREN)) {
+            for (;;) {
+                AstType *param = parse_type(p);
+                array_push(&base->fn.params, &param);
+
+                match(p, TK_IDENT); //! TODO: remember to implement this logic <3
+
+                if (!match(p, TK_COMMA))
+                    break;
+            }
+        }
+
+        expect(p, TK_RPAREN);
+    } else if (at(p, TK_KW_STRUCT)) {
+        base = parse_struct_type(p);
+    } else if (at(p, TK_KW_UNION)) {
+        base = parse_union_type(p);
+    } else if (at(p, TK_KW_ENUM)) {
+        base = parse_enum_type(p);
+    } else if (at(p, TK_POUND)) {
+        base = arena_calloc(p->arena, sizeof(*base));
+        base->kind = AST_TYPE_SPLICE;
+        base->span = p->current.span;
+
+        advance(p);
+
+        expect(p, TK_LPAREN);
+
+        base->splice.expr = parse_expression(p);
+
+        expect(p, TK_RPAREN);
+    } else if (at(p, TK_IDENT)) {
+        base = arena_calloc(p->arena, sizeof(*base));
+        base->kind = AST_TYPE_NAMED;
+        base->span = p->current.span;
+        base->named.path = parse_path(p);
+        base->named.args = array_create(p->arena, sizeof(AstType *));
+
+        if (match(p, TK_LT)) {
+            if (!at(p, TK_GT)) {
+                for (;;) {
+                    AstType *arg = parse_type(p);
+                    array_push(&base->named.args, &arg);
+
+                    if (!match(p, TK_COMMA))
+                        break;
+                }
+            }
+
+            expect_type_gt(p);
+        }
+    } else {
+        error_expected_type_symbol(p->diags, p->current.span);
+
+        base = arena_calloc(p->arena, sizeof(*base));
+        base->kind = AST_TYPE_ERROR;
+        base->span = p->current.span;
+    }
+
+    base->mutable = false;
+
+    for (;;) {
+        bool postfix_mut = match(p, TK_KW_MUT);
+
+        if (match(p, TK_STAR)) {
+            AstType *ptr = arena_calloc(p->arena, sizeof(*ptr));
+
+            ptr->kind = AST_TYPE_POINTER;
+            ptr->span = p->previous.span;
+            ptr->mutable = postfix_mut;
+            ptr->pointer.pointee = base;
+            ptr->pointer.optional = match(p, TK_QUERY);
+
+            if (prefix_mut) {
+                base->mutable = true;
+                prefix_mut = false;
+            }
+
+            base = ptr;
+            continue;
+        }
+
+        if (match(p, TK_LBRACK)) {
+            AstType *array = arena_calloc(p->arena, sizeof(*array));
+
+            array->kind = AST_TYPE_ARRAY;
+            array->span = p->previous.span;
+            array->mutable = postfix_mut;
+            array->array.element = base;
+
+            if (match(p, TK_RBRACK)) {
+                array->array.sized = false;
+                array->array.length = NULL;
+            } else {
+                array->array.sized = true;
+                array->array.length = parse_expression(p);
+
+                expect(p, TK_RBRACK);
+            }
+
+            base = array;
+            continue;
+        }
+
+        if (postfix_mut)
+            error_unexpected_token(p->diags, p->current.type, p->previous.span);
+
+        break;
+    }
+
+    if (prefix_mut)
+        base->mutable = true;
+
+    return base;
+}
+
+AstType *parse_type(Parser *p) {
+    AstType *left = parse_type_single(p);
+
+    if (!match(p, TK_PIPE))
+        return left;
+
+    AstType *sum = arena_calloc(p->arena, sizeof(*sum));
+
+    sum->kind = AST_TYPE_SUM;
+    sum->span = left->span;
+    sum->sum.members = array_create(p->arena, sizeof(AstType *));
+
+    array_push(&sum->sum.members, &left);
+
+    do {
+        AstType *member = parse_type_single(p);
+        array_push(&sum->sum.members, &member);
+    } while (match(p, TK_PIPE));
+
+    return sum;
+}

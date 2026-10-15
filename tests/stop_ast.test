@@ -1,0 +1,9 @@
+name: stop at ast
+expect: pass
+stop: ast
+errors: 0
+
+[source]
+fn int64 value(int64 a) {
+    return a;
+}

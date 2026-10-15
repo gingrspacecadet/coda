@@ -1,0 +1,9 @@
+name: bad comparison
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+fn bool bad(int64 *a, uint64 *b) {
+    return a == b;
+}

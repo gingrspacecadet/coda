@@ -1,528 +1,567 @@
 #ifndef AST_H
 #define AST_H
 
-#include "string.h"
+#include "String.h"
 #include "array.h"
 #include "source.h"
 
-typedef struct Module Module;
-typedef struct Decl Decl;
-typedef struct IncludeDecl IncludeDecl;
-typedef struct TypeDecl TypeDecl;
-typedef struct VarDecl VarDecl;
-typedef struct FnDecl FnDecl;
+typedef struct AstModule AstModule;
+typedef struct AstDecl AstDecl;
+typedef struct AstIncludeDecl AstIncludeDecl;
+typedef struct AstTypeDecl AstTypeDecl;
+typedef struct AstVarDecl AstVarDecl;
+typedef struct AstFnDecl AstFnDecl;
 
-typedef struct Type Type;
-typedef struct Stmt Stmt;
-typedef struct Expr Expr;
-typedef struct Pattern Pattern;
-typedef struct ConstraintDecl ConstraintDecl;
+typedef struct AstType AstType;
+typedef struct AstStmt AstStmt;
+typedef struct AstExpr AstExpr;
+typedef struct AstPattern AstPattern;
+typedef struct AstConstraintDecl AstConstraintDecl;
 
 typedef struct {
     enum {
-        NAME_IDENT,
-        NAME_SPLICE,
+        AST_NAME_ERROR,
+        AST_NAME_IDENT,
+        AST_NAME_SPLICE,
     } kind;
 
     union {
         String ident;
-        Expr *splice;
+        AstExpr *splice;
     };
 } AstName;
 
 typedef struct {
-    Array /* String */ parts;
+    Array(AstName) parts;
 } Path;
 
 typedef struct {
     Span span;
     String name;
-    Array /* Expr * */ args;
-} Attribute;
-
-typedef struct {
-    Span span;
-    AstName name;
-    Array /* Path */ constraints;
-} GenericParam;
-
-typedef struct {
-    Span span;
-    Type *type;
-    AstName name;
-} Param;
-
-typedef struct {
-    Span span;
-    AstName name;
-    Type *type;
-} Field;
+    Array(AstExpr *) args;
+} AstAttribute;
 
 typedef enum {
-    TYPE_NONE,
-    TYPE_NAMED,
-    TYPE_POINTER,
-    TYPE_ARRAY,
-    TYPE_FN,
-    TYPE_SUM,
-    TYPE_SPLICE,
-} TypeKind;
+    AST_CONSTRAINTREF_ERROR,
+    AST_CONSTRAINTREF_NAMED,
+    AST_CONSTRAINTREF_INLINE,
+} AstConstraintRefKind;
 
-struct Type {
+typedef struct {
     Span span;
-    TypeKind kind;
+
+    AstConstraintRefKind kind;
+
+    union {
+        Path path;
+        AstConstraintDecl *_inline;
+    };
+    Array(AstType *) args;
+} AstConstraintRef;
+
+typedef struct {
+    Span span;
+    AstName name;
+    Array(AstConstraintRef) constraints;
+} AstGenericParam;
+
+typedef struct {
+    Span span;
+    AstType *type;
+    AstName name;
+    AstExpr *default_value;
+} AstParam;
+
+typedef struct {
+    Span span;
+    AstName name;
+    AstType *type;
+} AstField;
+
+typedef enum {
+    AST_TYPE_ERROR,
+    AST_TYPE_NAMED,
+    AST_TYPE_POINTER,
+    AST_TYPE_ARRAY,
+    AST_TYPE_FN,
+    AST_TYPE_SUM,
+    AST_TYPE_STRUCT,
+    AST_TYPE_UNION,
+    AST_TYPE_ENUM,
+    AST_TYPE_SPLICE,
+} AstTypeKind;
+
+struct AstType {
+    Span span;
+    AstTypeKind kind;
+    bool mutable;
 
     union {
         struct {
             Path path;
-            Array /* Type * */ args;
+            Array(AstType *) args;
         } named;
 
         struct {
-            Type *pointee;
-            bool mutable;
+            AstType *pointee;
             bool optional;
         } pointer;
 
         struct {
-            Type *element;
-
-            /*
-             * false: T[]
-             * true:  T[n]
-             */
+            AstType *element;
             bool sized;
-            Expr *length;
+            AstExpr *length;
         } array;
 
         struct {
-            Type *ret;
-            Array /* Type * */ params;
+            AstType *ret;
+            Array(AstType *) params;
         } fn;
 
         struct {
-            Array /* Type * */ members;
+            Array(AstType *) members;
         } sum;
 
         struct {
-            Expr *expr;
+            AstType *base;
+            Array(AstField) fields;
+        } structure;
+
+        struct {
+            Array(AstField) fields;
+        } union_;
+
+        struct {
+            AstType *underlying;
+            Array(AstEnumItem) items;
+        } _enum;
+
+        struct {
+            AstExpr *expr;
         } splice;
     };
 };
 
 typedef enum {
-    LIT_INTEGER,
-    LIT_FLOAT,
-    LIT_STRING,
-    LIT_CHAR,
-    LIT_BOOL,
-    LIT_NONE,
-} LiteralKind;
+    AST_LIT_ERROR,
+    AST_LIT_INTEGER,
+    AST_LIT_FLOAT,
+    AST_LIT_STRING,
+    AST_LIT_CHAR,
+    AST_LIT_BOOL,
+    AST_LIT_NULL,
+} AstLiteralKind;
 
 typedef struct {
-    LiteralKind kind;
+    AstLiteralKind kind;
     String raw;
-} Literal;
+} AstLiteral;
 
 typedef enum {
-    UNARY_POS,
-    UNARY_NEG,
-    UNARY_NOT,
-    UNARY_BIT_NOT,
-    UNARY_DEREF,
-    UNARY_ADDRESS,
-} UnaryOp;
+    AST_UNARY_ERROR,
+    AST_UNARY_POS,
+    AST_UNARY_NEG,
+    AST_UNARY_NOT,
+    AST_UNARY_BIT_NOT,
+    AST_UNARY_DEREF,
+    AST_UNARY_ADDRESS,
+} AstUnaryOp;
 
 typedef enum {
-    BINARY_ADD,
-    BINARY_SUB,
-    BINARY_MUL,
-    BINARY_DIV,
-    BINARY_MOD,
+    AST_BINARY_ERROR,
+    AST_BINARY_ADD,
+    AST_BINARY_SUB,
+    AST_BINARY_MUL,
+    AST_BINARY_DIV,
+    AST_BINARY_MOD,
 
-    BINARY_EQUAL,
-    BINARY_NOT_EQUAL,
-    BINARY_LT,
-    BINARY_LTE,
-    BINARY_GT,
-    BINARY_GTE,
+    AST_BINARY_EQUAL,
+    AST_BINARY_NOT_EQUAL,
+    AST_BINARY_LT,
+    AST_BINARY_LTE,
+    AST_BINARY_GT,
+    AST_BINARY_GTE,
 
-    BINARY_LOGICAL_AND,
-    BINARY_LOGICAL_OR,
+    AST_BINARY_LOGICAL_AND,
+    AST_BINARY_LOGICAL_OR,
 
-    BINARY_BIT_AND,
-    BINARY_BIT_OR,
-    BINARY_BIT_XOR,
+    AST_BINARY_BIT_AND,
+    AST_BINARY_BIT_OR,
+    AST_BINARY_BIT_XOR,
 
-    BINARY_SHL,
-    BINARY_SHR,
+    AST_BINARY_SHL,
+    AST_BINARY_SHR,
 
-    BINARY_ASSIGN,
+    AST_BINARY_ASSIGN,
 
-    BINARY_ADD_ASSIGN,
-    BINARY_SUB_ASSIGN,
-    BINARY_MUL_ASSIGN,
-    BINARY_DIV_ASSIGN,
-    BINARY_MOD_ASSIGN,
+    AST_BINARY_ADD_ASSIGN,
+    AST_BINARY_SUB_ASSIGN,
+    AST_BINARY_MUL_ASSIGN,
+    AST_BINARY_DIV_ASSIGN,
+    AST_BINARY_MOD_ASSIGN,
 
-    BINARY_BIT_AND_ASSIGN,
-    BINARY_BIT_OR_ASSIGN,
-    BINARY_BIT_XOR_ASSIGN,
+    AST_BINARY_BIT_AND_ASSIGN,
+    AST_BINARY_BIT_OR_ASSIGN,
+    AST_BINARY_BIT_XOR_ASSIGN,
 
-    BINARY_SHL_ASSIGN,
-    BINARY_SHR_ASSIGN,
+    AST_BINARY_SHL_ASSIGN,
+    AST_BINARY_SHR_ASSIGN,
 
-    BINARY_NAND,
-    BINARY_NAND_ASSIGN,
+    AST_BINARY_NAND,
+    AST_BINARY_NAND_ASSIGN,
 
-    BINARY_NOR,
-    BINARY_NOR_ASSIGN,
-} BinaryOp;
+    AST_BINARY_NOR,
+    AST_BINARY_NOR_ASSIGN,
+} AstBinaryOp;
 
 typedef struct {
     Span span;
-    AstName *name; /* NULL = positional */
-    Expr *value;
-} InitField;
+    AstName name; /* AST_NAME_ERROR = positional */
+    AstExpr *value;
+} AstInitField;
+
+typedef struct {
+    Span span;
+    AstName name; // AST_NAME_ERROR = positional
+    AstExpr *value;
+} AstCallArg;
 
 typedef enum {
-    EXPR_NONE,
-    EXPR_ERROR,
+    AST_INTRINSIC_ARG_EXPR,
+    AST_INTRINSIC_ARG_TYPE,
+    AST_INTRINSIC_ARG_MEMBER_PATH,
+} AstIntrinsicArgKind;
 
-    EXPR_LITERAL,
-    EXPR_IDENT,
-    EXPR_PATH,
+typedef struct {
+    AstIntrinsicArgKind kind;
+    Span span;
+    union {
+        AstExpr *expr;
+        AstType *type;
+        Array(AstName) member_path;
+    };
+} AstIntrinsicArg;
 
-    EXPR_UNARY,
-    EXPR_BINARY,
+typedef enum {
+    AST_EXPR_ERROR,
 
-    EXPR_CALL,
-    EXPR_INDEX,
-    EXPR_MEMBER,
-    EXPR_CAST,
+    AST_EXPR_LITERAL,
+    AST_EXPR_IDENT,
+    AST_EXPR_PATH,
+    AST_EXPR_TYPE_VALUE,
 
-    EXPR_INTRINSIC,
-    EXPR_BUBBLE,
-    EXPR_INIT,
-    EXPR_LAMBDA,
+    AST_EXPR_UNARY,
+    AST_EXPR_BINARY,
 
-    EXPR_SPLICE,
-} ExprKind;
+    AST_EXPR_CALL,
+    AST_EXPR_INFERRED_METHOD_CALL,
+    AST_EXPR_INDEX,
+    AST_EXPR_MEMBER,
+    AST_EXPR_CAST,
 
-struct Expr {
+    AST_EXPR_INTRINSIC,
+    AST_EXPR_BUBBLE,
+    AST_EXPR_INIT,
+    AST_EXPR_LAMBDA,
+
+    AST_EXPR_SPLICE,
+} AstExprKind;
+
+struct AstExpr {
     Span span;
 
-    /*
-     * `$expr`
-     */
     bool comptime;
 
-    ExprKind kind;
+    AstExprKind kind;
 
     union {
+        AstLiteral literal;
+        AstName ident;
+        Path path;
         struct {
-            Literal literal;
-        } lit;
+            AstType *type;
+        } type_value;
 
         struct {
-            AstName name;
-        } ident;
-
-        struct {
-            Path path;
-        } path;
-
-        struct {
-            UnaryOp op;
-            Expr *operand;
+            AstUnaryOp op;
+            AstExpr *operand;
         } unary;
 
         struct {
-            BinaryOp op;
-            Expr *left;
-            Expr *right;
+            AstBinaryOp op;
+            AstExpr *left;
+            AstExpr *right;
         } binary;
 
         struct {
-            Expr *callee;
+            AstExpr *callee;
 
-            /*
-             * foo(x)
-             * foo<int>(x)
-             */
-            Array /* Type * */ generic_args;
-            Array /* Expr * */ args;
+            Array(AstType *) generic_args;
+            Array(AstCallArg) args;
         } call;
 
         struct {
-            Expr *object;
-            Expr *index;
+            AstName name;
+            Array(AstType *) generic_args;
+            Array(AstCallArg) args;
+        } inferred_method_call;
+
+        struct {
+            AstExpr *object;
+            AstExpr *index;
         } index;
 
         struct {
-            Expr *object;
+            AstExpr *object;
             AstName member;
         } member;
 
         struct {
-            Type *type;
-            Expr *operand;
+            AstType *type;
+            AstExpr *operand;
         } cast;
 
         struct {
             Path name;
-            Array /* Expr * */ args;
+            Array(AstIntrinsicArg) args;
         } intrinsic;
 
         struct {
-            Expr *operand;
+            AstExpr *operand;
         } bubble;
 
         struct {
-            /*
-             * e.g.:
-             *
-             * Foo {
-             *     x = 1,
-             *     y = 2,
-             * }
-             */
-            Array /* InitField */ fields;
+            Array(AstInitField) fields;
         } init;
 
         struct {
-            Array /* GenericParam */ generics;
-            Array /* Param */ params;
-            Type *ret;
-            Stmt *body;
+            Array(AstParam) params;
+            AstType *ret;
+            AstStmt *body;
         } lambda;
 
         struct {
-            Expr *expression;
+            AstExpr *expression;
         } splice;
     };
 };
 
 typedef enum {
-    STMT_NONE,
-    STMT_ERROR,
+    AST_PATTERN_ERROR,
+    AST_PATTERN_WILDCARD,
+    AST_PATTERN_LITERAL,
+    AST_PATTERN_BINDING,
+    AST_PATTERN_VARIANT,
+    AST_PATTERN_EXPR,
+} AstPatternKind;
 
-    STMT_VAR,
-    STMT_EXPR,
-    STMT_BLOCK,
-
-    STMT_RETURN,
-
-    STMT_IF,
-    STMT_FOR,
-    STMT_WHILE,
-    STMT_MATCH,
-
-    STMT_BREAK,
-    STMT_CONTINUE,
-
-    STMT_DEFER,
-} StmtKind;
-
-struct Stmt {
+struct AstPattern {
     Span span;
-
-    /*
-     * `$stmt`
-     */
-    bool comptime;
-
-    StmtKind kind;
-
+    AstPatternKind kind;
+    
     union {
+        AstLiteral literal;
+        
+        AstName binding;
+        
         struct {
-            VarDecl *var;
-        } var;
+            AstName name;
+            AstName binding;
+        } variant;
+        
+        AstExpr *expr;
+    };
+};
+
+typedef struct {
+    Span span;
+    
+    AstPattern *pattern;
+    AstStmt *body;
+} AstMatchCase;
+
+typedef enum {
+    AST_STMT_ERROR,
+
+    AST_STMT_VAR,
+    AST_STMT_EXPR,
+    AST_STMT_BLOCK,
+
+    AST_STMT_RETURN,
+
+    AST_STMT_IF,
+    AST_STMT_FOR,
+    AST_STMT_WHILE,
+    AST_STMT_MATCH,
+
+    AST_STMT_BREAK,
+    AST_STMT_CONTINUE,
+
+    AST_STMT_DEFER,
+} AstStmtKind;
+
+struct AstStmt {
+    Span span;
+    
+    bool comptime;
+    
+    AstStmtKind kind;
+    
+    union {
+        AstVarDecl *var;
+
+        AstExpr *expr;
 
         struct {
-            Expr *expr;
-        } expr;
-
-        struct {
-            Array /* Stmt * */ stmts;
+            Array(AstStmt *) stmts;
         } block;
 
         struct {
-            Expr *value;
+            AstExpr *value;
         } _return;
 
         struct {
-            Expr *cond;
-            Stmt *then;
-            Stmt *_else;
+            AstExpr *cond;
+            AstStmt *then;
+            AstStmt *_else;
         } _if;
 
         struct {
-            Stmt *init;
-            Expr *cond;
-            Expr *post;
-            Stmt *body;
+            AstStmt *init;
+            AstExpr *cond;
+            AstExpr *post;
+            AstStmt *body;
         } _for;
 
         struct {
-            Expr *cond;
-            Stmt *body;
+            AstExpr *cond;
+            AstStmt *body;
         } _while;
 
         struct {
-            Expr *expr;
-            Array /* MatchCase */ cases;
+            AstExpr *expr;
+            Array(AstMatchCase) cases;
         } match;
 
         struct {
-            Expr *value;
+            AstExpr *value;
         } _break;
 
         struct {
-            Expr *value;
+            AstExpr *value;
         } _continue;
 
         struct {
-            Stmt *deferred;
+            AstStmt *deferred;
         } defer;
     };
 };
 
-struct IncludeDecl {
-    Path path;
-    String alias;
-};
-
-typedef enum {
-    TYPEDEF_ALIAS,
-    TYPEDEF_STRUCT,
-    TYPEDEF_UNION,
-    TYPEDEF_ENUM,
-} TypeDefKind;
-
-struct TypeDecl {
+struct AstIncludeDecl {
     Span span;
 
+    Path path;
+    Path alias;
+};
+
+struct AstTypeDecl {
+    Span span;
+    
     AstName name;
-    Array /* GenericParam */ generics;
-
-    TypeDefKind kind;
-
-    union {
-        Type *alias;
-
-        struct {
-            Array /* Field */ fields;
-        } structure;
-
-        struct {
-            Array /* Field */ fields;
-        } union_;
-
-        struct {
-            Type *underlying;
-            Array /* EnumItem */ items;
-        } enumeration;
-    };
+    Array(AstGenericParam) generics;
+    Array(AstConstraintRef) constraints;
+    AstType *type;
 };
 
 typedef struct {
     Span span;
 
     AstName name;
-    Expr *value;
-} EnumItem;
+    AstExpr *value;
+} AstEnumItem;
 
-struct FnDecl {
+struct AstFnDecl {
     Span span;
 
     bool comptime;
 
+    AstType *receiver;
+
     AstName name;
 
-    Array /* GenericParam */ generics;
-    Array /* Param */ params;
+    Array(AstAttribute) attrs;
+    Array(AstGenericParam) generics;
+    Array(AstParam) params;
 
-    Type *ret;
-    Stmt *body;
+    AstType *ret;
+    AstStmt *body;
 };
 
-struct VarDecl {
+struct AstVarDecl {
     Span span;
 
-    Type *type;
+    AstType *type;
     AstName name;
-    Expr *init;
+    AstExpr *init;
 };
 
-struct ConstraintDecl {
+struct AstConstraintDecl {
     Span span;
 
     AstName name;
 
-    Array /* ConstraintItem */ items;
+    Array(AstGenericParam) generics;
+
+    Array(AstConstraintItem) items;
 };
 
 typedef enum {
-    CONSTRAINT_METHOD,
-    CONSTRAINT_FIELD,
-    CONSTRAINT_EXPR,
-} ConstraintItemKind;
+    AST_CONSTRAINT_ERROR,
+    AST_CONSTRAINT_METHOD,
+    AST_CONSTRAINT_FIELD,
+    AST_CONSTRAINT_EXPR,
+} AstConstraintItemKind;
 
 typedef struct {
     Span span;
 
-    ConstraintItemKind kind;
+    AstConstraintItemKind kind;
 
     union {
-        FnDecl *method;
-        Field field;
-        Expr *expr;
+        AstFnDecl *method;
+        AstField field;
+        AstExpr *expr;
     };
-} ConstraintItem;
+} AstConstraintItem;
 
-struct ConstraintMethod {
-    AstName name;
-
-    Array /* GenericParam */ generics;
-    Array /* Param */ params;
-
-    Type *ret;
-};
-
-struct ConstraintField {
-    Type *type;
-    AstName name;
-};
-
-struct Decl {
+struct AstDecl {
     Span span;
 
     enum {
-        DECL_NONE,
-        DECL_INCLUDE,
-        DECL_TYPE,
-        DECL_VAR,
-        DECL_FN,
-        DECL_CONSTRAINT,
+        AST_DECL_ERROR,
+        AST_DECL_INCLUDE,
+        AST_DECL_TYPE,
+        AST_DECL_VAR,
+        AST_DECL_FN,
+        AST_DECL_CONSTRAINT,
     } kind;
 
-    Array /* Attribute */ attrs;
+    Array(AstAttribute) attrs;
 
     union {
-        IncludeDecl include;
-        TypeDecl type;
-        VarDecl var;
-        FnDecl fn;
-        ConstraintDecl constraint;
+        AstIncludeDecl include;
+        AstTypeDecl type;
+        AstVarDecl var;
+        AstFnDecl fn;
+        AstConstraintDecl constraint;
     };
 };
 
-struct Module {
+struct AstModule {
     Span span;
 
     Path path;
-    Array /* Decl * */ decls;
+    Array(AstDecl *) decls;
 };
 
 #endif /* AST_H */

@@ -4,12 +4,12 @@ include std::system = sys;
 
 @export
 type File = struct {
-    int fd; // TODO: this is temporary
+    int fd; // TODO: this is temporary, needs to be per-OS abstraction
 };
 
 @export
-fn File create(string path) {
-    return (File){
-        .fd = sys::syscall(2u, (uint64)path.ptr, 1u | 64u, 420u),
+fn File File.create(string path) {
+    return {
+        .fd = sys::syscall(Open, (uint64)path.ptr, 1 | 64, 420) // O_CREAT | O_WRONLY | O_TRUNC, 0644
     };
 }

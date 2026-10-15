@@ -1,0 +1,13 @@
+name: enum value must fit its underlying type
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type TooLarge = enum : uint8 {
+    Invalid = 256,
+};
+
+fn uint8 main() {
+    return 0;
+}

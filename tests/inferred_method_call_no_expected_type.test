@@ -1,0 +1,16 @@
+name: reject type-inferred method call without expected type
+expect: fail
+errors: 1
+
+[source]
+type BigInt = struct {
+    uint64 value;
+};
+
+fn BigInt BigInt.create(uint64 value) {
+    return {.value = value};
+}
+
+fn none no_expected_type() {
+    .create(420);
+}

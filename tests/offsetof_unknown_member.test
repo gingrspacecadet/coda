@@ -1,0 +1,13 @@
+name: offsetof rejects unknown members
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+type Pair = struct {
+    uint64 value;
+};
+
+fn uint64 invalid_offset() {
+    return #offsetof(Pair, missing);
+}

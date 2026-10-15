@@ -1,0 +1,22 @@
+name: runtime return string slice
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@extern
+fn int64 write(int64 fd, uint8* data, uint64 count);
+
+fn uint8[] greeting() {
+    return "hello from Coda\n";
+}
+
+@export
+fn int64 main() {
+    uint8[] message = greeting();
+    write(1, message.ptr, message.len);
+    return 0;
+}
+
+[stdout]
+hello from Coda

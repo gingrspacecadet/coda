@@ -1,0 +1,37 @@
+name: C ABI calls handle scalar register and stack arguments
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@extern
+fn int64 c_abi_sum7(int64 a, int64 b, int64 c, int64 d, int64 e, int64 f, int64 g);
+
+@extern
+fn float64 c_abi_sum9(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, float64 h, float64 i);
+
+fn int64 main() {
+    if (c_abi_sum7(1, 2, 3, 4, 5, 6, 7) != 28) return 1;
+    if (c_abi_sum9(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0) != 45.0) return 2;
+    return 0;
+}
+
+[c_source]
+#include <stdint.h>
+
+typedef int64_t i64;
+
+i64 c_abi_sum7(i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, i64 g) {
+    return a + b + c + d + e + f + g;
+}
+
+double c_abi_sum9(double a, double b, double c, double d, double e, double f, double g, double h, double i) {
+    return a + b + c + d + e + f + g + h + i;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

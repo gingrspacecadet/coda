@@ -1,0 +1,49 @@
+name: float32 and float64 runtime arithmetic
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    float32 a = 1.5;
+    float32 b = 2.0;
+    float32 sum = a + b;
+    float32 expected = 3.5;
+    if (sum != expected) return 1;
+    float32 product = sum * b;
+    float32 seven = 7.0;
+    if (product != seven) return 2;
+    float32 quotient = product / b;
+    if (quotient != sum) return 3;
+    float32 mixed = sum + 1.0;
+    float32 fourhalf = 4.5;
+    if (mixed != fourhalf) return 4;
+    float32 delta = quotient - a;
+    if (delta != b) return 5;
+    float32 negative = -a;
+    float32 minus_onehalf = -1.5;
+    float32 zero = 0.0;
+    if (negative != minus_onehalf) return 6;
+    if (negative + a != zero) return 7;
+    float32 leading_negative = 1.0 + -1.0;
+    if (leading_negative != zero) return 8;
+
+    float64 x = 1.5;
+    float64 y = 2.25;
+    float64 total = x + y;
+    float64 expected_total = 3.75;
+    if (total != expected_total) return 9;
+    float64 product64 = total * y;
+    float64 expected_product = 8.4375;
+    if (product64 != expected_product) return 10;
+    float64 quotient64 = product64 / y;
+    if (quotient64 != total) return 11;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

@@ -1,0 +1,13 @@
+name: generic type requires arguments
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type Box<T> = struct {
+    T value;
+};
+
+fn int64 invalid(Box value) {
+    return 0;
+}

@@ -1,0 +1,15 @@
+name: lir integer negation
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 negate(int64 a) {
+    return -a;
+}
+
+[lir]
+negate:
+    block0(%0):
+        %1 = neg %0
+        return %1

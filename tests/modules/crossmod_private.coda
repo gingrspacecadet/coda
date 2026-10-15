@@ -1,0 +1,5 @@
+module crossmod::private_test;
+
+fn int64 secret() {
+    return 42;
+}

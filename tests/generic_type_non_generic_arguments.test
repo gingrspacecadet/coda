@@ -1,0 +1,13 @@
+name: non-generic type rejects type arguments
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type Plain = struct {
+    uint8 value;
+};
+
+fn int64 invalid(Plain<int64> value) {
+    return 0;
+}

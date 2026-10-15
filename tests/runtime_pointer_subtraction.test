@@ -1,0 +1,20 @@
+name: pointer subtraction
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@export
+fn int64 main() {
+    int64[4] values = {1, 2, 3, 4};
+    int64* first = values.ptr;
+    int64* last = first + 3;
+    return last - first;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+3

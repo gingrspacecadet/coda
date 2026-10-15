@@ -1,0 +1,23 @@
+name: implicit array to slice conversion
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 sum(int64[] values) {
+    return values[0] + values[1] + values[2];
+}
+
+fn int64 main() {
+    mut int64[3] values = {10, 20, 30};
+    mut int64[] view = values;
+    view[1] = 42;
+    return sum(values);
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+82

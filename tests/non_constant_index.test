@@ -1,0 +1,61 @@
+name: non-constant index
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Values = int64[4];
+type Matrix = int64[4][4];
+
+fn int64 get(Values values, int64 i) {
+    return values[i];
+}
+
+fn none set2(mut Matrix matrix, int64 i, int64 j, int64 value) {
+    matrix[i][j] = value;
+    return;
+}
+
+fn none set(mut Values values, int64 i, int64 value) {
+    values[i] = value;
+    return;
+}
+
+fn none set_constant(mut Values values, int64 value) {
+    values[2] = value;
+    return;
+}
+
+[lir]
+[lir]
+get:
+    block0(%0, %1):
+        %2 = mul %1, 8
+        %3 = add %2, 8
+        %4 = extract_dynamic %0, %3
+        return %4
+
+set2:
+    block0(%0, %1, %2, %3):
+        %4 = mul %1, 40
+        %5 = add %4, 8
+        %6 = extract_dynamic %0, %5
+        %7 = mul %2, 8
+        %8 = add %7, 8
+        %9 = insert_dynamic %6, %8, %3
+        %10 = mul %1, 40
+        %11 = add %10, 8
+        %12 = insert_dynamic %0, %11, %9
+        return
+
+set:
+    block0(%0, %1, %2):
+        %3 = mul %1, 8
+        %4 = add %3, 8
+        %5 = insert_dynamic %0, %4, %2
+        return
+
+set_constant:
+    block0(%0, %1):
+        %2 = insert %0, $24, %1
+        return

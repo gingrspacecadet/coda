@@ -1,0 +1,18 @@
+module std::algorithm;
+
+include std::collections : _;
+
+@export
+fn T *? linear_search<T>(Sequence<T> *seq, T value) {
+    for (size_t i = 0; i < seq.len(); i +=) {
+        if (seq.at(i).eq(&value)) {
+            return seq.at(i);
+        }
+    }
+    return null;
+}
+
+@export,inline
+fn T *? Sequence<T>.linear_search(Sequence<T> *this, T value) {
+    return linear_search(this, value);
+}

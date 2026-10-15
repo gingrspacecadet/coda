@@ -1,0 +1,6 @@
+module multifile::parts;
+
+@export
+fn int64 first() {
+    return second();
+}

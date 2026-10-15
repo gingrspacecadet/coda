@@ -1,0 +1,30 @@
+name: lir field non-zero offset
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Vec2 = struct {
+    int64 x;
+    int64 y;
+};
+
+fn int64 get(mut Vec2 value) {
+    return value.y;
+}
+
+fn none set(mut Vec2 value, int64 y) {
+    value.y = y;
+    return;
+}
+
+[lir]
+get:
+    block0(%0):
+        %1 = extract %0, $8
+        return %1
+
+set:
+    block0(%0, %1):
+        %2 = insert %0, $8, %1
+        return

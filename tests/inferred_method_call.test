@@ -1,0 +1,30 @@
+name: type-inferred method calls
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type BigInt = struct {
+    uint64 value;
+};
+
+fn BigInt BigInt.create(uint64 value) {
+    return {.value = value};
+}
+
+fn BigInt from_typed_initializer() {
+    BigInt value = .create(420);
+    return value;
+}
+
+fn BigInt from_return_expression() {
+    return .create(420);
+}
+
+fn BigInt identity(BigInt value) {
+    return value;
+}
+
+fn BigInt from_typed_argument() {
+    return identity(.create(420));
+}

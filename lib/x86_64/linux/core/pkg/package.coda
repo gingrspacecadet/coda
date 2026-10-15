@@ -1,0 +1,43 @@
+module core::pkg;
+
+include core::build : build;
+
+type SourceKind = enum {
+    Path,
+    Git,
+    Registry,
+};
+
+type PackageSource = struct {
+    SourceKind kind;
+    string location;
+};
+
+type PackageRef = struct {
+    string name;
+    string version;
+    PackageSource source;
+};
+
+type Package = struct {
+    string name;
+    string version;
+    PackageSource source;
+};
+
+fn PackageRef package(string name, string version) {
+    return {
+        .name = name,
+        .version = version,
+    };
+}
+
+fn build::Target target(PackageRef package, string name) {
+    Package resolved = resolve(package);
+
+    return resolved.target(name);
+}
+
+// TODO
+fn Package resolve(PackageRef package);
+fn build::Target Package.target(Package self, string name);

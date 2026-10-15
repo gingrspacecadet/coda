@@ -1,0 +1,19 @@
+name: runtime slice indexing and mutation
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    mut int64[3] values = {10, 20, 30};
+    mut int64[] view = {3, values.ptr};
+    view[1] = 42;
+    return view[1];
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+42

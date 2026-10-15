@@ -1,15 +1,21 @@
 CC = gcc
-CFLAGS = -g -Werror -Wextra -Wall -Wpedantic -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 # -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
+CFLAGS = -g -Werror -Wextra -Wall -Wno-unused -Wno-switch -MMD -std=gnu17 -O0 -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer
 
-SRCS = $(shell find src -type f -name "*.c" ! -path "src/backends/*" 2>/dev/null)
-OBJS = $(patsubst src/%.c,build/%.o,$(SRCS))
+SRC := src
+
+LIB_SRCS = $(shell find $(SRC) -type f -name "*.c" ! -name "main.c" ! -path "$(SRC)/backends/*" 2>/dev/null)
+LIB_OBJS = $(patsubst $(SRC)/%.c,build/%.o,$(LIB_SRCS))
+
+CLI_OBJ = build/main.o
+LIB = build/libcoda.a
 
 TARGET = codac
 
-BACKEND_DIRS = $(shell find src/backends -mindepth 1 -maxdepth 1 -type d | sed 's|.*/||')
-BACKEND_SRCS = $(shell find src/backends -type f -name "*.c" 2>/dev/null)
-BACKEND_OBJS = $(patsubst src/%.c,build/%.o,$(BACKEND_SRCS))
-BACKENDS_SO  = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
+BACKEND_DIRS = $(shell find $(SRC)/backends -mindepth 1 -maxdepth 1 -type d | sed 's|.*/||')
+BACKEND_SRCS = $(shell find $(SRC)/backends -type f -name "*.c" 2>/dev/null)
+BACKEND_OBJS = $(patsubst $(SRC)/%.c,build/backends/%.o,$(BACKEND_SRCS))
+BACKEND_PIC_OBJS = $(patsubst $(SRC)/backends/%.c,build/backends-pic/%.o,$(BACKEND_SRCS))
+BACKENDS_SO = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
 
 ifeq ($(OS),Windows_NT)
     SOEXT = dll
@@ -52,6 +58,14 @@ else
     endif
 endif
 
+ifeq ($(HOST_OS),linux)
+    LDLIBS += -ldl
+endif
+
+NATIVE_BACKEND_DIR = $(HOST_ARCH)
+NATIVE_BACKEND_SRCS = $(wildcard $(SRC)/backends/$(NATIVE_BACKEND_DIR)/*.c)
+NATIVE_BACKEND_OBJS = $(patsubst $(SRC)/backends/%.c,build/backends/%.o,$(NATIVE_BACKEND_SRCS))
+
 STDLIB_CODA_SRCS = $(shell find lib -type f -name "*.coda" 2>/dev/null)
 STDLIB_ASM_SRCS  = $(shell find lib -type f -name "*.s" 2>/dev/null)
 
@@ -63,32 +77,37 @@ STDLIB_OBJS      = $(patsubst build/lib/%.s,build/lib/%.o,$(STDLIB_GEN_ASM) $(ST
 STDLIB_TARGET_DIR = build/$(HOST_ARCH)/$(HOST_OS)/lib
 STDLIB_SO         = $(STDLIB_TARGET_DIR)/libcoda.$(SOEXT)
 
-.PHONY: all clean backends stdlib
+.PHONY: all clean backends stdlib test
 .SECONDARY: $(STDLIB_GEN_ASM)
 
-all: $(TARGET) backends stdlib
+all: $(LIB) $(TARGET) backends # stdlib
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ -rdynamic
+$(LIB): $(LIB_OBJS)
+	@mkdir -p $(dir $@)
+	ar rcs $@ $^
 
-build/%.o: src/%.c
+$(TARGET): $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS) -rdynamic $(LDLIBS)
+
+build/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-build/backends/%.o: src/backends/%.c
+build/backends/%.o: $(SRC)/backends/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+build/backends-pic/%.o: $(SRC)/backends/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(SHARED_FLAGS) -c -o $@ $<
 
 $(foreach d,$(BACKEND_DIRS), \
-  $(eval BACKEND_SRCS_$(d) := $(wildcard src/backends/$(d)/*.c)) \
-  $(eval BACKEND_OBJS_$(d) := $(patsubst src/%.c,build/%.o,$(BACKEND_SRCS_$(d)))) \
-  $(eval build/backends/$(d).$(SOEXT): $$(BACKEND_OBJS_$(d))) \
+  $(eval BACKEND_SRCS_$(d) := $(wildcard $(SRC)/backends/$(d)/*.c)) \
+  $(eval BACKEND_PIC_OBJS_$(d) := $(patsubst $(SRC)/backends/%.c,build/backends-pic/%.o,$(BACKEND_SRCS_$(d)))) \
+  $(eval build/backends/$(d).$(SOEXT): $$(BACKEND_PIC_OBJS_$(d))) \
   $(eval build/backends/$(d).$(SOEXT): ; \
-    @mkdir -p build/backends/$(d) ; \
-    if [ -n "$$^" ]; then \
-        echo "$(CC) $(DLL_LINK) -o $$@ $$^"; \
-        $(CC) $(DLL_LINK) -o $$@ $$^; \
-    fi ) \
+    @mkdir -p $$(dir $$@); \
+    $(CC) $(DLL_LINK) -o $$@ $$^ ) \
 )
 
 backends: $(BACKENDS_SO)
@@ -129,4 +148,18 @@ locs:
 tree:
 	git ls-files | tree --fromfile
 
--include $(patsubst %.o,%.d,$(OBJS) $(BACKEND_OBJS))
+TEST_SRC = $(wildcard test/*.c)
+TEST_OBJS = $(patsubst test/%.c,build/test/%.o,$(TEST_SRC))
+TEST_TARGET = build/codac-test
+
+$(TEST_TARGET): $(TEST_OBJS) $(LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_OBJS) $(NATIVE_BACKEND_OBJS) $(LIB)
+
+build/test/%.o: test/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I$(SRC) -c -o $@ $<
+
+test: $(TARGET) $(TEST_TARGET)
+	$(TEST_TARGET) tests
+
+-include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(BACKEND_OBJS) $(TEST_OBJS))

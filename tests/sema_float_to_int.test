@@ -1,0 +1,10 @@
+name: reject floating-point literal assigned to integer
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn int64 invalid() {
+    int64 value = 1.5;
+    return value;
+}

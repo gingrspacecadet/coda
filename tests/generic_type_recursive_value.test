@@ -1,0 +1,14 @@
+name: infinitely sized generic type
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+type Node<T> = struct {
+    T value;
+    Node<T> next;
+};
+
+fn int64 invalid(Node<int64> node) {
+    return 0;
+}

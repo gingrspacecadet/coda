@@ -1,0 +1,45 @@
+name: float numeric casts
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    int64 whole = 42;
+    float32 single = (float32) whole;
+    if (single != 42.0) return 1;
+
+    float64 wide = (float64) single;
+    if (wide != 42.0) return 2;
+
+    float32 narrow = (float32) wide;
+    if (narrow != single) return 3;
+
+    float64 decimal = 9.75;
+    int64 truncated = (int64) decimal;
+    if (truncated != 9) return 4;
+
+    float64 negative = -3.75;
+    int64 negative_truncated = (int64) negative;
+    if (negative_truncated != -3) return 5;
+
+    int32 small = (int32) decimal;
+    if (small != 9) return 6;
+
+    uint64 high = 9223372036854775808;
+    float64 high_float = (float64) high;
+    if (high_float < 9223372036854775808.0) return 7;
+    uint64 recovered = (uint64) high_float;
+    if (recovered != high) return 8;
+
+    float64 literal_expression = (float64) (1.25 + 2.5);
+    if (literal_expression != 3.75) return 9;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

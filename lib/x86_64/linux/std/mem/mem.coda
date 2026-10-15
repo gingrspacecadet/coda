@@ -1,0 +1,63 @@
+module std::mem;
+
+include std::test : _;
+
+fn none copy(mut uint8[] dst, uint8[] src) {
+    assert(dst.len == src.len);
+    for (usize i = 0; i < dst.len; i += 1) {
+        dst[i] = src[i];
+    }
+}
+
+fn none move(mut uint8[] dst, uint8[] src) {
+    assert(dst.len == src.len);
+    for (usize i = 0; i < dst.len; i += 1) {
+        dst[i] = src[i];
+        src[i] = 0;
+    }
+}
+
+fn none fill(mut uint8[] dst, uint8 value) {
+    for (usize i = 0; i < dst.len; i += 1) {
+        dst[i] = value;
+    }
+}
+
+fn none zero(mut uint8[] dst) {
+    fill(dst, 0);
+}
+
+fn uint8 compare(uint8[] a, uint8[] b) {
+    assert(a.len == b.len);
+    for (usize i = 0; i < a.len; i += 1) {
+        if (a[i] != b[i]) {
+            return a[i] - b[i];
+        }
+    }
+    return 0;
+}
+
+fn uint64 align_up(uint64 value, uint64 alignment) {
+    assert(alignment > 0);
+    return (value + alignment - 1) & ~(alignment - 1);
+}
+
+fn uint64 align_down(uint64 value, uint64 alignment) {
+    assert(alignment > 0);
+    return value & ~(alignment - 1);
+}
+
+fn none swap(mut uint8[] a, mut uint8[] b) {
+    assert(a.len == b.len);
+    for (usize i = 0; i < a.len; i += 1) {
+        uint8 temp = a[i];
+        a[i] = b[i];
+        b[i] = temp;
+    }
+}
+
+fn none T.swap(mut T *a, mut T *b) {
+    mut uint8[] a = {.ptr = a, .len = #sizeof(T),};
+    mut uint8[] b = {.ptr = b, .len = #sizeof(T),};
+    swap(a, b);
+}

@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "string.h"
+#include "String.h"
 #include "source.h"
 #include "diag.h"
 #include "token.h"

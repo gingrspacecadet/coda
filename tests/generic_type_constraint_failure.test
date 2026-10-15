@@ -1,0 +1,17 @@
+name: generic type constraint rejects invalid type argument
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+constraint HasSize = {
+    uint64 size;
+}
+
+type Box<T: HasSize> = struct {
+    T value;
+};
+
+fn int64 invalid(Box<uint64> box) {
+    return 0;
+}

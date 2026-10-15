@@ -1,0 +1,51 @@
+name: layout intrinsics resolve generic type applications directly
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Box<T> = struct {
+    uint8 tag;
+    T value;
+};
+
+type Envelope<T> = struct {
+    uint32 prefix;
+    Box<T> payload;
+};
+
+type WordBox = Box<uint64>;
+
+uint64 box_value_offset = #offsetof(Box<uint64>, value);
+uint64 box_size = #sizeof(Box<uint64>);
+uint64 box_align = #alignof(Box<uint64>);
+uint64 nested_value_offset = #offsetof(Envelope<uint64>, payload.value);
+uint64 alias_value_offset = #offsetof(WordBox, value);
+
+fn uint64 value_offset<T>() {
+    return #offsetof(Box<T>, value);
+}
+
+fn uint64 box_size_of<T>() {
+    return #sizeof(Box<T>);
+}
+
+fn int64 main() {
+    if (box_value_offset != 8) return 1;
+    if (box_size != 16) return 2;
+    if (box_align != 8) return 3;
+    if (nested_value_offset != 16) return 4;
+    if (alias_value_offset != 8) return 5;
+    if (value_offset<uint64>() != 8) return 6;
+    if (value_offset<uint8>() != 1) return 7;
+    if (box_size_of<uint64>() != 16) return 8;
+    if (box_size_of<uint8>() != 2) return 9;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

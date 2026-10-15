@@ -1,0 +1,30 @@
+module std::algorithm;
+
+include std::collections : _;
+include std::constraints : _;
+include std::mem;
+
+@export
+fn none bubble_sort<T: Comparable>(mut Sequence<T> *seq) {
+    bool swapped;
+
+    for (usize i = 0; i < seq.len() - 1; i += 1) {
+        swapped = false;
+
+        for (usize j = 0; j < seq.len() - i - 1; j += 1) {
+            if (seq.at(j).gt(seq.at(j + 1))) {
+                seq.at(j).swap(seq.at(j + 1));
+                swapped = true;
+            }
+        }
+
+        if (!swapped) {
+            break;
+        }
+    }
+}
+
+@export,inline
+fn none mut Sequence<T>.bubble_sort<T: Comparable>(mut Sequence<T> *this) {
+    bubble_sort(this);
+}

@@ -1,0 +1,36 @@
+name: float function arguments and returns use SSE ABI registers
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn float32 identity32(float32 value) {
+    return value;
+}
+
+fn float64 interleaved(int64 first, float64 left, int64 second, float64 right) {
+    if (first < second) return left + right;
+    return left - right;
+}
+
+fn int64 main() {
+    float32 narrow = identity32(1.25);
+    float32 expected_narrow = 1.25;
+    if (narrow != expected_narrow) return 1;
+
+    float64 sum = interleaved(1, 1.5, 2, 2.25);
+    float64 expected_sum = 3.75;
+    if (sum != expected_sum) return 2;
+
+    float64 difference = interleaved(2, 7.5, 1, 2.25);
+    float64 expected_difference = 5.25;
+    if (difference != expected_difference) return 3;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

@@ -1,0 +1,10 @@
+name: float builtin types and contextual literals
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+fn float32 narrow(float32 value) { return value; }
+fn float64 wide(float64 value) { return value; }
+fn float32 contextual() { return 1.5; }
+fn float64 inferred() { return 1.5 + 2.0; }

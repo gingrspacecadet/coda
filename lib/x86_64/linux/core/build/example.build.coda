@@ -1,0 +1,11 @@
+include core::build : build;
+include core::build::coda : coda;
+include core::pkg : pkg;
+
+@entry
+fn int main() {
+    Project project = .create("my game");
+    coda::default(&project)
+        .depend(pkg::target(pkg::package("raylib", "5.5"), "raylib"));
+    return build::run(&project);
+}

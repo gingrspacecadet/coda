@@ -1,0 +1,76 @@
+name: C callers use System V AMD64 aggregate ABI for exported Coda functions
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Pair = struct {
+    int64 x;
+    int64 y;
+};
+type Floats = struct {
+    float64 x;
+    float64 y;
+};
+type Mixed = struct {
+    int64 x;
+    float64 y;
+};
+type Large = struct {
+    int64 x;
+    int64 y;
+    int64 z;
+};
+
+@export
+fn Pair coda_abi_pair_roundtrip(mut Pair value) { value.x = value.x + 1; value.y = value.y + 2; return value; }
+@export
+fn Floats coda_abi_floats_roundtrip(mut Floats value) { value.x = value.x + 1.0; value.y = value.y + 2.0; return value; }
+@export
+fn Mixed coda_abi_mixed_roundtrip(mut Mixed value) { value.x = value.x + 10; value.y = value.y + 4.0; return value; }
+@export
+fn Large coda_abi_large_roundtrip(mut Large value) { value.x = value.x + 1; value.y = value.y + 2; value.z = value.z + 3; return value; }
+@export
+fn Pair coda_abi_pair_after_five(int64 a, int64 b, int64 c, int64 d, int64 e, mut Pair value) { value.x = value.x + a + b + c + d + e - 15; return value; }
+@export
+fn Floats coda_abi_floats_after_eight(float64 a, float64 b, float64 c, float64 d, float64 e, float64 f, float64 g, float64 h, mut Floats value) { value.x = value.x + a + b + c + d + e + f + g + h - 36.0; return value; }
+
+[c_source]
+#include <stdint.h>
+
+typedef struct { int64_t x, y; } Pair;
+typedef struct { double x, y; } Floats;
+typedef struct { int64_t x; double y; } Mixed;
+typedef struct { int64_t x, y, z; } Large;
+
+extern Pair coda_abi_pair_roundtrip(Pair value);
+extern Floats coda_abi_floats_roundtrip(Floats value);
+extern Mixed coda_abi_mixed_roundtrip(Mixed value);
+extern Large coda_abi_large_roundtrip(Large value);
+extern Pair coda_abi_pair_after_five(int64_t a, int64_t b, int64_t c, int64_t d, int64_t e, Pair value);
+extern Floats coda_abi_floats_after_eight(double a, double b, double c, double d, double e, double f, double g, double h, Floats value);
+
+int main(void) {
+    Pair pair = {10, 20};
+    Floats floats = {1.25, 2.5};
+    Mixed mixed = {30, 3.5};
+    Large large = {1, 2, 3};
+    Pair pair_result = coda_abi_pair_roundtrip(pair);
+    if (pair_result.x != 11) return 1;
+    if (pair_result.y != 22) return 1;
+    Floats floats_result = coda_abi_floats_roundtrip(floats);
+    if (floats_result.x != 2.25) return 2;
+    if (floats_result.y != 4.5) return 2;
+    Mixed mixed_result = coda_abi_mixed_roundtrip(mixed);
+    if (mixed_result.x != 40) return 3;
+    if (mixed_result.y != 7.5) return 3;
+    Large large_result = coda_abi_large_roundtrip(large);
+    if (large_result.x != 2) return 4;
+    if (large_result.y != 4) return 4;
+    if (large_result.z != 6) return 4;
+    Pair spilled_pair = coda_abi_pair_after_five(1, 2, 3, 4, 5, pair);
+    if (spilled_pair.x != 10 || spilled_pair.y != 20) return 5;
+    Floats spilled_floats = coda_abi_floats_after_eight(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, floats);
+    if (spilled_floats.x != 1.25 || spilled_floats.y != 2.5) return 6;
+    return 0;
+}

@@ -1,0 +1,9 @@
+name: reject bitwise not on a floating-point value
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn float64 invalid(float64 value) {
+    return ~value;
+}

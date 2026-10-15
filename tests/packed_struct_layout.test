@@ -1,0 +1,59 @@
+name: layout intrinsics resolve packed and ordinary type layouts
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type Ordinary = struct {
+    uint8 tag;
+    uint64 value;
+};
+
+@packed
+type Packed = struct {
+    uint8 tag;
+    uint64 value;
+};
+
+type Nested = struct {
+    uint8 prefix;
+    Packed payload;
+};
+
+uint64 ordinary_size = #sizeof(Ordinary);
+uint64 ordinary_align = #alignof(Ordinary);
+uint64 packed_size = #sizeof(Packed);
+uint64 packed_align = #alignof(Packed);
+uint64 nested_size = #sizeof(Nested);
+uint64 nested_align = #alignof(Nested);
+uint64 integer_size = #sizeof(uint64);
+uint64 integer_align = #alignof(uint64);
+
+fn uint64 size_of<T>() {
+    return #sizeof(T);
+}
+
+fn uint64 align_of<T>() {
+    return #alignof(T);
+}
+
+fn int64 main() {
+    if (ordinary_size != 16) return 1;
+    if (ordinary_align != 8) return 2;
+    if (packed_size != 9) return 3;
+    if (packed_align != 1) return 4;
+    if (nested_size != 10) return 5;
+    if (nested_align != 1) return 6;
+    if (integer_size != 8) return 7;
+    if (integer_align != 8) return 8;
+    if (size_of<Packed>() != packed_size) return 9;
+    if (align_of<Packed>() != packed_align) return 10;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

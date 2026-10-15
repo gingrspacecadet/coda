@@ -1,0 +1,35 @@
+name: floating-point constant expressions in globals
+expect: pass
+stop: run
+errors: 0
+
+[source]
+float64 sum = 1.5 + 2.5;
+float64 difference = sum - 1.25;
+float32 product = 1.25 * 4.0;
+float64 quotient = 9.0 / 2.0;
+float64 negative = -(difference + 1.0);
+float32 rounded = 0.1 + 0.2;
+bool folded_comparison = (float64) 1.5 + 1.5 == 3.0;
+float64 from_integer = (float64) 7;
+int32 from_float = (int32) 8.75;
+
+fn int64 main() {
+    if (sum != 4.0) return 1;
+    if (difference != 2.75) return 2;
+    if (product != 5.0) return 3;
+    if (quotient != 4.5) return 4;
+    if (negative != -3.75) return 5;
+    if (rounded != 0.3) return 6;
+    if (!folded_comparison) return 7;
+    if (from_integer != 7.0) return 8;
+    if (from_float != 8) return 9;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

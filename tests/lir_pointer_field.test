@@ -1,0 +1,29 @@
+name: lir pointer field load & store
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Counter = struct {
+    int64 value;
+};
+
+fn int64 get(Counter *counter) {
+    return counter.value;
+}
+
+fn none set(mut Counter *counter, int64 value) {
+    counter.value = value;
+    return;
+}
+
+[lir]
+get:
+    block0(%0):
+        %1 = load %0
+        return %1
+
+set:
+    block0(%0, %1):
+        store %0, %1
+        return

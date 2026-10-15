@@ -1,0 +1,19 @@
+name: compile-time function call
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int64 add(int64 a, int64 b) {
+    return a + b;
+}
+
+int64 x = $(add(20, 22));
+
+[lir]
+global @x:
+    $0 = 42
+add:
+    block0(%0, %1):
+        %2 = add %0, %1
+        return %2

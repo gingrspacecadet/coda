@@ -1,0 +1,26 @@
+name: runtime stdout, stderr, and exit status
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@extern
+fn int64 write(int64 fd, uint8 *data, uint64 count);
+
+uint8[3] output = {79, 75, 10};
+uint8[4] errors = {66, 65, 68, 10};
+
+fn int64 main() {
+    write(1, &output[0], 3);
+    write(2, &errors[0], 4);
+    return 23;
+}
+
+[stdout]
+OK
+
+[stderr]
+BAD
+
+[exit]
+23

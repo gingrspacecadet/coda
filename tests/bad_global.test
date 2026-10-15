@@ -1,0 +1,11 @@
+name: bad global
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn int64 get() {
+    return 42;
+}
+
+int64 bad = get();

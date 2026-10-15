@@ -1,0 +1,27 @@
+name: multidimensional dynamic array indexing
+expect: pass
+stop: run
+errors: 0
+
+[source]
+@export
+fn int64 main() {
+    mut int64[4][3] matrix = {{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}};
+    int64 i = 1;
+    int64 j = 2;
+
+    matrix[i][j] = 42;
+
+    if (matrix[1][2] != 42) return 1;
+    if (matrix[i][j] != 42) return 2;
+
+    matrix[i][j] = 99;
+    return matrix[1][2];
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+99

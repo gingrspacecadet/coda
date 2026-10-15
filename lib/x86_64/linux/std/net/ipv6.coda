@@ -1,0 +1,30 @@
+module std::net;
+
+@export
+type IPv6Address = struct {
+    uint8[16] octets;
+};
+
+@export
+fn IPv6Address ipv6(uint8[16] octets, uint16 port) {
+    return {
+        .octets = octets,
+        .port = port,
+    };
+}
+
+@export
+fn IPv6Address ipv6_any(uint16 port) {
+    return {
+        .octets = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .port = port,
+    };
+}
+
+@export
+fn IPv6Address ipv6_loopback(uint16 port) {
+    return {
+        .octets = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+        .port = port,
+    };
+}

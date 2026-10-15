@@ -9,6 +9,7 @@
     X(TK_KW_MODULE)      \
     X(TK_KW_INCLUDE)     \
     X(TK_KW_FN)          \
+    X(TK_KW_CONSTRAINT)  \
     X(TK_KW_RETURN)      \
     X(TK_KW_STRUCT)      \
     X(TK_KW_UNION)       \

@@ -1,0 +1,36 @@
+name: runtime slice aliasing
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 main() {
+    mut int64[3] values = {10, 20, 30};
+    mut int64[] first = values;
+    mut int64[] second = first;
+
+    first[1] = 42;
+    if (second[1] != 42) return 1;
+
+    second[2] = 99;
+    if (values[2] != 99) return 2;
+
+    mut int64[2] other = {5, 6};
+    mut int64[] replacement = other;
+    second = replacement;
+    second[0] = 77;
+
+    if (other[0] != 77) return 3;
+    if (values[0] != 10) return 4;
+    if (first[0] != 10) return 5;
+    if (second.len != replacement.len) return 6;
+
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

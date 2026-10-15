@@ -1,0 +1,47 @@
+name: named and default arguments
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 five() {
+    return 5;
+}
+
+fn int64 combine(int64 a, int64 b = 20, int64 c = 300) {
+    return a * 10000 + b * 100 + c;
+}
+
+fn T identity_with_default<T>(T value, int64 ignored = 9) {
+    return value;
+}
+
+type Counter = struct {
+    int64 value;
+};
+
+fn int64 Counter.add(Counter* self, int64 amount = 1) {
+    return self.value + amount;
+}
+
+fn int64 main() {
+    if (combine(1) != 12300) return 1;
+    if (combine(1, .c = 4) != 12004) return 2;
+    if (combine(.a = 2, .c = 7) != 22007) return 3;
+    if (combine(1, .b = 5, .c = 6) != 10506) return 4;
+    if (identity_with_default(42) != 42) return 5;
+    if (identity_with_default<int64>(13, .ignored = 100) != 13) return 6;
+    if (combine(1, .b = five()) != 10800) return 7;
+
+    Counter counter = {.value = 40};
+    if (counter.add() != 41) return 8;
+    if (counter.add(.amount = 2) != 42) return 9;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

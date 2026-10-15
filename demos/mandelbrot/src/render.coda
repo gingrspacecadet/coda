@@ -4,26 +4,26 @@ include complex;
 include fixed;
 include image;
 
-struct Config {
-    uint width;
-    uint height;
+type Config = struct {
+    uint32 width;
+    uint32 height;
 
     fixed::Fixed min_x;
     fixed::Fixed max_x;
     fixed::Fixed min_y;
     fixed::Fixed max_y;
 
-    uint iterations;
-}
+    uint32 iterations;
+};
 
-fn uint iterations(complex::Complex c, uint max) {
+fn uint32 iterations(complex::Complex c, uint32 max) {
     complex::Complex z = {
         .real = 0,
         .imag = 0
     };
 
-    for (uint i = 0u; i < max; i = i + 1) {
-        if (complex::magnitude_squared(z) > fixed::from_int(4)) {
+    for (uint32 i = 0; i < max; i += 1) {
+        if (z.magnitude_squared > Fixed.from_int(4)) {
             return i;
         }
 
@@ -33,9 +33,9 @@ fn uint iterations(complex::Complex c, uint max) {
     return max;
 }
 
-fn image::RGB colour(uint iteration, uint max) {
+fn image::RGB colour(uint32 iteration, uint32 max) {
     if (iteration == max) {
-        return {0, 0, 0};
+        return {};
     }
 
     uint8 c = iteration;
@@ -45,17 +45,17 @@ fn image::RGB colour(uint iteration, uint max) {
 
 @export
 fn none render(mut image::Image image, Config config) {
-    for (uint y = 0u; y < image.height; y = y + 1) {
-        for (uint x = 0u; x < image.width; x = x + 1) {
-            fixed::Fixed real = fixed::lerp(config.mix_x, config.max_x, x, image.width);
+    for (uint32 y = 0; y < image.height; y += 1) {
+        for (uint32 x = 0; x < image.width; x += 1) {
+            fixed::Fixed real = .lerp(config.mix_x, config.max_x, x, image.width);
 
-            fixed::Fixed imag = fixed::lerp(config.min_y, config.max_y, y, image.height);
+            fixed::Fixed imag = .lerp(config.min_y, config.max_y, y, image.height);
 
-            complex::Complex c = { .real = real, .imag = imag };
+            complex::Complex c = {real, imag};
 
-            uint count = iterations(c, config.iterations);
+            uint32 count = iterations(c, config.iterations);
 
-            image::set(image, x, y, colour(count, config.iterations));
+            image.set(x, y, colour(count, config.iterations));
         }
     }
 }
