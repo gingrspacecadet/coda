@@ -10,6 +10,7 @@
 typedef struct {
     Symbol *generic;
     Symbol *instance;
+    Array(HirType *) receiver_arguments;
     Array(HirType *) arguments;
 } GenericInstance;
 

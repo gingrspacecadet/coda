@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include "common.h"
 
 static HirExpr *generic_error_expr(Sema *sema, AstExpr *ast) {
@@ -214,10 +215,12 @@ static bool generic_arguments_equal(Array left, Array right) {
     return true;
 }
 
-static Symbol *generic_find_instance(Sema *sema, Symbol *generic, Array arguments) {
+static Symbol *generic_find_instance(Sema *sema, Symbol *generic, Array receiver_arguments, Array arguments) {
     for (size_t i = 0; i < sema->generic_instances.len; i++) {
         GenericInstance *instance = array_at(&sema->generic_instances, i);
-        if (symbol_canonical(instance->generic) == symbol_canonical(generic) && generic_arguments_equal(instance->arguments, arguments))
+        if (symbol_canonical(instance->generic) == symbol_canonical(generic) &&
+            generic_arguments_equal(instance->receiver_arguments, receiver_arguments) &&
+            generic_arguments_equal(instance->arguments, arguments))
             return instance->instance;
     }
 
@@ -238,7 +241,7 @@ static AstName generic_instance_name(Sema *sema, Scope *scope) {
     }
 }
 
-static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array arguments) {
+static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array receiver_arguments, Array arguments) {
     AstFnDecl *template = &generic->decl->fn;
     AstModule *previous_module = sema->module;
     Scope previous_global_scope = sema->global_scope;
@@ -252,6 +255,22 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
     Array previous_scopes = sema->scopes;
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     Scope *scope = sema_push_scope(sema);
+
+    Symbol *receiver_generic = sema_generic_receiver_type(sema, template->receiver);
+    if (receiver_generic != NULL) {
+        assert(receiver_arguments.len == receiver_generic->decl->type.generics.len);
+        for (size_t i = 0; i < receiver_arguments.len; i++) {
+            AstGenericParam *param = array_at(&receiver_generic->decl->type.generics, i);
+            Symbol binding = {
+                .kind = SYMBOL_TYPE,
+                .decl = NULL,
+                .name = param->name,
+                .type = ((HirType **)receiver_arguments.data)[i],
+                .span = param->span,
+            };
+            scope_insert(scope, &binding);
+        }
+    }
 
     for (size_t i = 0; i < template->generics.len; i++) {
         AstGenericParam *param = array_at(&template->generics, i);
@@ -299,6 +318,12 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
         return NULL;
     }
 
+    Array cached_receiver_arguments = array_create(sema->arena, sizeof(HirType *));
+    for (size_t i = 0; i < receiver_arguments.len; i++) {
+        HirType *type = ((HirType **)receiver_arguments.data)[i];
+        array_push(&cached_receiver_arguments, &type);
+    }
+
     Array cached_arguments = array_create(sema->arena, sizeof(HirType *));
     for (size_t i = 0; i < arguments.len; i++) {
         HirType *type = ((HirType **)arguments.data)[i];
@@ -308,11 +333,11 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
     GenericInstance cached = {
         .generic = generic,
         .instance = instance,
+        .receiver_arguments = cached_receiver_arguments,
         .arguments = cached_arguments,
     };
     array_push(&sema->generic_instances, &cached);
 
-    /* Register the concrete signature before the body so recursive calls reuse it. */
     sema_fn_decl(sema, &instance_decl->fn);
     sema->scopes = previous_scopes;
     sema->module = previous_module;
@@ -321,13 +346,14 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array argume
     return instance;
 }
 
-HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic) {
+static HirExpr *sema_generic_call_impl(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic, Array receiver_arguments, HirExpr *receiver, bool has_implicit_receiver) {
     AstFnDecl *template = &generic->decl->fn;
+    size_t receiver_offset = has_implicit_receiver ? 1 : 0;
 
     size_t param_count = template->params.len;
     size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
     bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
-    if (!sema_map_call_arguments(sema, ast, template, 0, arg_params, provided))
+    if (!sema_map_call_arguments(sema, ast, template, receiver_offset, arg_params, provided))
         return generic_error_expr(sema, ast);
 
     Array arguments = array_create(sema->arena, sizeof(HirType *));
@@ -379,9 +405,9 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
     if (!sema_check_symbol_generic_constraints(sema, generic, template->generics, arguments, ast->span))
         return generic_error_expr(sema, ast);
 
-    Symbol *instance = generic_find_instance(sema, generic, arguments);
+    Symbol *instance = generic_find_instance(sema, generic, receiver_arguments, arguments);
     if (instance == NULL)
-        instance = generic_create_instance(sema, generic, arguments);
+        instance = generic_create_instance(sema, generic, receiver_arguments, arguments);
     if (instance == NULL || instance->type == NULL || instance->type->kind != HIR_TYPE_FUNCTION)
         return generic_error_expr(sema, ast);
 
@@ -400,6 +426,32 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
     };
 
     HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
+
+    if (has_implicit_receiver) {
+        HirType *receiver_param = ((HirType **)instance->type->function.params.data)[0];
+
+        if (receiver_param->kind == HIR_TYPE_POINTER && receiver->type != NULL &&
+            type_equal(receiver->type, receiver_param->pointer.pointee) && sema_is_place(receiver)) {
+            HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
+            *address = (HirExpr){
+                .span = receiver->span,
+                .kind = HIR_EXPR_UNARY,
+                .type = pointer_type(sema, receiver->type, false),
+                .unary = {
+                    .op = AST_UNARY_ADDRESS,
+                    .operand = receiver,
+                },
+            };
+            receiver = address;
+        }
+
+        receiver = sema_coerce(sema, receiver, receiver_param);
+        if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR)
+            return generic_error_expr(sema, ast);
+
+        values[0] = receiver;
+    }
+
     for (size_t i = 0; i < ast->call.args.len; i++) {
         AstCallArg *ast_arg = array_at(&ast->call.args, i);
         size_t parameter = arg_params[i];
@@ -419,7 +471,7 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
         values[parameter] = value;
     }
 
-    if (!sema_complete_call_arguments(sema, instance, 0, provided, values))
+    if (!sema_complete_call_arguments(sema, instance, receiver_offset, provided, values))
         return generic_error_expr(sema, ast);
 
     for (size_t i = 0; i < param_count; i++) {
@@ -434,3 +486,13 @@ HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *
 
     return call;
 }
+
+HirExpr *sema_generic_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic) {
+    Array receiver_arguments = array_create(sema->arena, sizeof(HirType *));
+    return sema_generic_call_impl(sema, ast, expected, generic, receiver_arguments, NULL, false);
+}
+
+HirExpr *sema_generic_method_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic, Array receiver_arguments, HirExpr *receiver, bool has_implicit_receiver) {
+    return sema_generic_call_impl(sema, ast, expected, generic, receiver_arguments, receiver, has_implicit_receiver);
+}
+

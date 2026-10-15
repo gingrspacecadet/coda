@@ -506,6 +506,28 @@ static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     return sema_install_include(sema, owner, include, entry);
 }
 
+static bool sema_type_symbol_matches_origin(Symbol *instance, Symbol *generic) {
+    if (instance == NULL || generic == NULL ||
+        instance->kind != SYMBOL_TYPE || generic->kind != SYMBOL_TYPE)
+        return false;
+
+    if (instance == generic ||
+        symbol_canonical(instance) == symbol_canonical(generic))
+        return true;
+
+    if (!ast_name_equal(&instance->name, &generic->name))
+        return false;
+
+    if (instance->owner_module != NULL || generic->owner_module != NULL)
+        return instance->owner_module != NULL &&
+               instance->owner_module == generic->owner_module;
+
+    return instance->owner_scope != NULL &&
+           instance->owner_scope == generic->owner_scope;
+}
+
+Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);;
+
 static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *scope, HirType *receiver, AstName name, bool require_export) {
     AstModule *previous_module = sema->module;
     Scope previous_global_scope = sema->global_scope;
@@ -524,13 +546,23 @@ static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *
             continue;
 
         AstFnDecl *candidate = &decl->fn;
-        if (candidate->receiver == NULL || candidate->generics.len != 0 || !ast_name_equal(&candidate->name, &name))
+        if (candidate->receiver == NULL || !ast_name_equal(&candidate->name, &name))
             continue;
 
-        Symbol *symbol = scope_lookup(scope, candidate->name);
+        Symbol *symbol = scope_lookup_fn_decl(scope, candidate);
         if (symbol == NULL || symbol->kind != SYMBOL_FN || (require_export && !symbol->is_exported))
             continue;
 
+        Symbol *generic_receiver = sema_generic_receiver_type(sema, candidate->receiver);
+        if (generic_receiver != NULL) {
+            Symbol *nominal = receiver != NULL ? receiver->nominal : NULL;
+            if (sema_type_symbol_matches_origin(nominal, generic_receiver)) {
+                result = symbol;
+                break;
+            }
+            continue;
+        }
+        
         HirType *candidate_receiver = sema_type(sema, candidate->receiver);
         if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
             continue;

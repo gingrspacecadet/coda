@@ -479,7 +479,7 @@ static HirExpr *implicit_deref(Sema *sema, HirExpr *expr) {
     return deref;
 }
 
-static inline bool is_place(HirExpr *expr) {
+bool sema_is_place(HirExpr *expr) {
     if (expr == NULL)
         return false;
 
@@ -528,7 +528,7 @@ static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
             return operand->type->pointer.pointee;
 
         case AST_UNARY_ADDRESS:
-            if (!is_place(operand))
+            if (!sema_is_place(operand))
                 return NULL;
 
             return pointer_type(sema, operand->type, false);
@@ -890,6 +890,17 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     if (method == NULL)
         return NULL;
 
+    Array receiver_arguments;
+    bool generic_receiver = false;
+    if (!sema_method_receiver_arguments(sema, method, dispatch_type, &receiver_arguments, &generic_receiver))
+        return sema_method_error(sema, ast->span);
+
+    if (generic_receiver || method->decl->fn.generics.len != 0) {
+        *handled = true;
+        HirExpr *call = sema_generic_method_call(sema, ast, expected, method, receiver_arguments, receiver, has_implicit_receiver);
+        return call != NULL ? call : sema_method_error(sema, ast->span);
+    }
+
     *handled = true;
     HirType *function_type = sema_symbol_type(sema, method);
     if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION ||
@@ -919,7 +930,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
             sema_type_has_super(receiver_object, receiver_param->pointer.pointee);
 
         if (inherited_receiver) {
-            if (receiver->type->kind != HIR_TYPE_POINTER && is_place(receiver)) {
+            if (receiver->type->kind != HIR_TYPE_POINTER && sema_is_place(receiver)) {
                 HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
                 *address = (HirExpr){
                     .span = receiver->span,
@@ -941,7 +952,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         } else {
             if (receiver_param->kind == HIR_TYPE_POINTER &&
                 type_equal(receiver->type, receiver_param->pointer.pointee) &&
-                is_place(receiver)) {
+                sema_is_place(receiver)) {
                 HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
                 *address = (HirExpr){
                     .span = receiver->span,
@@ -1048,14 +1059,10 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
         return sema_method_error(sema, ast->span);
     }
 
-    HirType *function_type = sema_symbol_type(sema, method);
-    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION)
+    Array receiver_arguments;
+    bool generic_receiver = false;
+    if (!sema_method_receiver_arguments(sema, method, expected, &receiver_arguments, &generic_receiver))
         return sema_method_error(sema, ast->span);
-
-    if (method->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
-        error_cant_call_comptime(sema->diags, ast->span);
-        return sema_method_error(sema, ast->span);
-    }
 
     AstExpr call_ast = {
         .span = ast->span,
@@ -1066,6 +1073,18 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
             .args = ast->inferred_method_call.args,
         },
     };
+
+    if (generic_receiver || method->decl->fn.generics.len != 0)
+        return sema_generic_method_call(sema, &call_ast, expected, method, receiver_arguments, NULL, false);
+
+    HirType *function_type = sema_symbol_type(sema, method);
+    if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION)
+        return sema_method_error(sema, ast->span);
+
+    if (method->decl->fn.comptime && !sema->comptime && !(sema->current_fn != NULL && sema->current_fn->is_comptime)) {
+        error_cant_call_comptime(sema->diags, ast->span);
+        return sema_method_error(sema, ast->span);
+    }
 
     size_t param_count = method->decl->fn.params.len;
     size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->inferred_method_call.args.len);

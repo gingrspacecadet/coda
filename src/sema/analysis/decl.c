@@ -6,6 +6,9 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         return;
     }
 
+    if (sema_fn_has_unbound_receiver_generics(sema, ast))
+        return;
+
     Symbol *symbol = sema_lookup(sema, ast->name);
 
     if (symbol == NULL) {

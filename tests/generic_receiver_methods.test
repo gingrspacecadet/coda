@@ -1,0 +1,46 @@
+name: generic receiver methods
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Box<T> = struct {
+    T value;
+};
+
+fn Box<T> Box<T>.create(T value) {
+    Box<T> box = { .value = value };
+    return box;
+}
+
+fn T Box<T>.get(Box<T> *box) {
+    return box.value;
+}
+
+fn int32 test() {
+    Box<int32> box = Box<int32>.create(42);
+    Box<int32> box2 = .create(69);
+    return box.get();
+}
+
+[lir]
+.L_coda_generic_0:
+    block0(%0):
+        %1 = zero
+        %2 = insert %1, $0, %0
+        return %2
+
+.L_coda_generic_1:
+    block0(%0):
+        %1 = load %0
+        return %1
+
+test:
+    block0:
+        %0 = zero
+        %1 = addr %0
+        %2 = call @.L_coda_generic_0, 42
+        store %1, %2
+        %3 = call @.L_coda_generic_0, 69
+        %4 = call @.L_coda_generic_1, %1
+        return %4

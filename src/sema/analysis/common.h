@@ -144,5 +144,6 @@ Symbol *scope_lookup(Scope *scope, AstName name);
 Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);
 Symbol *sema_lookup(Sema *sema, AstName name);
 Symbol *sema_lookup_path(Sema *sema, Path path);
+bool sema_is_place(HirExpr *expr);
 
 #endif

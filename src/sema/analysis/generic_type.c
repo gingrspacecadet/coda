@@ -189,3 +189,121 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
     type->base = base;
     return generic_type_with_mutability(sema, type, ast->mutable);
 }
+
+Symbol *sema_generic_receiver_type(Sema *sema, AstType *receiver) {
+    while (receiver != NULL && receiver->kind == AST_TYPE_POINTER)
+        receiver = receiver->pointer.pointee;
+
+    if (receiver == NULL || receiver->kind != AST_TYPE_NAMED)
+        return NULL;
+
+    Symbol *symbol = sema_lookup_path(sema, receiver->named.path);
+    if (symbol == NULL || symbol->kind != SYMBOL_TYPE || symbol->decl == NULL || symbol->decl->kind != AST_DECL_TYPE)
+        return NULL;
+
+    if (symbol->decl->type.generics.len == 0 || receiver->named.args.len != symbol->decl->type.generics.len)
+        return NULL;
+
+    return symbol;
+}
+
+bool sema_fn_has_unbound_receiver_generics(Sema *sema, AstFnDecl *fn) {
+    if (fn == NULL || fn->receiver == NULL)
+        return false;
+
+    Symbol *generic = sema_generic_receiver_type(sema, fn->receiver);
+    if (generic == NULL)
+        return false;
+
+    for (size_t i = 0; i < generic->decl->type.generics.len; i++) {
+        AstGenericParam *param = array_at(&generic->decl->type.generics, i);
+        Symbol *binding = sema_lookup(sema, param->name);
+
+        if (binding == NULL || binding->kind != SYMBOL_TYPE || binding->type == NULL)
+            return true;
+    }
+
+    return false;
+}
+
+static bool generic_type_symbol_matches(Symbol *left, Symbol *right) {
+    if (left == NULL || right == NULL)
+        return false;
+
+    if (left == right || symbol_canonical(left) == symbol_canonical(right))
+        return true;
+
+    if (left->kind != SYMBOL_TYPE || right->kind != SYMBOL_TYPE)
+        return false;
+
+    if (left->decl != NULL && left->decl == right->decl)
+        return true;
+
+    if (!ast_name_equal(&left->name, &right->name))
+        return false;
+
+    if (left->owner_module != NULL || right->owner_module != NULL)
+        return left->owner_module != NULL && left->owner_module == right->owner_module;
+
+    return left->owner_scope != NULL && left->owner_scope == right->owner_scope;
+}
+
+GenericTypeInstance *sema_generic_type_instance_for_type(Sema *sema, HirType *type, Symbol *generic) {
+    while (type != NULL && type->kind == HIR_TYPE_POINTER)
+        type = type->pointer.pointee;
+
+    if (type == NULL || type->nominal == NULL)
+        return NULL;
+
+    for (size_t i = 0; i < sema->generic_type_instances.len; i++) {
+        GenericTypeInstance *instance = array_at(&sema->generic_type_instances, i);
+
+        if (symbol_canonical(instance->instance) != symbol_canonical(type->nominal))
+            continue;
+        if (generic != NULL && !generic_type_symbol_matches(instance->generic, generic))
+            continue;
+
+        return instance;
+    }
+
+    return NULL;
+}
+
+bool sema_method_receiver_arguments(Sema *sema, Symbol *method, HirType *receiver, Array *arguments, bool *is_generic) {
+    *arguments = array_create(sema->arena, sizeof(HirType *));
+    *is_generic = false;
+
+    if (method == NULL || method->decl == NULL || method->decl->kind != AST_DECL_FN)
+        return false;
+
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    if (method->owner_module != NULL)
+        sema->module = method->owner_module;
+    if (method->owner_scope != NULL) {
+        sema->global_scope = *method->owner_scope;
+        sema->module_scope = method->owner_scope;
+    }
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+
+    Symbol *generic = sema_generic_receiver_type(sema, method->decl->fn.receiver);
+    bool success = true;
+    if (generic != NULL) {
+        *is_generic = true;
+        GenericTypeInstance *instance = sema_generic_type_instance_for_type(sema, receiver, NULL);
+        if (instance == NULL) {
+            success = false;
+        } else {
+            *arguments = instance->arguments;
+        }
+    }
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    return success;
+}
