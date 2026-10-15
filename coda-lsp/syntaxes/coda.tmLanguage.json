@@ -38,30 +38,26 @@
     ],
     "repository": {
         "imports": {
+            "comment": "Scopes the import line, allowing internal tokens like :: and = to be colored individually",
+            "begin": "^\\s*(include|module)\\b",
+            "beginCaptures": {
+                "1": {
+                    "name": "keyword.control.coda"
+                }
+            },
+            "end": "(?=;|//|$)",
             "patterns": [
                 {
-                    "comment": "Scopes the import line, allowing internal tokens like :: and = to be colored individually",
-                    "begin": "^\\s*(include|module)\\b",
-                    "beginCaptures": {
-                        "1": {
-                            "name": "keyword.control.coda"
-                        }
-                    },
-                    "end": "(?=;|//|$)",
-                    "patterns": [
-                        {
-                            "name": "punctuation.separator.double-colon.coda",
-                            "match": "::"
-                        },
-                        {
-                            "name": "punctuation.separator.equal.coda",
-                            "match": "="
-                        },
-                        {
-                            "name": "entity.name.namespace.coda",
-                            "match": "\\b[A-Za-z_]\\w*\\b"
-                        }
-                    ]
+                    "name": "punctuation.separator.double-colon.coda",
+                    "match": "::"
+                },
+                {
+                    "name": "punctuation.separator.equal.coda",
+                    "match": "="
+                },
+                {
+                    "name": "entity.name.namespace.coda",
+                    "match": "\\b[A-Za-z_]\\w*\\b"
                 }
             ]
         },
@@ -112,36 +108,28 @@
             ]
         },
         "generics": {
-            "patterns": [
-                {
-                    "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(:)",
-                    "captures": {
-                        "1": {
-                            "name": "entity.name.type.parameter.coda"
-                        },
-                        "2": {
-                            "name": "punctuation.separator.colon.coda"
-                        }
-                    }
+            "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(:)",
+            "captures": {
+                "1": {
+                    "name": "entity.name.type.parameter.coda"
+                },
+                "2": {
+                    "name": "punctuation.separator.colon.coda"
                 }
-            ]
+            }
         },
         "functions": {
             "name": "entity.name.function.coda",
             "match": "\\b(?:[a-z_]\\w*\\s*(?=[\\(<])|[A-Z]\\w*\\s*(?=\\())"
         },
         "namespaces": {
-            "patterns": [
-                {
-                    "comment": "Handles inline namespace resolution like io::println",
-                    "match": "\\b([A-Za-z_]\\w*)(?=::)",
-                    "captures": {
-                        "1": {
-                            "name": "entity.name.namespace.coda"
-                        }
-                    }
+            "comment": "Handles inline namespace resolution like io::println",
+            "match": "\\b([A-Za-z_]\\w*)(?=::)",
+            "captures": {
+                "1": {
+                    "name": "entity.name.namespace.coda"
                 }
-            ]
+            }
         },
         "numbers": {
             "patterns": [
@@ -225,24 +213,31 @@
                 {
                     "name": "comment.line.coda",
                     "match": "//.*"
+                },
+                {
+                    "name": "comment.block.coda",
+                    "begin": "/\\*",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.begin.coda"
+                        }
+                    },
+                    "end": "\\*/",
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.end.coda"
+                        }
+                    }
                 }
             ]
         },
         "attributes": {
-            "patterns": [
-                {
-                    "name": "keyword.operator.coda",
-                    "match": "@[A-Za-z]+(\\([^()]*\\))?(,\\s*[A-Za-z]+(\\([^()]*\\))?)*"
-                }
-            ]
+            "name": "keyword.operator.coda",
+            "match": "@[A-Za-z]+(\\([^()]*\\))?(,\\s*[A-Za-z]+(\\([^()]*\\))?)*"
         },
         "types": {
-            "patterns": [
-                {
-                    "name": "entity.name.type.coda",
-                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
-                }
-            ]
+            "name": "entity.name.type.coda",
+            "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
         }
     },
     "scopeName": "source.coda"
