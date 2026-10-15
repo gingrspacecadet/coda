@@ -50,11 +50,11 @@
 //     uint64 copied = 0;
 
 //     while (copied < count) {
-//         uint64 n = count - copied;
+//         mut uint64 n = count - copied;
 //         if (n > buffer.len) n = buffer.len;
 
-//         src.read(buffer[..n])?;
-//         dst.write(buffer[..n])?;
+//         src.read({.ptr = buffer.ptr, .len = n})?;
+//         dst.write({.ptr = buffer.ptr, .len = n})?;
 
 //         copied += n;
 //     }

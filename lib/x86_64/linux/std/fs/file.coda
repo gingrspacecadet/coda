@@ -1,6 +1,7 @@
 module std::fs;
 
-include std::system = sys;
+include std::prelude : _;
+include std::system : sys;
 
 @export
 type File = struct {
@@ -10,6 +11,23 @@ type File = struct {
 @export
 fn File File.create(string path) {
     return {
-        .fd = sys::syscall(Open, (uint64)path.ptr, 1 | 64, 420) // O_CREAT | O_WRONLY | O_TRUNC, 0644
+        .fd = sys::syscall(sys::SysNums::Open, (uint64)path.ptr, 1 | 64, 420) // O_CREAT | O_WRONLY | O_TRUNC, 0644
     };
+}
+
+@export
+fn File File.open(string path) {
+    return {
+        .fd = sys::syscall(sys::SysNums::Open, (uint64)path.ptr),
+    };
+}
+
+@export
+fn int File.write(File this, uint8[] buf) {
+    return sys::syscall(sys::SysNums::Write, (uint64)this.fd, (uint64)buf.ptr, buf.len);
+}
+
+@export
+fn int File.read(File this, uint8[] buf) {
+    return sys::syscall(sys::SysNums::Read, (uint64)this.fd, (uint64)buf.ptr, buf.len);
 }

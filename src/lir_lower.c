@@ -662,6 +662,18 @@ static void lir_lower_store(LirLower *lower, LirPlace place, LirOperand value) {
     lir_emit(lower->function, lower->block, LIR_OP_STORE, NULL, (Array){.data = operands, .len = 2});
 }
 
+static HirType *lir_address_type(LirLower *lower, HirType *pointee) {
+    HirType *type = arena_calloc(lower->function->arena, sizeof(*type));
+    *type = (HirType){
+        .kind = HIR_TYPE_POINTER,
+        .mutable = false,
+        .size = sizeof(void *),
+        .align = _Alignof(void *),
+        .pointer = {.pointee = pointee, .optional = false},
+    };
+    return type;
+}
+
 static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_UNARY:
@@ -703,10 +715,11 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 offset,
             };
 
-            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = add_operands, .len = 2});
+            HirType *address_type = lir_address_type(lower, expr->type);
+            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, address_type, (Array){.data = add_operands, .len = 2});
 
             return (LirPlace){
-                .address = lir_operand_value(address, base.type),
+                .address = lir_operand_value(address, address_type),
                 .type = expr->type,
             };
         }
@@ -722,20 +735,22 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 base = object.address;
             }
 
+            HirType *address_type = lir_address_type(lower, expr->field.field->type);
             if (expr->field.field->offset == 0) {
+                base.type = address_type;
                 return (LirPlace){
                     .address = base,
-                    .type = expr->field.field->type
+                    .type = expr->field.field->type,
                 };
             }
 
             LirOperand offset = lir_operand_offset(expr->field.field->offset);
             LirOperand operands[2] = {base, offset};
 
-            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, base.type, (Array){.data = operands, .len = 2});
+            LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, address_type, (Array){.data = operands, .len = 2});
 
             return (LirPlace){
-                .address = lir_operand_value(address, base.type),
+                .address = lir_operand_value(address, address_type),
                 .type = expr->field.field->type,
             };
         }
@@ -1065,6 +1080,11 @@ static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr) {
 
     if (lir_constant_array_offset(expr, &constant_offset))
         return lir_operand_offset(constant_offset);
+
+    HirExpr *object = expr->index.object;
+    if (object->type->kind == HIR_TYPE_ARRAY &&
+        !(object->kind == HIR_EXPR_UNARY && object->unary.op == AST_UNARY_DEREF))
+        return lir_lower_array_aggregate_offset(lower, expr);
 
     HirExpr *index = expr->index.index;
     LirOperand index_operand = lir_lower_expr(lower, index);

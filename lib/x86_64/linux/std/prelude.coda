@@ -1,7 +1,7 @@
 module std::prelude;
 
-@export
-include std::collections : _;
+// @export
+// include std::collections : _;
 
 @export,alias
 type int = int32;
@@ -11,3 +11,9 @@ type char = uint8;
 
 @export,alias
 type string = char[];
+
+@export,alias
+type ssize = int64;
+
+@export,alias
+type usize = uint64;
