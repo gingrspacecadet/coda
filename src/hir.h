@@ -239,6 +239,7 @@ struct HirStmt {
         } block;
 
         struct {
+            AstBinaryOp op;
             HirExpr *target;
             HirExpr *value;
         } assign;

@@ -2090,3 +2090,75 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
     return hir;
 }
+
+
+static AstBinaryOp sema_compound_assignment_op(AstBinaryOp op) {
+    switch (op) {
+        case AST_BINARY_ASSIGN: return AST_BINARY_ASSIGN;
+        case AST_BINARY_ADD_ASSIGN: return AST_BINARY_ADD;
+        case AST_BINARY_SUB_ASSIGN: return AST_BINARY_SUB;
+        case AST_BINARY_MUL_ASSIGN: return AST_BINARY_MUL;
+        case AST_BINARY_DIV_ASSIGN: return AST_BINARY_DIV;
+        case AST_BINARY_MOD_ASSIGN: return AST_BINARY_MOD;
+        case AST_BINARY_BIT_AND_ASSIGN: return AST_BINARY_BIT_AND;
+        case AST_BINARY_BIT_OR_ASSIGN: return AST_BINARY_BIT_OR;
+        case AST_BINARY_BIT_XOR_ASSIGN: return AST_BINARY_BIT_XOR;
+        case AST_BINARY_SHL_ASSIGN: return AST_BINARY_SHL;
+        case AST_BINARY_SHR_ASSIGN: return AST_BINARY_SHR;
+        case AST_BINARY_NAND_ASSIGN: return AST_BINARY_NAND;
+        case AST_BINARY_NOR_ASSIGN: return AST_BINARY_NOR;
+        default: return AST_BINARY_ERROR;
+    }
+}
+
+HirStmt *sema_assignment_stmt(Sema *sema, AstExpr *ast) {
+    HirStmt *stmt = arena_calloc(sema->arena, sizeof(*stmt));
+    *stmt = (HirStmt){.span = ast != NULL ? ast->span : (Span){0}, .kind = HIR_STMT_ERROR};
+
+    if (ast == NULL || ast->kind != AST_EXPR_BINARY)
+        return stmt;
+
+    AstBinaryOp op = sema_compound_assignment_op(ast->binary.op);
+    if (op == AST_BINARY_ERROR)
+        return stmt;
+
+    HirExpr *target = sema_expr(sema, ast->binary.left, NULL);
+    if (target == NULL || target->kind == HIR_EXPR_ERROR || target->type == NULL)
+        return stmt;
+
+    if (!sema_is_place(target) || !target->type->mutable) {
+        error_not_mutable(sema->diags, target->span);
+        return stmt;
+    }
+
+    HirType *right_expected = target->type;
+    if (op != AST_BINARY_ASSIGN && (op == AST_BINARY_ADD || op == AST_BINARY_SUB) && is_pointer(target->type))
+        right_expected = NULL;
+
+    HirExpr *value = sema_expr(sema, ast->binary.right, right_expected);
+    if (value == NULL || value->kind == HIR_EXPR_ERROR || value->type == NULL)
+        return stmt;
+
+    if (op != AST_BINARY_ASSIGN) {
+        HirType *result = binop_type(sema, op, target, value, target->type);
+        if (result == NULL) {
+            error_invalid_binary_operation(sema->diags, binary_op_name(op), target->type, value->type, ast->span);
+            return stmt;
+        }
+        if (!type_equal(result, target->type)) {
+            error_type_mismatch(sema->diags, target->type, result, ast->span);
+            return stmt;
+        }
+    }
+
+    *stmt = (HirStmt){
+        .span = ast->span,
+        .kind = HIR_STMT_ASSIGN,
+        .assign = {
+            .op = op,
+            .target = target,
+            .value = value,
+        },
+    };
+    return stmt;
+}

@@ -363,6 +363,53 @@ static LirOperand lir_lower_scaled_index(LirLower *lower, LirOperand index, size
     return lir_operand_value(result, index.type);
 }
 
+static bool hir_type_is_pointer(HirType *type);
+
+static LirOperand lir_lower_binary_values(LirLower *lower, AstBinaryOp op, HirType *type, LirOperand left, LirOperand right) {
+    if ((op == AST_BINARY_ADD || op == AST_BINARY_SUB) &&
+        hir_type_is_pointer(left.type) && hir_type_is_integer(right.type)) {
+        LirOperand offset = lir_lower_scaled_index(lower, right, left.type->pointer.pointee->size);
+        if (op == AST_BINARY_SUB) {
+            LirOperand zero = hir_type_is_signed_integer(offset.type)
+                ? lir_operand_int(0, offset.type)
+                : lir_operand_uint(0, offset.type);
+            LirOperand negate_operands[2] = {zero, offset};
+            LirValueId negated = lir_emit(lower->function, lower->block, LIR_OP_SUB, offset.type, (Array){.data = negate_operands, .len = 2});
+            offset = lir_operand_value(negated, offset.type);
+        }
+        LirOperand operands[2] = {left, offset};
+        LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, type, (Array){.data = operands, .len = 2});
+        return lir_operand_value(result, type);
+    }
+
+    if (op == AST_BINARY_ADD && hir_type_is_integer(left.type) && hir_type_is_pointer(right.type)) {
+        LirOperand offset = lir_lower_scaled_index(lower, left, right.type->pointer.pointee->size);
+        LirOperand operands[2] = {right, offset};
+        LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, type, (Array){.data = operands, .len = 2});
+        return lir_operand_value(result, type);
+    }
+
+    if (op == AST_BINARY_SUB && hir_type_is_pointer(left.type) && hir_type_is_pointer(right.type)) {
+        LirOperand element_size = lir_operand_offset(left.type->pointer.pointee->size);
+        LirOperand operands[3] = {left, right, element_size};
+        LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_DIFF, type, (Array){.data = operands, .len = 3});
+        return lir_operand_value(result, type);
+    }
+
+    if (op == AST_BINARY_NAND || op == AST_BINARY_NOR) {
+        LirOperand operands[2] = {left, right};
+        LirOpcode opcode = op == AST_BINARY_NAND ? LIR_OP_AND : LIR_OP_OR;
+        LirValueId intermediate = lir_emit(lower->function, lower->block, opcode, type, (Array){.data = operands, .len = 2});
+        LirOperand operand = lir_operand_value(intermediate, type);
+        LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_NOT, type, (Array){.data = &operand, .len = 1});
+        return lir_operand_value(result, type);
+    }
+
+    LirOperand operands[2] = {left, right};
+    LirValueId result = lir_emit(lower->function, lower->block, lir_lower_binary_op(op), type, (Array){.data = operands, .len = 2});
+    return lir_operand_value(result, type);
+}
+
 static bool hir_type_is_pointer(HirType *type) {
     return type && type->kind == HIR_TYPE_POINTER;
 }
@@ -452,64 +499,16 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             }
 
         case HIR_EXPR_BINARY: {
-            HirType *left_type = expr->binary.left->type;
-            HirType *right_type = expr->binary.right->type;
-
-            if ((expr->binary.op == AST_BINARY_ADD || expr->binary.op == AST_BINARY_SUB) && hir_type_is_pointer(left_type) && hir_type_is_integer(right_type)) {
-                LirOperand pointer = lir_lower_expr(lower, expr->binary.left);
-                LirOperand index = lir_lower_expr(lower, expr->binary.right);
-                LirOperand offset = lir_lower_scaled_index(lower, index, left_type->pointer.pointee->size);
-
-                if (expr->binary.op == AST_BINARY_SUB) {
-                    LirOperand zero = hir_type_is_signed_integer(offset.type)
-                        ? lir_operand_int(0, offset.type)
-                        : lir_operand_uint(0, offset.type);
-
-                    LirOperand operands[2] = {zero, offset};
-                    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_SUB, offset.type, (Array){.data = operands, .len = 2});
-                    offset = lir_operand_value(result, offset.type);
-                }
-
-                LirOperand operands[2] = {pointer, offset};
-                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, pointer.type, (Array){.data = operands, .len = 2});
-                return lir_operand_value(result, expr->type);
-            }
-
-            if (expr->binary.op == AST_BINARY_ADD && hir_type_is_integer(left_type) && hir_type_is_pointer(right_type)) {
-                LirOperand index = lir_lower_expr(lower, expr->binary.left);
-                LirOperand pointer = lir_lower_expr(lower, expr->binary.right);
-                LirOperand offset = lir_lower_scaled_index(lower, index, right_type->pointer.pointee->size);
-
-                LirOperand operands[2] = {pointer, offset};
-                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, pointer.type, (Array){.data = operands, .len = 2});
-                return lir_operand_value(result, expr->type);
-            }
-
-            if (expr->binary.op == AST_BINARY_SUB && hir_type_is_pointer(left_type) && hir_type_is_pointer(right_type)) {
-                LirOperand left = lir_lower_expr(lower, expr->binary.left);
-                LirOperand right = lir_lower_expr(lower, expr->binary.right);
-                LirOperand element_size = lir_operand_offset(left_type->pointer.pointee->size);
-
-                LirOperand operands[3] = {left, right, element_size};
-                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_DIFF, expr->type, (Array){.data = operands, .len = 3});
-                return lir_operand_value(result, expr->type);
-            }
-
             if (expr->binary.op == AST_BINARY_LOGICAL_AND)
                 return lir_lower_logical_and(lower, expr);
 
             if (expr->binary.op == AST_BINARY_LOGICAL_OR)
                 return lir_lower_logical_or(lower, expr);
 
-            LirOperand operands[2] = {
-                lir_lower_expr(lower, expr->binary.left),
-                lir_lower_expr(lower, expr->binary.right),
-            };
-
-            LirValueId result = lir_emit(lower->function, lower->block, lir_lower_binary_op(expr->binary.op), expr->type, (Array){.data = operands, .len = 2});
-            return lir_operand_value(result, expr->type);
+            LirOperand left = lir_lower_expr(lower, expr->binary.left);
+            LirOperand right = lir_lower_expr(lower, expr->binary.right);
+            return lir_lower_binary_values(lower, expr->binary.op, expr->type, left, right);
         }
-
         case HIR_EXPR_CALL: {
             size_t operand_count = expr->call.args.len + 1;
             LirOperand *operands = arena_calloc(lower->function->arena, sizeof(LirOperand) * operand_count);
@@ -1177,40 +1176,60 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
 
         case HIR_STMT_ASSIGN: {
             HirExpr *target = stmt->assign.target;
-            LirOperand value = lir_lower_expr(lower, stmt->assign.value);
 
-            if (target->kind == HIR_EXPR_VALUE) {
-                Symbol *symbol = target->value.symbol;
+            if (stmt->assign.op == AST_BINARY_ASSIGN) {
+                LirOperand value = lir_lower_expr(lower, stmt->assign.value);
 
-                if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
-                    LirBinding *address = lir_find_address(lower, symbol);
-                    if (address != NULL) {
-                        lir_lower_store(lower, (LirPlace){.address = address->operand, .type = target->type}, value);
-                    } else {
-                        lir_bind(lower, symbol, value);
+                if (target->kind == HIR_EXPR_VALUE) {
+                    Symbol *symbol = target->value.symbol;
+
+                    if (symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) {
+                        LirBinding *address = lir_find_address(lower, symbol);
+                        if (address != NULL) {
+                            lir_lower_store(lower, (LirPlace){.address = address->operand, .type = target->type}, value);
+                        } else {
+                            lir_bind(lower, symbol, value);
+                        }
+                        return;
                     }
+
+                    if (symbol->kind == SYMBOL_GLOBAL) {
+                        LirPlace place = lir_lower_place(lower, target);
+                        lir_lower_store(lower, place, value);
+                        return;
+                    }
+
+                    assert(!"unexpected assignment target symbol");
+                }
+
+                if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(lower, target)) {
+                    lir_lower_aggregate_store(lower, target, value);
                     return;
                 }
 
-                if (symbol->kind == SYMBOL_GLOBAL) {
-                    LirPlace place = lir_lower_place(lower, target);
-                    lir_lower_store(lower, place, value);
-                    return;
-                }
-
-                assert(!"unexpected assignment target symbol");
-            }
-
-            if ((target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX) && lir_expr_is_ssa(lower, target)) {
-                lir_lower_aggregate_store(lower, target, value);
+                LirPlace place = lir_lower_place(lower, target);
+                lir_lower_store(lower, place, value);
                 return;
             }
 
+            if (target->kind == HIR_EXPR_VALUE) {
+                Symbol *symbol = target->value.symbol;
+                if ((symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) && lir_find_address(lower, symbol) == NULL) {
+                    LirOperand left = lir_lower_expr(lower, target);
+                    LirOperand right = lir_lower_expr(lower, stmt->assign.value);
+                    LirOperand value = lir_lower_binary_values(lower, stmt->assign.op, target->type, left, right);
+                    lir_bind(lower, symbol, value);
+                    return;
+                }
+            }
+
             LirPlace place = lir_lower_place(lower, target);
+            LirOperand left = lir_lower_load(lower, place);
+            LirOperand right = lir_lower_expr(lower, stmt->assign.value);
+            LirOperand value = lir_lower_binary_values(lower, stmt->assign.op, target->type, left, right);
             lir_lower_store(lower, place, value);
             return;
         }
-
         case HIR_STMT_EXPR:
             (void)lir_lower_expr(lower, stmt->expr);
             return;
@@ -1350,10 +1369,25 @@ static void lir_collect_address_taken_stmt(Array(Symbol *) *symbols, HirStmt *st
             lir_collect_address_taken_expr(symbols, stmt->expr);
             return;
 
-        case HIR_STMT_ASSIGN:
-            lir_collect_address_taken_expr(symbols, stmt->assign.target);
+        case HIR_STMT_ASSIGN: {
+            HirExpr *target = stmt->assign.target;
+            if (stmt->assign.op != AST_BINARY_ASSIGN &&
+                (target->kind == HIR_EXPR_FIELD || target->kind == HIR_EXPR_INDEX)) {
+                Symbol *symbol = lir_addressed_local_symbol(target);
+                bool found = false;
+                for (size_t i = 0; symbol != NULL && i < symbols->len; i++) {
+                    if (lir_same_symbol(((Symbol **)symbols->data)[i], symbol)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (symbol != NULL && !found)
+                    array_push(symbols, &symbol);
+            }
+            lir_collect_address_taken_expr(symbols, target);
             lir_collect_address_taken_expr(symbols, stmt->assign.value);
             return;
+        }
 
         case HIR_STMT_RETURN:
             lir_collect_address_taken_expr(symbols, stmt->_return.value);

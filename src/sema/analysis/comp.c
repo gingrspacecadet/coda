@@ -873,7 +873,23 @@ static CompExecResult exec_stmt(CompContext *context, HirStmt *stmt) {
         }
 
 case HIR_STMT_ASSIGN: {
-    HirExpr *value = comp_eval_expr(context, stmt->assign.value);
+    HirExpr *value;
+    if (stmt->assign.op == AST_BINARY_ASSIGN) {
+        value = comp_eval_expr(context, stmt->assign.value);
+    } else {
+        HirExpr *left = comp_eval_expr(context, stmt->assign.target);
+        HirExpr *right = comp_eval_expr(context, stmt->assign.value);
+        if (left == NULL || right == NULL || !comp_expr_is_evaluable(left) || !comp_expr_is_evaluable(right))
+            return (CompExecResult){.kind = COMP_EXEC_ERROR};
+
+        HirExpr binary = {
+            .span = stmt->span,
+            .kind = HIR_EXPR_BINARY,
+            .type = stmt->assign.target->type,
+            .binary = {.op = stmt->assign.op, .left = left, .right = right},
+        };
+        value = comp_eval_expr(context, &binary);
+    }
 
     if (value == NULL || !comp_expr_is_evaluable(value))
         return (CompExecResult){.kind = COMP_EXEC_ERROR};

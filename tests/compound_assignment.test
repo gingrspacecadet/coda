@@ -1,0 +1,31 @@
+name: compound assignment and for post
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 next_index(mut int64 *count) {
+    *count += 1;
+    return 1;
+}
+
+fn int64 main() {
+    mut int64 total = 0;
+    for (mut int64 i = 0; i < 4; i += 1) {
+        total += i;
+    }
+    if (total != 6) return 1;
+
+    mut int64[3] values = {10, 20, 30};
+    mut int64 calls = 0;
+    values[next_index(&calls)] += 5;
+    if (calls != 1) return 2;
+    if (values[1] != 25) return 3;
+
+    mut int64 value = 16;
+    value >>= 2;
+    if (value != 4) return 4;
+    value |= 1;
+    if (value != 5) return 5;
+    return 0;
+}

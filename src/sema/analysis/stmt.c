@@ -1,5 +1,30 @@
 #include "common.h"
 
+static bool stmt_is_assignment_expr(AstExpr *expr) {
+    if (expr == NULL || expr->kind != AST_EXPR_BINARY)
+        return false;
+
+    switch (expr->binary.op) {
+        case AST_BINARY_ASSIGN:
+        case AST_BINARY_ADD_ASSIGN:
+        case AST_BINARY_SUB_ASSIGN:
+        case AST_BINARY_MUL_ASSIGN:
+        case AST_BINARY_DIV_ASSIGN:
+        case AST_BINARY_MOD_ASSIGN:
+        case AST_BINARY_BIT_AND_ASSIGN:
+        case AST_BINARY_BIT_OR_ASSIGN:
+        case AST_BINARY_BIT_XOR_ASSIGN:
+        case AST_BINARY_SHL_ASSIGN:
+        case AST_BINARY_SHR_ASSIGN:
+        case AST_BINARY_NAND_ASSIGN:
+        case AST_BINARY_NOR_ASSIGN:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
 
@@ -67,6 +92,7 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
             .span = ast->span,
             .kind = HIR_STMT_ASSIGN,
             .assign = {
+                .op = AST_BINARY_ASSIGN,
                 .target = target,
                 .value = init,
             },
@@ -234,30 +260,8 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         }
 
         case AST_STMT_EXPR: {
-            if (ast->expr->kind == AST_EXPR_BINARY &&
-                ast->expr->binary.op == AST_BINARY_ASSIGN) {
-                HirStmt *stmt = arena_calloc(sema->arena, sizeof(HirStmt));
-                HirExpr *target = sema_expr(sema, ast->expr->binary.left, NULL);
-                HirExpr *value = sema_expr(sema, ast->expr->binary.right, target->type);
-
-                if (target == NULL || target->kind == HIR_EXPR_ERROR ||
-                    value == NULL || value->kind == HIR_EXPR_ERROR) {
-                    stmt->kind = HIR_STMT_ERROR;
-                    return stmt;
-                }
-
-                if (!target->type->mutable) {
-                    error_not_mutable(sema->diags, target->span);
-                    stmt->kind = HIR_STMT_ERROR;
-                    return stmt;
-                }
-
-                stmt->span = ast->span;
-                stmt->kind = HIR_STMT_ASSIGN;
-                stmt->assign.target = target;
-                stmt->assign.value = value;
-                return stmt;
-            }
+            if (stmt_is_assignment_expr(ast->expr))
+                return sema_assignment_stmt(sema, ast->expr);
 
             hir->kind = HIR_STMT_EXPR;
             hir->expr = sema_expr(sema, ast->expr, NULL);
@@ -513,10 +517,17 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             array_push(&loop_body->block.stmts, &body);
 
             if (ast->_for.post != NULL) {
-                HirStmt *post = hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
-                post->expr = sema_expr(sema, ast->_for.post, NULL);
+                HirStmt *post;
+                if (stmt_is_assignment_expr(ast->_for.post)) {
+                    post = sema_assignment_stmt(sema, ast->_for.post);
+                } else {
+                    post = hir_stmt(sema, HIR_STMT_EXPR, ast->_for.post->span);
+                    post->expr = sema_expr(sema, ast->_for.post, NULL);
+                }
 
-                if (post->expr == NULL || post->expr->kind == HIR_EXPR_ERROR) {
+                if (post == NULL || post->kind == HIR_STMT_ERROR ||
+                    (post->kind == HIR_STMT_EXPR &&
+                     (post->expr == NULL || post->expr->kind == HIR_EXPR_ERROR))) {
                     sema_pop_scope(sema);
                     loop->kind = HIR_STMT_ERROR;
                     return loop;
