@@ -275,6 +275,8 @@ AstType *parse_type_single(Parser *p) {
                 AstType *param = parse_type(p);
                 array_push(&base->fn.params, &param);
 
+                match(p, TK_IDENT); //! TODO: remember to implement this logic <3
+
                 if (!match(p, TK_COMMA))
                     break;
             }

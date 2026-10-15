@@ -9,6 +9,7 @@
 #include "parser.h"
 #include "source.h"
 #include "arena.h"
+#include "array.h"
 #include "diag.h"
 #include "sema.h"
 
@@ -33,6 +34,8 @@ typedef struct {
     const BackendApi *backend;
     Backend backend_instance;
     FILE *output;
+    Array(String) include_paths;
+    Array(AstIncludeDecl) forced_includes;
 
     CodaCompilation compilation;
 } CodaCompiler;

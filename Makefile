@@ -80,7 +80,7 @@ STDLIB_SO         = $(STDLIB_TARGET_DIR)/libcoda.$(SOEXT)
 .PHONY: all clean backends stdlib test
 .SECONDARY: $(STDLIB_GEN_ASM)
 
-all: $(LIB) $(TARGET) backends stdlib
+all: $(LIB) $(TARGET) backends # stdlib
 
 $(LIB): $(LIB_OBJS)
 	@mkdir -p $(dir $@)

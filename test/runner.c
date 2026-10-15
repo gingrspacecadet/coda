@@ -1135,6 +1135,11 @@ static size_t test_run_path(const char *path, TestStats *stats) {
 int main(int argc, char **argv) {
     TestStats stats = {0};
 
+    if (test_cli_arguments())
+        stats.passed++;
+    else
+        stats.failed++;
+
     if (argc == 1) {
         test_run_path("tests", &stats);
     } else {

@@ -104,6 +104,12 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (!returns_none && !hir_stmt_terminates(fn->body))
         error_missing_return_value(sema->diags, return_type, ast->body->span);
 
+    if (returns_none && !hir_stmt_terminates(fn->body) && fn->body->kind == HIR_STMT_BLOCK) {
+        HirStmt *ret = arena_calloc(sema->arena, sizeof(HirStmt *));
+        ret->kind = HIR_STMT_RETURN;
+        array_push(&fn->body->block.stmts, ret);
+    }
+
     sema->current_fn = previous_fn;
     sema_pop_scope(sema);
 

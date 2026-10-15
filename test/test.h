@@ -57,5 +57,6 @@ typedef struct {
 } TestCase;
 
 bool test_parse(Arena *arena, String contents, TestCase *test);
+bool test_cli_arguments(void);
 
 #endif
