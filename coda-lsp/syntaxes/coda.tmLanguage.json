@@ -94,7 +94,11 @@
                 },
                 {
                     "name": "storage.type.built-in.primitive.coda",
-                    "match": "\\b(none|bool|u?int(8|16|32|64)?|usize|ssize|float(16|32|64)|any|w?char|w?string)\\b"
+                    "match": "\\b(none|bool|u?int(8|16|32|64)|usize|ssize|float(16|32|64)|any)\\b"
+                },
+                {
+                    "name": "support.type.prelude.coda",
+                    "match": "\\b(uint|int|char|string)\\b"
                 },
                 {
                     "name": "constant.language.boolean.coda",
@@ -282,7 +286,12 @@
         },
         "attributes": {
             "name": "storage.modifier.coda",
-            "match": "@[a-zA-Z_]\\w*(\\([\\(]*\\))?"
+            "match": "@[a-zA-Z_]\\w*(?:\\([\\(]*\\))?(?:\\s*(,)\\s*[a-zA-Z_]\\w*(?:\\([\\(]*\\))?)*",
+            "captures": {
+                "1": {
+                    "name": "punctuation.separator.comma.coda"
+                }
+            }
         },
         "constants": {
             "name": "variable.other.constant.coda",
