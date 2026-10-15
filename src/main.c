@@ -322,8 +322,6 @@ int main(int argc, char **argv) {
         print_ast_module(stdout, compiler.compilation.ast);
     if (options.dump_hir)
         print_hir_module(stdout, compiler.compilation.hir);
-    if (options.dump_json)
-        print_hir_json(stdout, compiler.compilation.hir);
     if (options.dump_lir)
         lir_print(stdout, compiler.compilation.lir);
 

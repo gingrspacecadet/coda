@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "../../mangle.h"
+#include "../../mangle.h"
 #include "common.h"
 
 static HirExpr *generic_error_expr(Sema *sema, AstExpr *ast) {

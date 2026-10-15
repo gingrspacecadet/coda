@@ -162,4 +162,4 @@ build/test/%.o: test/%.c
 test: $(TARGET) $(TEST_TARGET)
 	$(TEST_TARGET) tests
 
--include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(BACKEND_OBJS) $(TEST_OBJS))
+-include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(NATIVE_BACKEND_OBJS) $(BACKEND_OBJS) $(TEST_OBJS))

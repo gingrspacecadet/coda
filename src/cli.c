@@ -236,11 +236,6 @@ static CliParseResult cli_parse_args_impl(int argc, char **argv, CliOptions *opt
             continue;
         }
 
-        if (!options_ended && strcmp(arg, "--dump-json") == 0) {
-            options->dump_json = true;
-            continue;
-        }
-
         if (!options_ended && strcmp(arg, "--dump-lir") == 0) {
             options->dump_lir = true;
             continue;
@@ -330,7 +325,6 @@ void cli_print_help(FILE *stream, const char *program_name) {
     fprintf(stream, "  --dump-ast              Print the AST after successful compilation\n");
     fprintf(stream, "  --dump-hir              Print the HIR after successful compilation\n");
     fprintf(stream, "  --dump-lir              Print the LIR after successful compilation\n");
-    fprintf(stream, "  --dump-json             Print the HIR as JSON after successful compilation\n");
     fprintf(stream, "  --version               Display compiler version and exit\n");
     fprintf(stream, "  --                      End compiler options; with --run, pass following arguments to the program\n");
 }

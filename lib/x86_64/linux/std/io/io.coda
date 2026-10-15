@@ -1,63 +1,63 @@
-module std::io;
+// module std::io;
 
-@export
-type IOError = enum {
-    EOS,
-    CONNECTION_RESET,
-    TIMED_OUT,
-    WOULD_BLOCK,
-    UNKNOWN,
-};
+// @export
+// type IOError = enum {
+//     EOS,
+//     CONNECTION_RESET,
+//     TIMED_OUT,
+//     WOULD_BLOCK,
+//     UNKNOWN,
+// };
 
-@export
-constraint Reader {
-    fn (uint64 | IOError) read(mut Reader *this, mut uint8[] dst);
-}
+// @export
+// constraint Reader {
+//     fn (uint64 | IOError) read(mut Reader *this, mut uint8[] dst);
+// }
 
-@export
-constraint Writer {
-    fn (uint64 | IOError) write(mut Writer *this, uint8[] src);
+// @export
+// constraint Writer {
+//     fn (uint64 | IOError) write(mut Writer *this, uint8[] src);
 
-    fn (uint64 | IOError) writeln(mut Writer *this, uint8[] src) {
-        uint64 n = this.write(src)?;
-        n += this.write("\n")?;
-        return n;
-    }
-}
+//     fn (uint64 | IOError) writeln(mut Writer *this, uint8[] src) {
+//         uint64 n = this.write(src)?;
+//         n += this.write("\n")?;
+//         return n;
+//     }
+// }
 
-@export
-type SeekOrigin = enum {
-    BEGIN,
-    CURRENT,
-    END,
-};
+// @export
+// type SeekOrigin = enum {
+//     BEGIN,
+//     CURRENT,
+//     END,
+// };
 
-@export 
-constraint Seeker {
-    fn uint64 seek(mut Seeker *this, SeekOrigin origin, int64 offset);
-    fn uint64 tell(Seeker *this);
-}
+// @export 
+// constraint Seeker {
+//     fn uint64 seek(mut Seeker *this, SeekOrigin origin, int64 offset);
+//     fn uint64 tell(Seeker *this);
+// }
 
-@export
-constraint Flusher {
-    fn none flush(mut Flusher *this);
-}
+// @export
+// constraint Flusher {
+//     fn none flush(mut Flusher *this);
+// }
 
-@export
-@export
-fn (uint64 | IOError) copy(mut Reader *src, mut Writer *dst, uint64 count) {
-    mut uint8[4096] buffer;
-    uint64 copied = 0;
+// @export
+// @export
+// fn (uint64 | IOError) copy(mut Reader *src, mut Writer *dst, uint64 count) {
+//     mut uint8[4096] buffer;
+//     uint64 copied = 0;
 
-    while (copied < count) {
-        uint64 n = count - copied;
-        if (n > buffer.len) n = buffer.len;
+//     while (copied < count) {
+//         uint64 n = count - copied;
+//         if (n > buffer.len) n = buffer.len;
 
-        src.read(buffer[..n])?;
-        dst.write(buffer[..n])?;
+//         src.read(buffer[..n])?;
+//         dst.write(buffer[..n])?;
 
-        copied += n;
-    }
+//         copied += n;
+//     }
 
-    return copied;
-}
+//     return copied;
+// }

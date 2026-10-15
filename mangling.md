@@ -1,42 +1,39 @@
 # Coda linker names
 
-Coda keeps a symbol's source name separate from its linker name. `Symbol.name`
-is used for source-level lookup and diagnostics; `Symbol.link_name` is used by
-the backend when emitting symbol definitions and references.
+Coda stores source names and linker names separately. `Symbol.name` remains the
+source-level identifier; `Symbol.link_name` is used by the backend when emitting
+symbol definitions and references.
 
-## Identity
+## Format
 
-For mangled symbols, identity includes the symbol kind, module path, source
-name, receiver type for methods, and concrete type arguments for a generic
-specialization. Each component is encoded independently, so module separators
-and punctuation inside type descriptions cannot make the encoding ambiguous.
+A qualified name is encoded as `_C` followed by its source-name components.
+Each component is prefixed by its byte length, with no separators between
+components. For example, `std::io::print` becomes `_C3std2io5print`.
+The final component is the declaration name; preceding components are its module
+path. This is the same compact, readable encoding used by the earlier compiler.
 
-The current encoding starts with `__coda1_`. The version is part of the format:
-an incompatible future encoding must use a new version. Module path components,
-the source name, receiver description, function signature, and each type argument
-are represented as a byte length followed by the hexadecimal encoding of those bytes.
+Method names append `_R` followed by a length-prefixed receiver type. Generic
+specializations append `_G` plus the number of type arguments; each type argument
+is prefixed by `T` and its byte length. For example, `std::io::identity<int32>`
+becomes `_C3std2io8identity_G1T5int32`.
 
-Symbol kind codes are `F` for functions, `V` for globals, `T` for types, and
-`C` for constraints. The decoder validates the complete input and rejects
-malformed or trailing data.
+Type payloads preserve ASCII letters and digits, while punctuation, whitespace,
+and underscores are escaped as `_HH` byte sequences. This keeps emitted labels
+assembler-safe without hex-encoding ordinary names or even simple type arguments
+such as `int32`. Only type arguments are currently encoded; value-generic
+arguments are not supported by the current compiler.
 
-## Exceptions
+Declaration kinds and ordinary function signatures are not repeated in the
+encoding: names are unique within a module namespace, and current method lookup
+uses the receiver type. The demangler therefore reconstructs a qualified identity,
+not a complete declaration record; tooling should resolve the result against its
+symbol index to obtain declaration kind and source location. If overloads are
+introduced later, add only the discriminator they require.
 
-`@extern` declarations preserve the declared foreign symbol name. The root
-module's non-specialized `main` function also remains named `main` because the
-current startup code calls that entry point directly. Ordinary top-level symbols
-in an unnamed root module may remain unmangled. Tooling must accept raw names as
-well as versioned Coda names.
+`@extern` declarations preserve their foreign ABI names. The root `main` entry
+point also remains `main` while the current startup code expects that symbol;
+this is a temporary ABI constraint, not part of the general naming scheme.
 
-## Tooling
-
-Use `coda_demangle_symbol()` to recover module path, source name, receiver,
-signature, and tagged generic argument descriptions from a linker name. Use
-`coda_demangled_symbol_name()` for a readable qualified name. These descriptions
-preserve symbol identity; locating a declaration or source range still requires
-the module/source index.
-
-The generated function's internal compiler name may remain an ordinal such as
-`.L_coda_generic_0`; that is not the emitted linker name. The linker name is
-derived from the generic declaration and its concrete type arguments, so it is
-stable across discovery order and can be demangled by tooling.
+`coda_demangle_symbol()` parses compact names into their qualified components,
+receiver, and tagged generic arguments. Raw `@extern` names are not Coda-mangled
+names and cannot be decoded by this function.

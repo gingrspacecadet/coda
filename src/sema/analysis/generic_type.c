@@ -1,5 +1,6 @@
 #include "common.h"
 #include "../../mangle.h"
+#include "../../mangle.h"
 
 static HirType *generic_type_error(Sema *sema, AstType *ast, DiagCode code, String message, String note) {
     DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, code, ast->span, message);

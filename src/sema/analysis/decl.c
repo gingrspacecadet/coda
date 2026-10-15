@@ -1,5 +1,6 @@
 #include "common.h"
 #include "../../mangle.h"
+#include "../../mangle.h"
 
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (ast->generics.len != 0) {
@@ -46,6 +47,11 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         }
 
         symbol->type = type;
+    }
+
+    if (symbol->link_name.length == 0) {
+        Array arguments = array_create(sema->arena, sizeof(HirType *));
+        symbol->link_name = coda_mangle_symbol(sema, symbol, arguments, false);
     }
 
     if (symbol->link_name.length == 0) {
@@ -286,6 +292,11 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     }
 
     symbol->type = type;
+
+    if (symbol->link_name.length == 0) {
+        Array arguments = array_create(sema->arena, sizeof(HirType *));
+        symbol->link_name = coda_mangle_symbol(sema, symbol, arguments, false);
+    }
 
     if (symbol->link_name.length == 0) {
         Array arguments = array_create(sema->arena, sizeof(HirType *));
