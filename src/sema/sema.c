@@ -15,6 +15,7 @@ HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes) {
         .loop = false,
     };
     sema->module = module;
+    sema->root_module = module;
     sema->module_scope = sema->root_scope;
     sema->hir_module = hmod;
 

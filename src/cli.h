@@ -30,6 +30,7 @@ typedef struct {
     bool run;
     bool dump_ast;
     bool dump_hir;
+    bool dump_json;
     bool dump_lir;
 } CliOptions;
 

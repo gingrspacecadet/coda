@@ -36,6 +36,7 @@ typedef struct {
 
 typedef struct {
     AstModule *module;
+    AstModule *root_module;
 
     Array(Scope) scopes;
     Scope global_scope;
@@ -65,6 +66,7 @@ typedef struct {
 static inline Sema sema_create(Arena *arena, Diags *diags) {
     return (Sema){
         .module = NULL,
+        .root_module = NULL,
         .scopes = array_create(arena, sizeof(Scope)),
         .current_fn = NULL,
         .generic_instances = array_create(arena, sizeof(GenericInstance)),

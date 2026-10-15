@@ -307,6 +307,7 @@ struct HirGlobal {
 struct HirModule {
     Array(HirFunction) functions;
     Array(HirGlobal) globals;
+    String name;
 };
 
 typedef struct {
@@ -332,6 +333,7 @@ struct Symbol {
     SymbolKind kind;
     AstDecl *decl;
     AstName name;
+    String link_name;
     HirType *type;
     Span span;
 
@@ -341,6 +343,14 @@ struct Symbol {
     Symbol *canonical;
     bool is_exported;
 };
+
+static inline String symbol_link_name(const Symbol *symbol) {
+    if (symbol != NULL && symbol->link_name.data != NULL && symbol->link_name.length != 0)
+        return symbol->link_name;
+    if (symbol != NULL && symbol->name.kind == AST_NAME_IDENT)
+        return symbol->name.ident;
+    return (String){0};
+}
 
 static inline Symbol *symbol_canonical(Symbol *symbol) {
     return symbol != NULL && symbol->canonical != NULL ? symbol->canonical : symbol;

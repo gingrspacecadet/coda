@@ -980,7 +980,8 @@ static void emit_addr(X86Function *function, const LirInstruction *instruction) 
     const LirOperand *operand = &((LirOperand *)instruction->operands.data)[0];
 
     if (operand->kind == LIR_OPERAND_SYMBOL) {
-        fprintf(function->out, "    lea rax, %.*s[rip]\n", (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
+        String name = symbol_link_name(operand->symbol);
+        fprintf(function->out, "    lea rax, %.*s[rip]\n", (int)name.length, name.data);
     } else if (operand->kind == LIR_OPERAND_VALUE) {
         X86Slot *source = slot(function, operand->value);
         fprintf(function->out, "    lea rax, [rbp%ld]\n", source->offset);
@@ -1187,7 +1188,10 @@ static void emit_operand_address(X86Function *function, const LirOperand *operan
         }
 
         case LIR_OPERAND_SYMBOL:
-            fprintf(function->out, "    lea %s, %.*s[rip]\n", reg_name(reg, 8), (int)operand->symbol->name.ident.length, operand->symbol->name.ident.data);
+            {
+                String name = symbol_link_name(operand->symbol);
+                fprintf(function->out, "    lea %s, %.*s[rip]\n", reg_name(reg, 8), (int)name.length, name.data);
+            }
             return;
 
         default:
@@ -1322,7 +1326,8 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
         }
     }
 
-    fprintf(function->out, "    call %.*s\n", (int)symbol->name.ident.length, symbol->name.ident.data);
+    String name = symbol_link_name(symbol);
+    fprintf(function->out, "    call %.*s\n", (int)name.length, name.data);
     if (stack_size != 0)
         fprintf(function->out, "    add rsp, %zu\n", stack_size);
 
@@ -1603,7 +1608,7 @@ static void emit_terminator(X86Function *function, const LirTerminator *terminat
 
 static void emit_function(X86Function *function) {
     const LirFunction *lir = function->function;
-    String name = lir->symbol->name.ident;
+    String name = symbol_link_name(lir->symbol);
 
     fprintf(function->out, "\n.section .text\n");
 
@@ -1642,7 +1647,7 @@ static bool global_is_zero(const LirGlobal *global) {
 }
 
 static void emit_global(FILE *out, const LirGlobal *global) {
-    String name = global->symbol->name.ident;
+    String name = symbol_link_name(global->symbol);
     const char *section = global->is_mutable ? ".data" : ".rodata";
 
     if (global_is_zero(global))
@@ -1710,7 +1715,10 @@ static void emit_global(FILE *out, const LirGlobal *global) {
                 break;
 
             case LIR_DATA_ADDRESS:
-                fprintf(out, "    .quad %.*s\n", (int)data->symbol->name.ident.length, data->symbol->name.ident.data);
+                {
+                    String name = symbol_link_name(data->symbol);
+                    fprintf(out, "    .quad %.*s\n", (int)name.length, name.data);
+                }
                 offset = data->offset + type_size(data->type);
                 break;
         }
@@ -1723,7 +1731,7 @@ static void emit_global(FILE *out, const LirGlobal *global) {
 }
 
 static void emit_string(FILE *out, const LirString *string) {
-    String name = string->symbol->name.ident;
+    String name = symbol_link_name(string->symbol);
 
     fprintf(out, "\n.section .rodata\n.balign 1\n%.*s:\n", (int)name.length, name.data);
 

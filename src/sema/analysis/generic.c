@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
+#include "../../mangle.h"
 #include "common.h"
 
 static HirExpr *generic_error_expr(Sema *sema, AstExpr *ast) {
@@ -317,6 +318,10 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array receiv
         sema->module_scope = previous_module_scope;
         return NULL;
     }
+
+    Symbol link_symbol = *generic;
+    link_symbol.type = instance->type;
+    instance->link_name = coda_mangle_symbol(sema, &link_symbol, arguments, true);
 
     Array cached_receiver_arguments = array_create(sema->arena, sizeof(HirType *));
     for (size_t i = 0; i < receiver_arguments.len; i++) {

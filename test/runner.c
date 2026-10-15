@@ -1140,6 +1140,11 @@ int main(int argc, char **argv) {
     else
         stats.failed++;
 
+    if (test_mangling())
+        stats.passed++;
+    else
+        stats.failed++;
+
     if (argc == 1) {
         test_run_path("tests", &stats);
     } else {

@@ -1,4 +1,5 @@
 #include "common.h"
+#include "../../mangle.h"
 
 static HirType *generic_type_error(Sema *sema, AstType *ast, DiagCode code, String message, String note) {
     DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, code, ast->span, message);
@@ -187,6 +188,7 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic) {
     type->mutable = false;
     type->nominal = instance_symbol;
     type->base = base;
+    instance_symbol->link_name = coda_mangle_symbol(sema, generic, arguments, true);
     return generic_type_with_mutability(sema, type, ast->mutable);
 }
 
