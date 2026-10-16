@@ -1,0 +1,12 @@
+name: local variable may share a method name
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+type Thing = struct { int32 fd; };
+
+fn int32 Thing.size(Thing this) {
+    int32 size = 1;
+    return size;
+}

@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 
+#include "sema/common.h"
 #include "lir_lower.h"
 
 typedef struct {
@@ -18,6 +19,7 @@ typedef struct {
     LirBlockId header;
     LirBlockId exit;
     Array(LirBinding) bindings;
+    size_t stack_save_depth;
 } LirLoop;
 
 typedef struct {
@@ -28,6 +30,7 @@ typedef struct {
     Array(LirBinding) bindings;
     Array(LirBinding) addresses;
     Array(Symbol *) address_taken;
+    Array(LirOperand) stack_saves;
     Array(LirLoop) loops;
 } LirLower;
 
@@ -414,6 +417,29 @@ static bool hir_type_is_pointer(HirType *type) {
     return type && type->kind == HIR_TYPE_POINTER;
 }
 
+static bool lir_expr_is_place(HirExpr *expr) {
+    if (expr == NULL)
+        return false;
+
+    switch (expr->kind) {
+        case HIR_EXPR_VALUE:
+            return expr->value.symbol != NULL &&
+                   (expr->value.symbol->kind == SYMBOL_LOCAL ||
+                    expr->value.symbol->kind == SYMBOL_PARAMETER ||
+                    expr->value.symbol->kind == SYMBOL_GLOBAL);
+
+        case HIR_EXPR_FIELD:
+        case HIR_EXPR_INDEX:
+            return true;
+
+        case HIR_EXPR_UNARY:
+            return expr->unary.op == AST_UNARY_DEREF;
+
+        default:
+            return false;
+    }
+}
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr);
 
 static LirOperand lir_lower_init(LirLower *lower, HirExpr *expr) {
@@ -440,6 +466,40 @@ static LirOperand lir_lower_init(LirLower *lower, HirExpr *expr) {
 
 static LirOperand lir_lower_array_offset(LirLower *lower, HirExpr *expr);
 static LirOperand lir_lower_array_aggregate_offset(LirLower *lower, HirExpr *expr);
+
+static HirType *lir_unwrap_type(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+    return type;
+}
+
+static HirType *lir_sum_tag_type(LirLower *lower) {
+    HirType *type = arena_calloc(lower->function->arena, sizeof(*type));
+    *type = (HirType){
+        .kind = HIR_TYPE_BUILTIN,
+        .size = sizeof(uint64_t),
+        .align = _Alignof(uint64_t),
+        .builtin = BUILTIN_UINT64,
+    };
+    return type;
+}
+
+static size_t lir_sum_payload_offset(HirType *type) {
+    type = lir_unwrap_type(type);
+    assert(type != NULL && type->kind == HIR_TYPE_SUM);
+
+    size_t payload_align = 1;
+
+    for (size_t i = 0; i < type->sum.members.len; i++) {
+        HirType *member = lir_unwrap_type(((HirType **)type->sum.members.data)[i]);
+        if (member->align > payload_align)
+            payload_align = member->align;
+    }
+
+    size_t tag_size = sizeof(uint64_t);
+    size_t remainder = tag_size % payload_align;
+    return remainder == 0 ? tag_size : tag_size + payload_align - remainder;
+}
 
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
@@ -484,8 +544,18 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 }
 
                 case AST_UNARY_ADDRESS: {
-                    LirPlace place = lir_lower_place(lower, expr->unary.operand);
+                    if (!lir_expr_is_place(expr->unary.operand)) {
+                        LirOperand value = lir_lower_expr(lower, expr->unary.operand);
+                        LirValueId storage_id = lir_emit(lower->function, lower->block, LIR_OP_ZERO, value.type, (Array){0});
+                        LirOperand storage = lir_operand_value(storage_id, value.type);
+                        LirValueId address_id = lir_emit(lower->function, lower->block, LIR_OP_ADDR, expr->type, (Array){.data = &storage, .len = 1});
+                        LirOperand address = lir_operand_value(address_id, expr->type);
 
+                        lir_lower_store(lower, (LirPlace){.address = address, .type = value.type}, value);
+                        return address;
+                    }
+
+                    LirPlace place = lir_lower_place(lower, expr->unary.operand);
                     return place.address;
                 }
 
@@ -577,6 +647,58 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
 
         case HIR_EXPR_INIT:
             return lir_lower_init(lower, expr);
+
+        case HIR_EXPR_SUM_INJECT: {
+            HirType *sum_type = lir_unwrap_type(expr->type);
+            assert(sum_type != NULL && sum_type->kind == HIR_TYPE_SUM);
+            assert(expr->sum_inject.member_index < sum_type->sum.members.len);
+
+            HirType *member_type = lir_unwrap_type(
+                ((HirType **)sum_type->sum.members.data)[expr->sum_inject.member_index]
+            );
+            LirOperand value = lir_lower_expr(lower, expr->sum_inject.value);
+
+            LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, expr->type, (Array){0});
+            LirOperand aggregate = lir_operand_value(zero, expr->type);
+
+            HirType *tag_type = lir_sum_tag_type(lower);
+            LirOperand tag = lir_operand_uint((uint64_t)expr->sum_inject.member_index, tag_type);
+            LirOperand tag_operands[3] = {aggregate, lir_operand_offset(0), tag};
+
+            LirValueId tagged = lir_emit(lower->function, lower->block, LIR_OP_INSERT, expr->type, (Array){.data = tag_operands, .len = 3});
+            aggregate = lir_operand_value(tagged, expr->type);
+
+            if (member_type->size != 0) {
+                LirOperand payload_operands[3] = {aggregate, lir_operand_offset(lir_sum_payload_offset(sum_type)), value};
+                LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, expr->type, (Array){.data = payload_operands, .len = 3});
+                aggregate = lir_operand_value(result, expr->type);
+            }
+
+            return aggregate;
+        }
+
+        case HIR_EXPR_VLA_ALLOC: {
+            HirType *type = expr->type;
+            HirType *element = expr->vla_alloc.element;
+            assert(type != NULL && type->kind == HIR_TYPE_SLICE && type->slice.fields.len >= 2);
+            HirField *length_field = &((HirField *)type->slice.fields.data)[0];
+            HirField *pointer_field = &((HirField *)type->slice.fields.data)[1];
+            LirOperand length = lir_lower_expr(lower, expr->vla_alloc.length);
+            LirValueId cast_length = lir_emit(lower->function, lower->block, LIR_OP_CAST, length_field->type, (Array){.data = &length, .len = 1});
+            length = lir_operand_value(cast_length, length_field->type);
+            size_t alignment = element->align < 16 ? 16 : element->align;
+            LirOperand allocation_operands[3] = {length, lir_operand_offset(element->size), lir_operand_offset(alignment)};
+            LirValueId data = lir_emit(lower->function, lower->block, LIR_OP_STACK_ALLOC, pointer_field->type, (Array){.data = allocation_operands, .len = 3});
+            LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, type, (Array){0});
+            LirOperand aggregate = lir_operand_value(zero, type);
+            LirOperand length_operands[3] = {aggregate, lir_operand_offset(length_field->offset), length};
+            LirValueId with_length = lir_emit(lower->function, lower->block, LIR_OP_INSERT, type, (Array){.data = length_operands, .len = 3});
+            aggregate = lir_operand_value(with_length, type);
+            LirOperand pointer = lir_operand_value(data, pointer_field->type);
+            LirOperand pointer_operands[3] = {aggregate, lir_operand_offset(pointer_field->offset), pointer};
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, type, (Array){.data = pointer_operands, .len = 3});
+            return lir_operand_value(result, type);
+        }
 
         case HIR_EXPR_LAMBDA:
             assert(!"HIR expression not yet lowered");
@@ -971,6 +1093,10 @@ static void lir_lower_break(LirLower *lower) {
     assert(lower->loops.len != 0);
 
     LirLoop *loop = &((LirLoop *)lower->loops.data)[lower->loops.len - 1];
+    if (lower->stack_saves.len > loop->stack_save_depth) {
+        LirOperand saved_stack = ((LirOperand *)lower->stack_saves.data)[loop->stack_save_depth];
+        lir_emit(lower->function, lower->block, LIR_OP_STACK_RESTORE, NULL, (Array){.data = &saved_stack, .len = 1});
+    }
     Array(LirOperand) args = array_create(lower->function->arena, sizeof(LirOperand));
 
     lir_collect_branch_args(lower, &loop->bindings, &args);
@@ -981,6 +1107,10 @@ static void lir_lower_continue(LirLower *lower) {
     assert(lower->loops.len != 0);
 
     LirLoop *loop = &((LirLoop *)lower->loops.data)[lower->loops.len - 1];
+    if (lower->stack_saves.len > loop->stack_save_depth) {
+        LirOperand saved_stack = ((LirOperand *)lower->stack_saves.data)[loop->stack_save_depth];
+        lir_emit(lower->function, lower->block, LIR_OP_STACK_RESTORE, NULL, (Array){.data = &saved_stack, .len = 1});
+    }
     Array(LirOperand) args = array_create(lower->function->arena, sizeof(LirOperand));
 
     lir_collect_branch_args(lower, &loop->bindings, &args);
@@ -1022,6 +1152,7 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
         .header = header,
         .exit = exit,
         .bindings = snapshot,
+        .stack_save_depth = lower->stack_saves.len,
     };
 
     array_push(&lower->loops, &loop);
@@ -1178,21 +1309,66 @@ static LirOperand lir_lower_aggregate_store(LirLower *lower, HirExpr *target, Li
     return lir_operand_invalid();
 }
 
+static bool lir_stmt_contains_vla_alloc(HirStmt *stmt) {
+    if (stmt == NULL)
+        return false;
+
+    switch (stmt->kind) {
+        case HIR_STMT_BLOCK:
+            for (size_t i = 0; i < stmt->block.stmts.len; i++)
+                if (lir_stmt_contains_vla_alloc(((HirStmt **)stmt->block.stmts.data)[i])) return true;
+            return false;
+        case HIR_STMT_ASSIGN:
+            return stmt->assign.value != NULL && stmt->assign.value->kind == HIR_EXPR_VLA_ALLOC;
+        case HIR_STMT_IF:
+            return lir_stmt_contains_vla_alloc(stmt->_if.then) || lir_stmt_contains_vla_alloc(stmt->_if._else);
+        case HIR_STMT_WHILE:
+            return lir_stmt_contains_vla_alloc(stmt->_while.body);
+        case HIR_STMT_EXPR:
+        case HIR_STMT_RETURN:
+        case HIR_STMT_BREAK:
+        case HIR_STMT_CONTINUE:
+        case HIR_STMT_ERROR:
+            return false;
+    }
+
+    return false;
+}
+
 static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
     if (lir_lower_block_terminated(lower)) {
         return;
     }
 
     switch (stmt->kind) {
-        case HIR_STMT_BLOCK:
-            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
-                lir_lower_stmt(lower, ((HirStmt **)stmt->block.stmts.data)[i]);
-
-                if (lir_lower_block_terminated(lower)) {
-                    break;
-                }
+        case HIR_STMT_BLOCK: {
+            size_t stack_save_depth = lower->stack_saves.len;
+            bool has_vla = lir_stmt_contains_vla_alloc(stmt);
+            LirOperand saved_stack = lir_operand_invalid();
+            if (has_vla) {
+                HirType *stack_pointer_type = lir_address_type(lower, lower->function->return_type);
+                LirValueId stack_pointer = lir_emit(lower->function, lower->block, LIR_OP_STACK_SAVE, stack_pointer_type, (Array){0});
+                saved_stack = lir_operand_value(stack_pointer, stack_pointer_type);
+                array_push(&lower->stack_saves, &saved_stack);
             }
+            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
+                HirStmt *child = ((HirStmt **)stmt->block.stmts.data)[i];
+
+                if (child == NULL) {
+                    fprintf(stderr, "internal compiler error: null HIR statement in block at index %zu of %zu (span %zu:%zu)\n",
+                            i, stmt->block.stmts.len, source_line(stmt->span.source, stmt->span.offset), source_column(stmt->span.source, stmt->span.offset));
+                    abort();
+                }
+
+                lir_lower_stmt(lower, child);
+                if (lir_lower_block_terminated(lower))
+                    break;
+            }
+            if (has_vla && !lir_lower_block_terminated(lower))
+                lir_emit(lower->function, lower->block, LIR_OP_STACK_RESTORE, NULL, (Array){.data = &saved_stack, .len = 1});
+            lower->stack_saves.len = stack_save_depth;
             return;
+        }
 
         case HIR_STMT_ASSIGN: {
             HirExpr *target = stmt->assign.target;
@@ -1252,6 +1428,8 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
         }
         case HIR_STMT_EXPR:
             (void)lir_lower_expr(lower, stmt->expr);
+            if (hir_expr_is_noreturn_call(stmt->expr))
+                lir_set_terminator(lower->function, lower->block, (LirTerminator){.kind = LIR_TERM_UNREACHABLE});
             return;
 
         case HIR_STMT_RETURN:
@@ -1277,6 +1455,10 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
 
         case HIR_STMT_CONTINUE:
             lir_lower_continue(lower);
+            return;
+
+        case HIR_STMT_UNREACHABLE:
+            lir_set_terminator(lower->function, lower->block, (LirTerminator){.kind = LIR_TERM_UNREACHABLE});
             return;
 
         case HIR_STMT_ERROR:
@@ -1364,8 +1546,16 @@ static void lir_collect_address_taken_expr(Array(Symbol *) *symbols, HirExpr *ex
                 lir_collect_address_taken_expr(symbols, ((HirInitField *)expr->init.fields.data)[i].value);
             return;
 
+        case HIR_EXPR_VLA_ALLOC:
+            lir_collect_address_taken_expr(symbols, expr->vla_alloc.length);
+            return;
+
         case HIR_EXPR_LAMBDA:
             lir_collect_address_taken_stmt(symbols, expr->lambda.body);
+            return;
+
+        case HIR_EXPR_SUM_INJECT:
+            lir_collect_address_taken_expr(symbols, expr->sum_inject.value);
             return;
 
         case HIR_EXPR_ERROR:
@@ -1484,6 +1674,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
         .bindings = array_create(module->arena, sizeof(LirBinding)),
         .addresses = array_create(module->arena, sizeof(LirBinding)),
         .address_taken = address_taken,
+        .stack_saves = array_create(module->arena, sizeof(LirOperand)),
         .loops = array_create(module->arena, sizeof(LirLoop)),
     };
 

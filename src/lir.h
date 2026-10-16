@@ -84,6 +84,9 @@ typedef enum {
     LIR_OP_INSERT_DYNAMIC,
 
     LIR_OP_ZERO,
+    LIR_OP_STACK_SAVE,
+    LIR_OP_STACK_RESTORE,
+    LIR_OP_STACK_ALLOC,
 } LirOpcode;
 
 typedef struct {
@@ -103,6 +106,7 @@ typedef enum {
     LIR_TERM_RETURN,
     LIR_TERM_JUMP,
     LIR_TERM_BRANCH,
+    LIR_TERM_UNREACHABLE,
 } LirTerminatorKind;
 
 typedef struct {
@@ -226,6 +230,7 @@ static inline LirOperand lir_operand_offset(size_t offset) {
         .offset = offset,
     };
 }
+void lir_set_terminator(LirFunction *function, LirBlockId block_id, LirTerminator terminator);
 
 const char *lir_opcode_name(LirOpcode opcode);
 void lir_print(FILE *out, const LirModule *module);

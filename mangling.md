@@ -13,7 +13,7 @@ The final component is the declaration name; preceding components are its module
 path. This is the same compact, readable encoding used by the earlier compiler.
 
 Method names append `_R` followed by a length-prefixed receiver type. Generic
-specializations append `_G` plus the number of type arguments; each type argument
+specialisations append `_G` plus the number of type arguments; each type argument
 is prefixed by `T` and its byte length. For example, `std::io::identity<int32>`
 becomes `_C3std2io8identity_G1T5int32`.
 

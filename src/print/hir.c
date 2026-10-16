@@ -36,6 +36,7 @@ static const char *expr_kind_name(HirExprKind kind) {
     case HIR_EXPR_FIELD:     return "field";
     case HIR_EXPR_CAST:      return "cast";
     case HIR_EXPR_INIT:      return "init";
+    case HIR_EXPR_VLA_ALLOC: return "vla_alloc";
     case HIR_EXPR_LAMBDA:    return "lambda";
     }
 
@@ -303,6 +304,12 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
 
             print_expr(out, field->value, depth + 2);
         }
+        break;
+
+    case HIR_EXPR_VLA_ALLOC:
+        indent(out, depth + 1);
+        fputs("runtime length\n", out);
+        print_expr(out, expr->vla_alloc.length, depth + 2);
         break;
 
     case HIR_EXPR_LAMBDA:

@@ -46,6 +46,7 @@ typedef struct {
 
     HirModule *hir_module;
     HirFunction *current_fn;
+    AstType *vla_type_allowed;
 
     ModuleIndex modules;
 
@@ -69,6 +70,7 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .root_module = NULL,
         .scopes = array_create(arena, sizeof(Scope)),
         .current_fn = NULL,
+        .vla_type_allowed = NULL,
         .generic_instances = array_create(arena, sizeof(GenericInstance)),
         .function_defaults = array_create(arena, sizeof(FunctionDefaults)),
         .next_generic_instance = 0,

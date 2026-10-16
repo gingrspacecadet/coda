@@ -1426,6 +1426,33 @@ static void emit_instruction(X86Function *function, const LirInstruction *instru
             emit_zero(function, instruction);
             break;
 
+        case LIR_OP_STACK_SAVE:
+            fprintf(function->out, "    mov rax, rsp\n");
+            store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
+            break;
+
+        case LIR_OP_STACK_RESTORE: {
+            LirOperand *operands = instruction->operands.data;
+            load_operand(function, &operands[0], X86_RAX);
+            fprintf(function->out, "    mov rsp, rax\n");
+            break;
+        }
+
+        case LIR_OP_STACK_ALLOC: {
+            LirOperand *operands = instruction->operands.data;
+            size_t element_size = operands[1].offset;
+            size_t alignment = operands[2].offset;
+            load_operand(function, &operands[0], X86_RAX);
+            if (element_size == 0) fprintf(function->out, "    xor eax, eax\n");
+            else fprintf(function->out, "    imul rax, %zu\n", element_size);
+            if (alignment > 1) fprintf(function->out, "    add rax, %zu\n", alignment - 1);
+            fprintf(function->out, "    sub rsp, rax\n");
+            if (alignment > 1) fprintf(function->out, "    and rsp, -%zu\n", alignment);
+            fprintf(function->out, "    mov rax, rsp\n");
+            store_register(function, X86_RAX, instruction->result, type_size(instruction->result_type));
+            break;
+        }
+
         case LIR_OP_EXTRACT:
             emit_extract(function, instruction, false);
             break;
@@ -1601,7 +1628,12 @@ static void emit_terminator(X86Function *function, const LirTerminator *terminat
             emit_epilogue(function);
             break;
 
+        case LIR_TERM_UNREACHABLE:
+            fputs("ud2\n", function->out);
+            break;
+
         default:
+            fprintf(stderr, "terminator %d not yet implemented\n", terminator->kind);
             assert(!"terminator not implemented yet");
     }
 }

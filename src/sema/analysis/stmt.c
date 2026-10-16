@@ -34,25 +34,39 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
         return false;
     }
 
-    Symbol *existing = sema_lookup(sema, ast->name);
+    Symbol *existing = sema_lookup_non_method(sema, ast->name);
 
     if (existing != NULL) {
         error_shadowing(sema->diags, ast->name.ident, ast->span, existing->span);
         return false;
     }
 
+    AstType *previous_vla_type = sema->vla_type_allowed;
+    sema->vla_type_allowed = ast->type != NULL && ast->type->kind == AST_TYPE_ARRAY && ast->type->array.sized ? ast->type : NULL;
     HirType *type = sema_type(sema, ast->type);
+    sema->vla_type_allowed = previous_vla_type;
 
     if (type == NULL || type->kind == HIR_TYPE_ERROR)
         return false;
 
     HirExpr *init = NULL;
 
+    if (type->is_vla && ast->init != NULL) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("variable-length arrays cannot have an initializer"));
+        diag_finish(&diagnostic);
+        return false;
+    }
+
     if (ast->init != NULL) {
         init = sema_expr(sema, ast->init, type);
 
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
             return false;
+    }
+
+    if (type->is_vla) {
+        init = arena_calloc(sema->arena, sizeof(*init));
+        *init = (HirExpr){.span = ast->type->span, .kind = HIR_EXPR_VLA_ALLOC, .type = type, .vla_alloc = {.element = type->slice.element, .length = type->vla_length}};
     }
 
     Symbol *symbol = arena_calloc(sema->arena, sizeof(Symbol));
@@ -217,6 +231,312 @@ static HirStmt *lower_defer_exit(Sema *sema, HirStmt *exit, size_t scope) {
 
     array_push(&block->block.stmts, &exit);
     return block;
+}
+
+typedef struct {
+    HirExpr *condition;
+    HirStmt *body;
+    size_t member_index;
+} SemaMatchCase;
+
+static HirType *match_unwrap_type(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+    return type;
+}
+
+static size_t match_member_index(HirType *sum, HirType *type) {
+    for (size_t i = 0; i < sum->sum.members.len; i++) {
+        HirType *member = ((HirType **)sum->sum.members.data)[i];
+        if (type_equal(member, type))
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+static size_t match_payload_offset(HirType *sum) {
+    size_t align = 1;
+    for (size_t i = 0; i < sum->sum.members.len; i++) {
+        HirType *member = match_unwrap_type(((HirType **)sum->sum.members.data)[i]);
+        if (member->align > align)
+            align = member->align;
+    }
+
+    size_t tag_size = sizeof(uint64_t);
+    size_t remainder = tag_size % align;
+    return remainder == 0 ? tag_size : tag_size + align - remainder;
+}
+
+static HirExpr *match_field_expr(Sema *sema, Span span, HirExpr *object, HirType *type, size_t offset) {
+    HirField *field = arena_calloc(sema->arena, sizeof(*field));
+    *field = (HirField){.type = type, .offset = offset};
+
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
+    *expr = (HirExpr){
+        .span = span,
+        .kind = HIR_EXPR_FIELD,
+        .type = type,
+        .field = {.object = object, .field = field},
+    };
+    return expr;
+}
+
+static HirExpr *match_local_ref(Sema *sema, Span span, Symbol *symbol, HirType *type) {
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
+    *expr = (HirExpr){
+        .span = span,
+        .kind = HIR_EXPR_VALUE,
+        .type = type,
+        .value = {.symbol = symbol},
+    };
+    return expr;
+}
+
+static bool match_insert_binding(Sema *sema, AstName name, HirType *type, Span span, HirExpr *value, HirStmt **init) {
+    if (name.kind != AST_NAME_IDENT)
+        return false;
+
+    Scope *scope = array_at(&sema->scopes, sema->scopes.len - 1);
+    Symbol *previous = scope_lookup(scope, name);
+    if (previous == NULL)
+        previous = sema_lookup_non_method(sema, name);
+
+    if (previous != NULL) {
+        error_shadowing(sema->diags, name.ident, span, previous->span);
+        return false;
+    }
+
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+    *symbol = (Symbol){
+        .kind = SYMBOL_LOCAL,
+        .name = name,
+        .type = type,
+        .span = span,
+    };
+    scope_insert(scope, symbol);
+
+    HirLocal local = {.symbol = symbol, .type = type};
+    array_push(&sema->current_fn->locals, &local);
+
+    HirExpr *target = match_local_ref(sema, span, symbol, type);
+    *init = hir_stmt(sema, HIR_STMT_ASSIGN, span);
+    (*init)->assign = (typeof((*init)->assign)){
+        .op = AST_BINARY_ASSIGN,
+        .target = target,
+        .value = value,
+    };
+    return true;
+}
+
+static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
+    HirStmt *error = hir_stmt(sema, HIR_STMT_ERROR, ast->span);
+
+    if (sema->current_fn == NULL) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("match requires a sum-type value inside a function"));
+        diag_finish(&diagnostic);
+        return error;
+    }
+
+    HirExpr *scrutinee = sema_expr(sema, ast->match.expr, NULL);
+    if (scrutinee == NULL || scrutinee->kind == HIR_EXPR_ERROR || scrutinee->type == NULL)
+        return error;
+
+    HirType *sum = match_unwrap_type(scrutinee->type);
+    if (sum == NULL || sum->kind != HIR_TYPE_SUM) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->match.expr->span, STRING("match currently requires a sum-type value"));
+        diag_finish(&diagnostic);
+        return error;
+    }
+
+    HirType *tag_type = builtin_type(sema, BUILTIN_UINT64);
+    HirType *bool_type = builtin_type(sema, BUILTIN_BOOL);
+    size_t member_count = sum->sum.members.len;
+    bool *covered = arena_calloc(sema->arena, sizeof(bool) * member_count);
+
+    Symbol *temporary = arena_calloc(sema->arena, sizeof(*temporary));
+    *temporary = (Symbol){
+        .kind = SYMBOL_LOCAL,
+        .name = {.kind = AST_NAME_ERROR},
+        .type = scrutinee->type,
+        .span = ast->span,
+    };
+    HirLocal temporary_local = {.symbol = temporary, .type = scrutinee->type};
+    array_push(&sema->current_fn->locals, &temporary_local);
+
+    HirStmt *save = hir_stmt(sema, HIR_STMT_ASSIGN, ast->match.expr->span);
+    save->assign = (typeof(save->assign)){
+        .op = AST_BINARY_ASSIGN,
+        .target = match_local_ref(sema, ast->match.expr->span, temporary, scrutinee->type),
+        .value = scrutinee,
+    };
+
+    HirExpr *temporary_ref = match_local_ref(sema, ast->match.expr->span, temporary, scrutinee->type);
+    Array(SemaMatchCase) cases = array_create(sema->arena, sizeof(SemaMatchCase));
+    bool exhaustive = false;
+
+    for (size_t i = 0; i < ast->match.cases.len; i++) {
+        AstMatchCase *ast_case = array_at(&ast->match.cases, i);
+        AstPattern *pattern = ast_case->pattern;
+        size_t member_index = SIZE_MAX;
+        bool unconditional = false;
+        bool bind_payload = false;
+        AstName binding_name = {.kind = AST_NAME_ERROR};
+        HirType *binding_type = NULL;
+
+        switch (pattern->kind) {
+            case AST_PATTERN_WILDCARD:
+                unconditional = true;
+                exhaustive = true;
+                break;
+
+            case AST_PATTERN_VARIANT: {
+                Symbol *variant = sema_lookup(sema, pattern->variant.name);
+                if (variant == NULL || variant->kind != SYMBOL_TYPE || variant->type == NULL) {
+                    String name = pattern->variant.name.kind == AST_NAME_IDENT ? pattern->variant.name.ident : STRING("<pattern>");
+                    error_unknown_name(sema->diags, name, pattern->span);
+                    return error;
+                }
+
+                member_index = match_member_index(sum, variant->type);
+                if (member_index == SIZE_MAX) {
+                    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, pattern->span, STRING("pattern type is not a member of the matched sum type"));
+                    diag_finish(&diagnostic);
+                    return error;
+                }
+
+                binding_name = pattern->variant.binding;
+                binding_type = ((HirType **)sum->sum.members.data)[member_index];
+                bind_payload = true;
+                break;
+            }
+
+            case AST_PATTERN_BINDING: {
+                Symbol *symbol = sema_lookup(sema, pattern->binding);
+                if (symbol != NULL && symbol->kind == SYMBOL_TYPE && symbol->type != NULL) {
+                    member_index = match_member_index(sum, symbol->type);
+                    if (member_index == SIZE_MAX) {
+                        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, pattern->span, STRING("pattern type is not a member of the matched sum type"));
+                        diag_finish(&diagnostic);
+                        return error;
+                    }
+                } else {
+                    unconditional = true;
+                    exhaustive = true;
+                    binding_name = pattern->binding;
+                    binding_type = scrutinee->type;
+                    bind_payload = true;
+                }
+                break;
+            }
+
+            default: {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, pattern->span, STRING("this match pattern form is not supported yet"));
+                diag_note(&diagnostic, STRING("sum-type matches currently support type variants, payload bindings, and wildcard patterns"));
+                diag_finish(&diagnostic);
+                return error;
+            }
+        }
+
+        if (member_index != SIZE_MAX) {
+            if (covered[member_index]) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, pattern->span, STRING("duplicate sum-type match case"));
+                diag_finish(&diagnostic);
+                return error;
+            }
+            covered[member_index] = true;
+        }
+
+        if (unconditional)
+            for (size_t j = 0; j < member_count; j++)
+                covered[j] = true;
+
+        HirExpr *condition = NULL;
+        if (!unconditional) {
+            HirExpr *tag = match_field_expr(sema, pattern->span, temporary_ref, tag_type, 0);
+            HirExpr *index = arena_calloc(sema->arena, sizeof(*index));
+            *index = (HirExpr){
+                .span = pattern->span,
+                .kind = HIR_EXPR_LITERAL,
+                .type = tag_type,
+                .literal = {.kind = HIR_LITERAL_INTEGER, .integer = member_index},
+            };
+
+            condition = arena_calloc(sema->arena, sizeof(*condition));
+            *condition = (HirExpr){
+                .span = pattern->span,
+                .kind = HIR_EXPR_BINARY,
+                .type = bool_type,
+                .binary = {.op = AST_BINARY_EQUAL, .left = tag, .right = index},
+            };
+        }
+
+        HirStmt *binding_init = NULL;
+        sema_push_scope(sema);
+
+        if (bind_payload) {
+            HirExpr *value = temporary_ref;
+            if (member_index != SIZE_MAX)
+                value = match_field_expr(sema, pattern->span, temporary_ref, binding_type, match_payload_offset(sum));
+
+            if (!match_insert_binding(sema, binding_name, binding_type, pattern->span, value, &binding_init)) {
+                sema_pop_scope(sema);
+                return error;
+            }
+        }
+
+        HirStmt *body = sema_stmt(sema, ast_case->body);
+        sema_pop_scope(sema);
+
+        if (body == NULL || body->kind == HIR_STMT_ERROR)
+            return error;
+
+        if (binding_init != NULL) {
+            HirStmt *block = hir_stmt(sema, HIR_STMT_BLOCK, ast_case->span);
+            block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+            array_push(&block->block.stmts, &binding_init);
+            array_push(&block->block.stmts, &body);
+            body = block;
+        }
+
+        SemaMatchCase lowered = {
+            .condition = condition,
+            .body = body,
+            .member_index = member_index,
+        };
+        array_push(&cases, &lowered);
+    }
+
+    for (size_t i = 0; i < member_count; i++) {
+        if (!covered[i]) {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("match does not cover every member of the sum type"));
+            diag_finish(&diagnostic);
+            return error;
+        }
+    }
+
+    exhaustive = true;
+    HirStmt *chain = NULL;
+    for (size_t i = cases.len; i > 0; i--) {
+        SemaMatchCase *current = array_at(&cases, i - 1);
+
+        if (current->condition == NULL || (exhaustive && i == cases.len && current->member_index != SIZE_MAX)) {
+            chain = current->body;
+            continue;
+        }
+
+        HirStmt *branch = hir_stmt(sema, HIR_STMT_IF, ast->span);
+        branch->_if.cond = current->condition;
+        branch->_if.then = current->body;
+        branch->_if._else = chain;
+        chain = branch;
+    }
+
+    HirStmt *result = hir_stmt(sema, HIR_STMT_BLOCK, ast->span);
+    result->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+    array_push(&result->block.stmts, &save);
+    if (chain != NULL)
+        array_push(&result->block.stmts, &chain);
+    return result;
 }
 
 HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
@@ -546,9 +866,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
         }
 
         case AST_STMT_MATCH:
-            //! TODO: lower match
-            hir->kind = HIR_STMT_ERROR;
-            break;
+            return sema_match_stmt(sema, ast);
 
         case AST_STMT_DEFER:
             //! TODO: lower defer

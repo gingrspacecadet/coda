@@ -98,6 +98,7 @@ static bool hir_stmt_terminates(HirStmt *stmt) {
         case HIR_STMT_RETURN:
         case HIR_STMT_BREAK:
         case HIR_STMT_CONTINUE:
+        case HIR_STMT_UNREACHABLE:
             return true;
 
         case HIR_STMT_BLOCK:
@@ -108,6 +109,9 @@ static bool hir_stmt_terminates(HirStmt *stmt) {
 
         case HIR_STMT_IF:
             return stmt->_if._else != NULL && hir_stmt_terminates(stmt->_if.then) && hir_stmt_terminates(stmt->_if._else);
+
+        case HIR_STMT_EXPR:
+            return hir_expr_is_noreturn_call(stmt->expr);
 
         default:
             return false;
@@ -144,6 +148,7 @@ void scope_insert(Scope *scope, Symbol *sym);
 Symbol *scope_lookup(Scope *scope, AstName name);
 Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);
 Symbol *sema_lookup(Sema *sema, AstName name);
+Symbol *sema_lookup_non_method(Sema *sema, AstName name);
 Symbol *sema_lookup_path(Sema *sema, Path path);
 bool sema_is_place(HirExpr *expr);
 

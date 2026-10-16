@@ -281,6 +281,20 @@ static HirExpr *sema_array_to_slice(Sema *sema, HirExpr *expr, HirType *type) {
     return slice;
 }
 
+static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_t member_index) {
+    HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
+    *expr = (HirExpr) {
+        .span = value->span,
+        .kind = HIR_EXPR_SUM_INJECT,
+        .type = type,
+        .sum_inject = {
+            .value = value,
+            .member_index = member_index,
+        },
+    };
+    return expr;
+}
+
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr == NULL || type == NULL)
         return expr;
@@ -310,6 +324,15 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
 
             if (slice != NULL)
                 return slice;
+        }
+
+        HirType *sum = sema_unwrap_type(type);
+        if (sum != NULL && sum->kind == HIR_TYPE_SUM) {
+            for (size_t i = 0; i < sum->sum.members.len; i++) {
+                HirType *member = ((HirType **)sum->sum.members.data)[i];
+                if (type_equal(expr->type, member))
+                    return sema_sum_inject(sema, expr, type, i);
+            }
         }
 
         error_type_mismatch(sema->diags, type, expr->type, expr->span);
@@ -930,7 +953,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
             sema_type_has_super(receiver_object, receiver_param->pointer.pointee);
 
         if (inherited_receiver) {
-            if (receiver->type->kind != HIR_TYPE_POINTER && sema_is_place(receiver)) {
+            if (receiver->type->kind != HIR_TYPE_POINTER) {
                 HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
                 *address = (HirExpr){
                     .span = receiver->span,
@@ -951,8 +974,7 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
             receiver = cast;
         } else {
             if (receiver_param->kind == HIR_TYPE_POINTER &&
-                type_equal(receiver->type, receiver_param->pointer.pointee) &&
-                sema_is_place(receiver)) {
+                type_equal(receiver->type, receiver_param->pointer.pointee)) {
                 HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
                 *address = (HirExpr){
                     .span = receiver->span,
@@ -1747,15 +1769,15 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->kind = HIR_EXPR_CAST;
             HirType *target = sema_type(sema, ast->cast.type);
             bool literal_context = sema_type_is_float(target) && sema_is_untyped_numeric_expression(ast->cast.operand);
-            HirExpr *operand = sema_expr(sema, ast->cast.operand, literal_context ? target : NULL);
+            bool aggregate_context = ast->cast.operand != NULL && ast->cast.operand->kind == AST_EXPR_INIT;
+            HirExpr *operand = sema_expr(sema, ast->cast.operand, literal_context || aggregate_context ? target : NULL);
 
             if (target == NULL || target->kind == HIR_TYPE_ERROR || operand == NULL || operand->kind == HIR_EXPR_ERROR) {
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            if ((sema_type_is_float(target) || sema_type_is_float(operand->type)) &&
-                (!sema_type_is_numeric(target) || !sema_type_is_numeric(operand->type))) {
+            if ((sema_type_is_float(target) || sema_type_is_float(operand->type)) && (!sema_type_is_numeric(target) || !sema_type_is_numeric(operand->type))) {
                 error_type_mismatch(sema->diags, target, operand->type, ast->span);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
@@ -1764,6 +1786,10 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->cast.type = target;
             hir->cast.operand = operand;
             hir->type = target;
+            
+            if (expected != NULL)
+                return expr_coerce(sema, hir, expected);
+            
             break;
         }
 
@@ -1849,16 +1875,16 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->init.fields = array_create(sema->arena, sizeof(HirInitField));
 
             if (expected == NULL) {
-                //! TODO: infer initialiser type
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("cannot infer aggregate initializer type"));
+                diag_note(&diagnostic, STRING("provide an expected struct, union, array, or slice type"));
+                diag_finish(&diagnostic);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
 
-            if (expected->kind != HIR_TYPE_STRUCT &&
-                expected->kind != HIR_TYPE_UNION &&
-                expected->kind != HIR_TYPE_ARRAY &&
-                expected->kind != HIR_TYPE_SLICE) {
-                //! TODO: expected aggregate initialiser
+            if (expected->kind != HIR_TYPE_STRUCT && expected->kind != HIR_TYPE_UNION && expected->kind != HIR_TYPE_ARRAY && expected->kind != HIR_TYPE_SLICE) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("aggregate initializer requires a struct, union, array, or slice type"));
+                diag_finish(&diagnostic);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }

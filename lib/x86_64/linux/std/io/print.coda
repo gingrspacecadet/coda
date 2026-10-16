@@ -2,10 +2,7 @@ module std::io;
 
 include std::system;
 
-type int = int32;
-type string = uint8[];
-@alias
-type char = uint8;
+include std::types : _;
 
 @export
 fn int print(string s) {

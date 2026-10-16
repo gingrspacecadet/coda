@@ -17,6 +17,21 @@ Symbol *scope_lookup(Scope *scope, AstName name) {
     return NULL;
 }
 
+static bool sema_symbol_is_method(Symbol *symbol) {
+    return symbol->kind == SYMBOL_FN && symbol->decl != NULL &&
+           symbol->decl->kind == AST_DECL_FN && symbol->decl->fn.receiver != NULL;
+}
+
+static Symbol *scope_lookup_non_method(Scope *scope, AstName name) {
+    for (size_t i = scope->syms.len; i > 0; --i) {
+        Symbol *symbol = (Symbol *)array_at(&scope->syms, i - 1);
+        if (ast_name_equal(&symbol->name, &name) && !sema_symbol_is_method(symbol))
+            return symbol;
+    }
+
+    return NULL;
+}
+
 Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl) {
     for (size_t i = scope->syms.len; i > 0; i--) {
         Symbol *symbol = array_at(&scope->syms, i - 1);
@@ -43,6 +58,21 @@ Symbol *sema_lookup(Sema *sema, AstName name) {
         return symbol;
 
     return scope_lookup(&sema->builtin_scope, name);
+}
+
+Symbol *sema_lookup_non_method(Sema *sema, AstName name) {
+    for (size_t i = sema->scopes.len; i > 0; --i) {
+        Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
+        Symbol *symbol = scope_lookup_non_method(scope, name);
+        if (symbol != NULL)
+            return symbol;
+    }
+
+    Symbol *symbol = scope_lookup_non_method(&sema->global_scope, name);
+    if (symbol != NULL)
+        return symbol;
+
+    return scope_lookup_non_method(&sema->builtin_scope, name);
 }
 
 static Symbol *sema_lookup_enum_item(Symbol *symbol, AstName name) {

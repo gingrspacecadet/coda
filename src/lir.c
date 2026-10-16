@@ -24,7 +24,7 @@ static void lir_assert_unterminated(LirFunction *function, LirBlockId block_id) 
     assert(block->terminator.kind == LIR_TERM_NONE);
 }
 
-static void lir_set_terminator(LirFunction *function, LirBlockId block_id, LirTerminator terminator) {
+void lir_set_terminator(LirFunction *function, LirBlockId block_id, LirTerminator terminator) {
     LirBlock *block = lir_get_block(function, block_id);
 
     assert(block->terminator.kind == LIR_TERM_NONE);
@@ -286,6 +286,9 @@ const char *lir_opcode_name(LirOpcode opcode) {
         case LIR_OP_EXTRACT_DYNAMIC: return "extract_dynamic";
         case LIR_OP_INSERT_DYNAMIC: return "insert_dynamic";
         case LIR_OP_ZERO: return "zero";
+        case LIR_OP_STACK_SAVE: return "stack_save";
+        case LIR_OP_STACK_RESTORE: return "stack_restore";
+        case LIR_OP_STACK_ALLOC: return "stack_alloc";
     }
 
     return "<invalid>";
@@ -404,6 +407,9 @@ static void lir_print_terminator(FILE *out, const LirTerminator *terminator) {
 
             fprintf(out, "\n");
             break;
+
+        case LIR_TERM_UNREACHABLE:
+            fputs("        unreachable", out);
     }
 }
 

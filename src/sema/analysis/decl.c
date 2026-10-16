@@ -96,12 +96,19 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     sema->current_fn = fn;
 
     //! TODO: analyse attributes properly
-    if (ast->attrs.len > 0 && string_eq(((AstAttribute *)array_at(&ast->attrs, 0))->name, STRING("export")))
-        fn->is_export = true;
+    for (size_t i = 0; i < ast->attrs.len; i++) {
+        AstAttribute attr = ((AstAttribute *)ast->attrs.data)[i];
+
+        if (string_eq(attr.name, STRING("export")))
+            fn->is_export = true;
+        else if (string_eq(attr.name, STRING("noreturn")))
+            fn->is_noreturn = true;
+    }
 
     fn->body = sema_stmt(sema, ast->body);
 
     if (fn->body == NULL || fn->body->kind == HIR_STMT_ERROR) {
+        fprintf(stderr, "internal compiler error: dropping body of function %.*s\n", string_fmt(fn->symbol->name.ident));
         sema->current_fn = previous_fn;
         sema_pop_scope(sema);
         return;
@@ -116,10 +123,16 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (!returns_none && !hir_stmt_terminates(fn->body))
         error_missing_return_value(sema->diags, return_type, ast->body->span);
 
-    if (returns_none && !hir_stmt_terminates(fn->body) && fn->body->kind == HIR_STMT_BLOCK) {
-        HirStmt *ret = arena_calloc(sema->arena, sizeof(HirStmt *));
-        ret->kind = HIR_STMT_RETURN;
-        array_push(&fn->body->block.stmts, ret);
+    if (fn->body != NULL && fn->body->kind == HIR_STMT_BLOCK && !hir_stmt_terminates(fn->body)) {
+        if (fn->is_noreturn) {
+            HirStmt *unreachable = arena_calloc(sema->arena, sizeof(*unreachable));
+            unreachable->kind = HIR_STMT_UNREACHABLE;
+            array_push(&fn->body->block.stmts, &unreachable);
+        } else if (returns_none) {
+            HirStmt *ret = arena_calloc(sema->arena, sizeof(*ret));
+            ret->kind = HIR_STMT_RETURN;
+            array_push(&fn->body->block.stmts, &ret);
+        }
     }
 
     sema->current_fn = previous_fn;

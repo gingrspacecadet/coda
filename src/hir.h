@@ -59,6 +59,8 @@ struct HirType {
     Symbol *nominal;
     HirType *base;
     HirType *super;
+    bool is_vla;
+    HirExpr *vla_length;
 
     union {
         BuiltinType builtin;
@@ -145,6 +147,8 @@ typedef enum {
     HIR_EXPR_FIELD,
     HIR_EXPR_CAST,
     HIR_EXPR_INIT,
+    HIR_EXPR_SUM_INJECT,
+    HIR_EXPR_VLA_ALLOC,
     HIR_EXPR_LAMBDA,
 } HirExprKind;
 
@@ -196,11 +200,21 @@ struct HirExpr {
         } init;
 
         struct {
+            HirExpr *value;
+            size_t member_index;
+        } sum_inject;
+
+        struct {
             Symbol *symbol;
             Array(HirParam) params;
             HirType *ret;
             HirStmt *body;
         } lambda;
+        struct {
+            HirType *element;
+            HirExpr *length;
+        } vla_alloc;
+
     };
 };
 
@@ -225,6 +239,7 @@ typedef enum {
     HIR_STMT_WHILE,
     HIR_STMT_BREAK,
     HIR_STMT_CONTINUE,
+    HIR_STMT_UNREACHABLE,
 } HirStmtKind;
 
 struct HirStmt {
@@ -287,6 +302,7 @@ struct HirFunction {
     bool is_extern;
     bool is_export;
     bool is_comptime;
+    bool is_noreturn;
 };
 
 typedef enum {

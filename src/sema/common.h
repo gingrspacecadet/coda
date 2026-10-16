@@ -105,6 +105,25 @@ static String binary_op_name(AstBinaryOp op) {
     return STRING("?");
 }
 
+static inline bool hir_expr_is_noreturn_call(HirExpr *expr) {
+    if (expr == NULL || expr->kind != HIR_EXPR_CALL || expr->call.function == NULL)
+        return false;
+
+    Symbol *symbol = expr->call.function;
+    if (symbol->decl == NULL || symbol->decl->kind != AST_DECL_FN)
+        return false;
+
+    AstFnDecl *fn = &symbol->decl->fn;
+    for (size_t i = 0; i < fn->attrs.len; i++) {
+        AstAttribute *attr = array_at(&fn->attrs, i);
+        if (string_eq(attr->name, STRING("noreturn"))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void scope_insert(Scope *scope, Symbol *sym);
 Symbol *scope_lookup(Scope *scope, AstName name);
 Symbol *sema_lookup(Sema *sema, AstName name);
@@ -118,6 +137,7 @@ HirType *sema_generic_type(Sema *sema, AstType *ast, Symbol *generic);
 Symbol *sema_generic_receiver_type(Sema *sema, AstType *receiver);
 bool sema_method_receiver_arguments(Sema *sema, Symbol *method, HirType *receiver, Array *arguments, bool *is_generic);
 HirExpr *sema_generic_method_call(Sema *sema, AstExpr *ast, HirType *expected, Symbol *generic, Array receiver_arguments, HirExpr *receiver, bool has_implicit_receiver);
+bool sema_generic_method_receiver_matches(Sema *sema, AstFnDecl *fn, HirType *receiver, bool *is_generic_pattern);
 bool sema_fn_has_unbound_receiver_generics(Sema *sema, AstFnDecl *fn);
 GenericTypeInstance *sema_generic_type_instance_for_type(Sema *sema, HirType *type, Symbol *generic);
 bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments, Span span);

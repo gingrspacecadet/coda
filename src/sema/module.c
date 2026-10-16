@@ -562,6 +562,15 @@ static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *
             }
             continue;
         }
+
+        bool generic_pattern = false;
+        if (sema_generic_method_receiver_matches(sema, candidate, receiver, &generic_pattern)) {
+            result = symbol;
+            break;
+        }
+
+        if (generic_pattern)
+            continue;
         
         HirType *candidate_receiver = sema_type(sema, candidate->receiver);
         if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)

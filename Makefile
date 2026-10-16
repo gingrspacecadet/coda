@@ -162,4 +162,8 @@ build/test/%.o: test/%.c
 test: $(TARGET) $(TEST_TARGET)
 	$(TEST_TARGET) tests
 
+.PHONY: install
+install: all
+	@sudo cp $(TARGET) /usr/bin
+
 -include $(patsubst %.o,%.d,$(LIB_OBJS) $(CLI_OBJ) $(NATIVE_BACKEND_OBJS) $(BACKEND_OBJS) $(TEST_OBJS))

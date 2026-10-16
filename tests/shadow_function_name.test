@@ -1,0 +1,12 @@
+name: local variable cannot shadow an ordinary function
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn int32 size() { return 1; }
+
+fn int32 test() {
+    int32 size = 2;
+    return size;
+}

@@ -1,0 +1,16 @@
+module std::types;
+
+@export,alias
+type int = int32;
+
+@export,alias
+type char = uint8;
+
+@export,alias
+type string = char[];
+
+@export,alias
+type ssize = int64;
+
+@export,alias
+type usize = uint64;

@@ -1,0 +1,13 @@
+name: infer generic method parameters from sum receiver
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+fn T (T | E).fallback<T, E>((T | E) *this, T fallback) {
+    return fallback;
+}
+
+fn int32 test((int32 | bool) value) {
+    return value.fallback(123);
+}

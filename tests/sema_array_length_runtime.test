@@ -1,0 +1,13 @@
+name: variable-length local array runs
+expect: pass
+stop: run
+
+[source]
+fn int32 main(int32 argc, uint8 **argv) {
+    mut uint8[argc] buffer;
+    buffer[0] = 42;
+    if (buffer[0] != 42) {
+        return 1;
+    }
+    return 0;
+}

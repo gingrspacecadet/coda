@@ -211,6 +211,61 @@ static size_t align_up(size_t value, size_t align) {
     return remainder == 0 ? value : value + align - remainder;
 }
 
+static bool sema_runtime_integer_type(HirType *type) {
+    while (type != NULL && type->base != NULL)
+        type = type->base;
+
+    if (type != NULL && type->kind == HIR_TYPE_ENUM) {
+        type = type->_enum.underlying;
+        while (type != NULL && type->base != NULL)
+            type = type->base;
+    }
+
+    if (type == NULL || type->kind != HIR_TYPE_BUILTIN)
+        return false;
+
+    switch (type->builtin) {
+        case BUILTIN_INT8:
+        case BUILTIN_INT16:
+        case BUILTIN_INT32:
+        case BUILTIN_INT64:
+        case BUILTIN_UINT8:
+        case BUILTIN_UINT16:
+        case BUILTIN_UINT32:
+        case BUILTIN_UINT64:
+            return true;
+        case BUILTIN_BOOL:
+        case BUILTIN_NONE:
+        case BUILTIN_FLOAT32:
+        case BUILTIN_FLOAT64:
+            return false;
+    }
+
+    return false;
+}
+
+static HirType *sema_make_vla_slice(Sema *sema, AstType *ast, HirType *hir, HirType *element, HirType *length_type) {
+    HirType *pointer = pointer_type(sema, element, false);
+    hir->kind = HIR_TYPE_SLICE;
+    hir->slice.element = element;
+    hir->slice.fields = array_create(sema->arena, sizeof(HirField));
+
+    Symbol *length_symbol = arena_calloc(sema->arena, sizeof(*length_symbol));
+    *length_symbol = (Symbol){.kind = SYMBOL_FIELD, .name = {.kind = AST_NAME_IDENT, .ident = STRING("len")}, .type = length_type, .span = ast->span};
+    HirField length_field = {.symbol = length_symbol, .type = length_type, .offset = 0};
+    array_push(&hir->slice.fields, &length_field);
+
+    size_t pointer_offset = align_up(length_type->size, pointer->align);
+    Symbol *pointer_symbol = arena_calloc(sema->arena, sizeof(*pointer_symbol));
+    *pointer_symbol = (Symbol){.kind = SYMBOL_FIELD, .name = {.kind = AST_NAME_IDENT, .ident = STRING("ptr")}, .type = pointer, .span = ast->span};
+    HirField pointer_field = {.symbol = pointer_symbol, .type = pointer, .offset = pointer_offset};
+    array_push(&hir->slice.fields, &pointer_field);
+
+    hir->align = length_type->align > pointer->align ? length_type->align : pointer->align;
+    hir->size = align_up(pointer_offset + pointer->size, hir->align);
+    return hir;
+}
+
 static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t offset, Span span) {
     Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
     *symbol = (Symbol) {
@@ -291,6 +346,12 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             HirType *element = sema_type(sema, ast->array.element);
             if (!ast->array.sized)
                 sema->type_indirection_depth--;
+
+            if (element == NULL || element->kind == HIR_TYPE_ERROR) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
             HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
             assert(length_type != NULL);
 
@@ -345,14 +406,49 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
 
             HirExpr *length = sema_expr(sema, ast->array.length, NULL);
+            if (length == NULL || length->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            HirExpr *runtime_length = length;
             CompContext context = {
                 .sema = sema,
                 .frame = NULL
             };
             length = comp_eval_expr(&context, length);
+            if (length == NULL || length->kind == HIR_EXPR_ERROR) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
 
             if (length->kind != HIR_EXPR_LITERAL) {
-                //! TODO: expected comptime integer
+                if (ast == sema->vla_type_allowed && sema->current_fn != NULL) {
+                    if (!sema_runtime_integer_type(runtime_length->type)) {
+                        error_expected_integer(sema->diags, ast->array.length->span);
+                        hir->kind = HIR_TYPE_ERROR;
+                        return hir;
+                    }
+                    sema_make_vla_slice(sema, ast, hir, element, length_type);
+                    hir->is_vla = true;
+                    hir->vla_length = runtime_length;
+                    return hir;
+                }
+                DiagBuilder diagnostic = diag_begin(
+                    sema->diags,
+                    DIAG_ERROR,
+                    E_COMP_CANT_EVAL,
+                    ast->array.length->span,
+                    STRING("array length must be a compile-time integer")
+                );
+                diag_note(&diagnostic, STRING("this expression cannot be evaluated at compile time"));
+                diag_finish(&diagnostic);
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            if (length->literal.kind != HIR_LITERAL_INTEGER) {
+                error_expected_integer(sema->diags, ast->array.length->span);
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
             }
@@ -409,17 +505,63 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             }
             break;
 
-        case AST_TYPE_SUM:
+        case AST_TYPE_SUM: {
             hir->kind = HIR_TYPE_SUM;
             hir->sum.members = array_create(sema->arena, sizeof(HirType *));
 
+            size_t payload_size = 0;
+            size_t payload_align = 1;
+
             for (size_t i = 0; i < ast->sum.members.len; i++) {
                 AstType *member = ((AstType **)ast->sum.members.data)[i];
-
                 HirType *type = sema_type(sema, member);
+
+                if (type == NULL || type->kind == HIR_TYPE_ERROR) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+
                 array_push(&hir->sum.members, &type);
+
+                HirType *layout = type;
+                while (layout->base != NULL)
+                    layout = layout->base;
+
+                if (layout->size > payload_size)
+                    payload_size = layout->size;
+                if (layout->align > payload_align)
+                    payload_align = layout->align;
             }
+
+            HirType *tag = builtin_type(sema, BUILTIN_UINT64);
+            assert(tag != NULL);
+
+            size_t remainder = tag->size % payload_align;
+            size_t payload_offset = remainder == 0
+                ? tag->size
+                : tag->size + payload_align - remainder;
+
+            if (payload_size > SIZE_MAX - payload_offset) {
+                hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            hir->align = tag->align > payload_align ? tag->align : payload_align;
+            size_t size = payload_offset + payload_size;
+            remainder = size % hir->align;
+
+            if (remainder != 0) {
+                size_t padding = hir->align - remainder;
+                if (size > SIZE_MAX - padding) {
+                    hir->kind = HIR_TYPE_ERROR;
+                    return hir;
+                }
+                size += padding;
+            }
+
+            hir->size = size;
             break;
+        }
 
         case AST_TYPE_STRUCT: {
             hir->kind = HIR_TYPE_STRUCT;
