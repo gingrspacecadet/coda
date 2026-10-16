@@ -1,0 +1,17 @@
+@export
+fn int main(string[] args) {
+    if (args.len == 0) {
+        printn("cat: requires an argument");
+        return 1;
+    }
+
+    for (usize i = 0; i < args.len; i += 1) {
+        File f = .open(args[i]).expect(format("Failed to open file {}!", args[i]));
+        
+        char[f.size()] buffer;
+        buffer.len = f.read(buffer).expect(format("Failed to read file {}!", args[i]));
+        print(buffer);
+    }
+
+    return 0;
+}
