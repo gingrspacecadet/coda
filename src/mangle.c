@@ -19,7 +19,7 @@ typedef struct {
 } MangleCursor;
 
 static bool buffer_reserve(MangleBuffer *buffer, size_t extra) {
-    if (extra > SIZE_MAX - buffer->length - 1)
+    if (buffer->length == SIZE_MAX || extra > SIZE_MAX - buffer->length - 1)
         return false;
 
     size_t required = buffer->length + extra + 1;
@@ -80,7 +80,7 @@ static bool buffer_appendf(MangleBuffer *buffer, const char *format, ...) {
 }
 
 static bool buffer_append_component(MangleBuffer *buffer, String string) {
-    if (string.data == NULL && string.length != 0)
+    if (string.data == NULL || string.length == 0)
         return false;
     return buffer_appendf(buffer, "%zu", string.length) && buffer_append_n(buffer, string.data, string.length);
 }
@@ -134,83 +134,71 @@ static bool buffer_append_symbol_path(MangleBuffer *buffer, const Symbol *symbol
     return buffer_append_module_path(buffer, symbol->owner_module) && buffer_append_component(buffer, symbol->name.ident);
 }
 
-static bool buffer_append_qualified_symbol(MangleBuffer *buffer, const Symbol *symbol) {
+static bool buffer_append_nominal_identity(MangleBuffer *buffer, const Symbol *symbol) {
     if (symbol == NULL || symbol->name.kind != AST_NAME_IDENT)
-        return buffer_append(buffer, "<unknown>");
+        return false;
 
-    if (symbol->owner_module != NULL) {
-        Path *path = &symbol->owner_module->path;
-        for (size_t i = 0; i < path->parts.len; i++) {
-            AstName *part = array_at(&path->parts, i);
-            if (i != 0 && !buffer_append(buffer, "::"))
-                return false;
-            if (part->kind != AST_NAME_IDENT || !buffer_append_n(buffer, part->ident.data, part->ident.length))
-                return false;
-        }
-        if (path->parts.len != 0 && !buffer_append(buffer, "::"))
-            return false;
-    }
-
-    return buffer_append_n(buffer, symbol->name.ident.data, symbol->name.ident.length);
+    size_t module_count = symbol->owner_module != NULL ? symbol->owner_module->path.parts.len : 0;
+    if (!buffer_appendf(buffer, "N%zu_", module_count + 1) ||
+        !buffer_append_module_path(buffer, symbol->owner_module))
+        return false;
+    return buffer_append_component(buffer, symbol->name.ident);
 }
 
 static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, size_t depth);
 
 static bool buffer_append_type_arguments(MangleBuffer *buffer, Sema *sema, Array arguments, size_t depth) {
-    if (!buffer_append(buffer, "<"))
+    if (!buffer_appendf(buffer, "_I%zu_", arguments.len))
         return false;
 
     for (size_t i = 0; i < arguments.len; i++) {
-        if (i != 0 && !buffer_append(buffer, ", "))
-            return false;
         HirType *argument = ((HirType **)arguments.data)[i];
         if (!buffer_append_type(buffer, sema, argument, depth + 1))
             return false;
     }
-
-    return buffer_append(buffer, ">");
+    return true;
 }
 
 static bool buffer_append_fields(MangleBuffer *buffer, Sema *sema, Array fields, bool is_union, size_t depth) {
-    if (!buffer_append(buffer, is_union ? "union{" : "struct{"))
+    if (!buffer_appendf(buffer, "%c%zu_", is_union ? 'U' : 'C', fields.len))
         return false;
 
     for (size_t i = 0; i < fields.len; i++) {
         HirField *field = array_at(&fields, i);
-        if (i != 0 && !buffer_append(buffer, ";"))
-            return false;
+        String name = {0};
+        char fallback[32];
         if (field->symbol != NULL && field->symbol->name.kind == AST_NAME_IDENT) {
-            if (!buffer_append_n(buffer, field->symbol->name.ident.data, field->symbol->name.ident.length))
+            name = field->symbol->name.ident;
+        } else {
+            int length = snprintf(fallback, sizeof(fallback), "field%zu", i);
+            if (length < 0 || (size_t)length >= sizeof(fallback))
                 return false;
-        } else if (!buffer_appendf(buffer, "field%zu", i)) {
-            return false;
+            name = (String){.data = fallback, .length = (size_t)length};
         }
-        if (!buffer_append(buffer, ":") || !buffer_append_type(buffer, sema, field->type, depth + 1))
+
+        if (!buffer_append_component(buffer, name) ||
+            !buffer_append_type(buffer, sema, field->type, depth + 1))
             return false;
     }
-
-    return buffer_append(buffer, "}");
+    return true;
 }
 
 static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, size_t depth) {
-    if (type == NULL)
-        return buffer_append(buffer, "<null>");
-    if (depth > 128)
-        return buffer_append(buffer, "<depth-limit>");
-    /* Nominal types must be encoded by identity, not by their underlying layout. */
+    if (type == NULL || depth > 128)
+        return false;
+
+    /* Nominal types encode identity, never their underlying layout. */
     if (type->nominal != NULL) {
-        if (!buffer_append_qualified_symbol(buffer, type->nominal))
+        if (!buffer_append_nominal_identity(buffer, type->nominal))
             return false;
         GenericTypeInstance *instance = sema_generic_type_instance_for_type(sema, type, NULL);
-        if (instance != NULL && instance->arguments.len != 0 &&
-            !buffer_append_type_arguments(buffer, sema, instance->arguments, depth))
-            return false;
-        return true;
+        return instance == NULL || instance->arguments.len == 0 ||
+               buffer_append_type_arguments(buffer, sema, instance->arguments, depth);
     }
 
     switch (type->kind) {
         case HIR_TYPE_ERROR:
-            return buffer_append(buffer, "<error>");
+            return false;
 
         case HIR_TYPE_BUILTIN: {
             static const char *names[] = {
@@ -222,42 +210,39 @@ static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, 
                 [BUILTIN_FLOAT32] = "float32", [BUILTIN_FLOAT64] = "float64",
             };
             if ((size_t)type->builtin >= sizeof(names) / sizeof(*names) || names[type->builtin] == NULL)
-                return buffer_append(buffer, "<builtin>");
-            return buffer_append(buffer, names[type->builtin]);
+                return false;
+            return buffer_append(buffer, "B") &&
+                   buffer_append_component(buffer, (String){.data = (char *)names[type->builtin], .length = strlen(names[type->builtin])});
         }
 
         case HIR_TYPE_POINTER:
-            return buffer_append_type(buffer, sema, type->pointer.pointee, depth + 1) &&
-                   buffer_append(buffer, type->pointer.optional ? "*?" : "*");
+            return buffer_append(buffer, type->pointer.optional ? "Q" : "P") &&
+                   buffer_append_type(buffer, sema, type->pointer.pointee, depth + 1);
 
         case HIR_TYPE_SLICE:
-            return buffer_append_type(buffer, sema, type->slice.element, depth + 1) && buffer_append(buffer, "[]");
+            return buffer_append(buffer, "L") && buffer_append_type(buffer, sema, type->slice.element, depth + 1);
 
         case HIR_TYPE_ARRAY:
-            return buffer_append_type(buffer, sema, type->array.element, depth + 1) &&
-                   buffer_appendf(buffer, "[%llu]", (unsigned long long)type->array.length);
+            return buffer_appendf(buffer, "A%llu_", (unsigned long long)type->array.length) &&
+                   buffer_append_type(buffer, sema, type->array.element, depth + 1);
 
         case HIR_TYPE_SUM:
-            if (!buffer_append(buffer, "("))
+            if (!buffer_appendf(buffer, "S%zu_", type->sum.members.len))
                 return false;
             for (size_t i = 0; i < type->sum.members.len; i++) {
-                if (i != 0 && !buffer_append(buffer, " | "))
-                    return false;
                 if (!buffer_append_type(buffer, sema, ((HirType **)type->sum.members.data)[i], depth + 1))
                     return false;
             }
-            return buffer_append(buffer, ")");
+            return true;
 
         case HIR_TYPE_FUNCTION:
-            if (!buffer_append(buffer, "fn("))
+            if (!buffer_appendf(buffer, "F%zu_", type->function.params.len))
                 return false;
             for (size_t i = 0; i < type->function.params.len; i++) {
-                if (i != 0 && !buffer_append(buffer, ", "))
-                    return false;
                 if (!buffer_append_type(buffer, sema, ((HirType **)type->function.params.data)[i], depth + 1))
                     return false;
             }
-            return buffer_append(buffer, ")->") && buffer_append_type(buffer, sema, type->function.ret, depth + 1);
+            return buffer_append_type(buffer, sema, type->function.ret, depth + 1);
 
         case HIR_TYPE_STRUCT:
             return buffer_append_fields(buffer, sema, type->structure.fields, false, depth);
@@ -266,111 +251,134 @@ static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, 
             return buffer_append_fields(buffer, sema, type->union_.fields, true, depth);
 
         case HIR_TYPE_ENUM:
-            return buffer_append(buffer, "enum(") && buffer_append_type(buffer, sema, type->_enum.underlying, depth + 1) && buffer_append(buffer, ")");
+            return buffer_append(buffer, "E") && buffer_append_type(buffer, sema, type->_enum.underlying, depth + 1);
     }
 
-    return buffer_append(buffer, "<unknown-type>");
+    return false;
 }
 
-static String mangle_type_text(Sema *sema, HirType *type) {
-    MangleBuffer buffer = {0};
-    if (!buffer_append_type(&buffer, sema, type, 0)) {
-        buffer_discard(&buffer);
-        return (String){0};
+static size_t generic_type_index(AstFnDecl *fn, AstType *type) {
+    if (fn == NULL || type == NULL || type->kind != AST_TYPE_NAMED ||
+        type->named.path.parts.len != 1 || type->named.args.len != 0)
+        return SIZE_MAX;
+
+    AstName *name = array_at(&type->named.path.parts, 0);
+    for (size_t i = 0; i < fn->generics.len; i++) {
+        AstGenericParam *param = array_at(&fn->generics, i);
+        if (ast_name_equal(name, &param->name))
+            return i;
     }
-    return buffer_finish(sema->arena, &buffer);
+    return SIZE_MAX;
 }
 
-static bool type_text_char_is_safe(unsigned char c) {
-    return (c >= 'a' && c <= 'z') ||
-           (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9');
+static bool ast_type_contains_generic(AstFnDecl *fn, AstType *type) {
+    if (type == NULL)
+        return false;
+    if (generic_type_index(fn, type) != SIZE_MAX)
+        return true;
+
+    switch (type->kind) {
+        case AST_TYPE_NAMED:
+            for (size_t i = 0; i < type->named.args.len; i++)
+                if (ast_type_contains_generic(fn, ((AstType **)type->named.args.data)[i]))
+                    return true;
+            return false;
+
+        case AST_TYPE_POINTER:
+            return ast_type_contains_generic(fn, type->pointer.pointee);
+
+        case AST_TYPE_ARRAY:
+            return ast_type_contains_generic(fn, type->array.element);
+
+        case AST_TYPE_FN:
+            if (ast_type_contains_generic(fn, type->fn.ret))
+                return true;
+            for (size_t i = 0; i < type->fn.params.len; i++)
+                if (ast_type_contains_generic(fn, ((AstType **)type->fn.params.data)[i]))
+                    return true;
+            return false;
+
+        case AST_TYPE_SUM:
+            for (size_t i = 0; i < type->sum.members.len; i++)
+                if (ast_type_contains_generic(fn, ((AstType **)type->sum.members.data)[i]))
+                    return true;
+            return false;
+
+        case AST_TYPE_STRUCT:
+            for (size_t i = 0; i < type->structure.fields.len; i++) {
+                AstField *field = array_at(&type->structure.fields, i);
+                if (ast_type_contains_generic(fn, field->type))
+                    return true;
+            }
+            return false;
+
+        case AST_TYPE_UNION:
+            for (size_t i = 0; i < type->union_.fields.len; i++) {
+                AstField *field = array_at(&type->union_.fields, i);
+                if (ast_type_contains_generic(fn, field->type))
+                    return true;
+            }
+            return false;
+
+        case AST_TYPE_ENUM:
+            return ast_type_contains_generic(fn, type->_enum.underlying);
+
+        case AST_TYPE_ERROR:
+        case AST_TYPE_SPLICE:
+            return false;
+    }
+    return false;
 }
 
-static bool buffer_append_type_text(MangleBuffer *buffer, String text) {
-    static const char hex[] = "0123456789ABCDEF";
-
-    if (text.data == NULL && text.length != 0)
+/* Generic receiver patterns are encoded only when their structure is supported.
+   Any unsupported pattern falls back to its fully resolved HIR type. */
+static bool buffer_append_type_pattern(MangleBuffer *buffer, Sema *sema, AstFnDecl *fn, AstType *type, size_t depth) {
+    if (type == NULL || depth > 128)
         return false;
 
-    for (size_t i = 0; i < text.length; i++) {
-        unsigned char c = (unsigned char)text.data[i];
+    size_t generic_index = generic_type_index(fn, type);
+    if (generic_index != SIZE_MAX)
+        return buffer_appendf(buffer, "V%zu", generic_index);
 
-        if (type_text_char_is_safe(c)) {
-            if (!buffer_append_n(buffer, &text.data[i], 1))
+    if (!ast_type_contains_generic(fn, type)) {
+        HirType *resolved = sema_type(sema, type);
+        return resolved != NULL && buffer_append_type(buffer, sema, resolved, depth + 1);
+    }
+
+    switch (type->kind) {
+        case AST_TYPE_POINTER:
+            return buffer_append(buffer, type->pointer.optional ? "Q" : "P") &&
+                   buffer_append_type_pattern(buffer, sema, fn, type->pointer.pointee, depth + 1);
+
+        case AST_TYPE_ARRAY:
+            if (type->array.sized)
                 return false;
-        } else {
-            char encoded[] = {'_', hex[c >> 4], hex[c & 0x0f]};
-            if (!buffer_append_n(buffer, encoded, sizeof(encoded)))
+            return buffer_append(buffer, "L") &&
+                   buffer_append_type_pattern(buffer, sema, fn, type->array.element, depth + 1);
+
+        case AST_TYPE_ENUM:
+            return buffer_append(buffer, "E") &&
+                   buffer_append_type_pattern(buffer, sema, fn, type->_enum.underlying, depth + 1);
+
+        case AST_TYPE_SUM:
+            if (!buffer_appendf(buffer, "S%zu_", type->sum.members.len))
                 return false;
-        }
+            for (size_t i = 0; i < type->sum.members.len; i++)
+                if (!buffer_append_type_pattern(buffer, sema, fn, ((AstType **)type->sum.members.data)[i], depth + 1))
+                    return false;
+            return true;
+
+        case AST_TYPE_FN:
+            if (!buffer_appendf(buffer, "F%zu_", type->fn.params.len))
+                return false;
+            for (size_t i = 0; i < type->fn.params.len; i++)
+                if (!buffer_append_type_pattern(buffer, sema, fn, ((AstType **)type->fn.params.data)[i], depth + 1))
+                    return false;
+            return buffer_append_type_pattern(buffer, sema, fn, type->fn.ret, depth + 1);
+
+        default:
+            return false;
     }
-
-    return true;
-}
-
-static bool buffer_append_encoded(MangleBuffer *buffer, String text) {
-    MangleBuffer encoded = {0};
-
-    if (!buffer_append_type_text(&encoded, text)) {
-        buffer_discard(&encoded);
-        return false;
-    }
-
-    String component = {
-        .data = encoded.data,
-        .length = encoded.length,
-    };
-
-    bool ok = buffer_append_component(buffer, component);
-    buffer_discard(&encoded);
-    return ok;
-}
-
-static String mangle_type_link_text(Sema *sema, HirType *type) {
-    String text = mangle_type_text(sema, type);
-    if (text.data == NULL)
-        return (String){0};
-
-    MangleBuffer buffer = {0};
-    if (!buffer_append_type_text(&buffer, text)) {
-        buffer_discard(&buffer);
-        return (String){0};
-    }
-
-    return buffer_finish(sema->arena, &buffer);
-}
-
-static String mangle_function_signature(Sema *sema, Symbol *symbol) {
-    if (symbol == NULL || symbol->type == NULL || symbol->type->kind != HIR_TYPE_FUNCTION)
-        return (String){0};
-
-    HirType *type = symbol->type;
-    MangleBuffer buffer = {0};
-    bool ok = buffer_append(&buffer, "fn(");
-
-    for (size_t i = 0; ok && i < type->function.params.len; i++) {
-        if (i != 0)
-            ok = buffer_append(&buffer, ",");
-        if (ok)
-            ok = buffer_append_type(&buffer, sema, ((HirType **)type->function.params.data)[i], 0);
-    }
-
-    if (ok)
-        ok = buffer_append(&buffer, ")->") && buffer_append_type(&buffer, sema, type->function.ret, 0);
-
-    if (!ok) {
-        buffer_discard(&buffer);
-        return (String){0};
-    }
-    return buffer_finish(sema->arena, &buffer);
-}
-
-static bool buffer_append_type_argument(MangleBuffer *buffer, Sema *sema, HirType *type) {
-    String type_text = mangle_type_text(sema, type);
-    return type_text.data != NULL &&
-           buffer_append(buffer, "T") &&
-           buffer_append_encoded(buffer, type_text);
 }
 
 String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool specialization) {
@@ -392,27 +400,38 @@ String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool spec
     if (!specialization && !has_module && !has_receiver && arguments.len == 0)
         return symbol->name.ident;
 
-    String receiver_text = {0};
+    HirType *receiver_type = NULL;
     if (has_receiver) {
-        HirType *receiver_type = sema_type(sema, symbol->decl->fn.receiver);
+        receiver_type = sema_type(sema, symbol->decl->fn.receiver);
         if (receiver_type == NULL || receiver_type->kind == HIR_TYPE_ERROR)
-            return (String){0};
-        receiver_text = mangle_type_link_text(sema, receiver_type);
-        if (receiver_text.data == NULL)
             return (String){0};
     }
 
     MangleBuffer buffer = {0};
     bool ok = buffer_append(&buffer, "_C") && buffer_append_symbol_path(&buffer, symbol);
 
-    if (ok && receiver_text.length != 0)
-        ok = buffer_append(&buffer, "_R") && buffer_append_component(&buffer, receiver_text);
+    if (ok && has_receiver) {
+        ok = buffer_append(&buffer, "_R");
+        AstFnDecl *fn = &symbol->decl->fn;
+        if (ok && fn->generics.len != 0 && ast_type_contains_generic(fn, fn->receiver)) {
+            MangleBuffer pattern = {0};
+            if (buffer_append_type_pattern(&pattern, sema, fn, fn->receiver, 0)) {
+                ok = buffer_append_n(&buffer, pattern.data, pattern.length);
+                buffer_discard(&pattern);
+            } else {
+                buffer_discard(&pattern);
+                ok = buffer_append_type(&buffer, sema, receiver_type, 0);
+            }
+        } else if (ok) {
+            ok = buffer_append_type(&buffer, sema, receiver_type, 0);
+        }
+    }
 
     if (ok && arguments.len != 0)
-        ok = buffer_appendf(&buffer, "_G%zu", arguments.len);
+        ok = buffer_appendf(&buffer, "_G%zu_", arguments.len);
     for (size_t i = 0; ok && i < arguments.len; i++) {
         HirType *argument = ((HirType **)arguments.data)[i];
-        ok = buffer_append_type_argument(&buffer, sema, argument);
+        ok = buffer_append_type(&buffer, sema, argument, 0);
     }
 
     if (!ok) {
@@ -424,7 +443,8 @@ String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool spec
 
 static bool cursor_expect(MangleCursor *cursor, const char *text) {
     size_t length = strlen(text);
-    if (length > cursor->input.length - cursor->position ||
+    if (cursor->position > cursor->input.length ||
+        length > cursor->input.length - cursor->position ||
         memcmp(cursor->input.data + cursor->position, text, length) != 0)
         return false;
     cursor->position += length;
@@ -451,6 +471,10 @@ static bool cursor_number(MangleCursor *cursor, size_t *result) {
     return true;
 }
 
+static bool cursor_count_suffix(MangleCursor *cursor, size_t *result) {
+    return cursor_number(cursor, result) && cursor_expect(cursor, "_");
+}
+
 static bool cursor_component(Arena *arena, MangleCursor *cursor, String *result) {
     size_t length;
     if (!cursor_number(cursor, &length) || length == 0 || length > cursor->input.length - cursor->position)
@@ -466,51 +490,113 @@ static bool cursor_component(Arena *arena, MangleCursor *cursor, String *result)
     return true;
 }
 
-static int hex_value(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
+static bool cursor_type(Arena *arena, MangleCursor *cursor, MangleBuffer *display, size_t depth);
+
+static bool cursor_type_list(Arena *arena, MangleCursor *cursor, MangleBuffer *display, size_t count, const char *separator, size_t depth) {
+    for (size_t i = 0; i < count; i++) {
+        if (i != 0 && !buffer_append(display, separator))
+            return false;
+        if (!cursor_type(arena, cursor, display, depth + 1))
+            return false;
+    }
+    return true;
 }
 
-static bool cursor_type_component(Arena *arena, MangleCursor *cursor, String *result) {
-    String encoded;
-    if (!cursor_component(arena, cursor, &encoded))
+static bool cursor_type(Arena *arena, MangleCursor *cursor, MangleBuffer *display, size_t depth) {
+    if (depth > 128 || cursor->position >= cursor->input.length)
         return false;
 
-    MangleBuffer buffer = {0};
-    for (size_t i = 0; i < encoded.length; i++) {
-        unsigned char c = (unsigned char)encoded.data[i];
-        if (c == '_') {
-            if (i + 2 >= encoded.length) {
-                buffer_discard(&buffer);
-                return false;
-            }
-            int high = hex_value(encoded.data[++i]);
-            int low = hex_value(encoded.data[++i]);
-            if (high < 0 || low < 0) {
-                buffer_discard(&buffer);
-                return false;
-            }
-            char decoded = (char)((high << 4) | low);
-            if (decoded == '\0' || !buffer_append_n(&buffer, &decoded, 1)) {
-                buffer_discard(&buffer);
-                return false;
-            }
-        } else {
-            if (!type_text_char_is_safe(c) || !buffer_append_n(&buffer, (const char *)&encoded.data[i], 1)) {
-                buffer_discard(&buffer);
-                return false;
-            }
+    char tag = cursor->input.data[cursor->position++];
+    size_t count;
+    switch (tag) {
+        case 'B': {
+            String name;
+            return cursor_component(arena, cursor, &name) && buffer_append_n(display, name.data, name.length);
         }
-    }
 
-    *result = buffer_finish(arena, &buffer);
-    return result->data != NULL;
+        case 'N': {
+            if (!cursor_count_suffix(cursor, &count) || count == 0 || count > cursor->input.length)
+                return false;
+            for (size_t i = 0; i < count; i++) {
+                String component;
+                if (!cursor_component(arena, cursor, &component))
+                    return false;
+                if (i != 0 && !buffer_append(display, "::"))
+                    return false;
+                if (!buffer_append_n(display, component.data, component.length))
+                    return false;
+            }
+            if (cursor->position + 2 <= cursor->input.length &&
+                cursor->input.data[cursor->position] == '_' && cursor->input.data[cursor->position + 1] == 'I') {
+                cursor->position += 2;
+                if (!cursor_count_suffix(cursor, &count) || count == 0 || count > cursor->input.length ||
+                    !buffer_append(display, "<"))
+                    return false;
+                if (!cursor_type_list(arena, cursor, display, count, ", ", depth + 1) ||
+                    !buffer_append(display, ">"))
+                    return false;
+            }
+            return true;
+        }
+
+        case 'V':
+            return cursor_number(cursor, &count) && buffer_appendf(display, "T%zu", count);
+
+        case 'P':
+        case 'Q':
+            if (!cursor_type(arena, cursor, display, depth + 1))
+                return false;
+            return buffer_append(display, tag == 'P' ? "*" : "*?");
+
+        case 'L':
+            return cursor_type(arena, cursor, display, depth + 1) && buffer_append(display, "[]");
+
+        case 'A':
+            if (!cursor_count_suffix(cursor, &count) || !cursor_type(arena, cursor, display, depth + 1))
+                return false;
+            return buffer_appendf(display, "[%zu]", count);
+
+        case 'S':
+            if (!cursor_count_suffix(cursor, &count) || count == 0 || count > cursor->input.length ||
+                !buffer_append(display, "("))
+                return false;
+            return cursor_type_list(arena, cursor, display, count, " | ", depth + 1) && buffer_append(display, ")");
+
+        case 'F':
+            if (!cursor_count_suffix(cursor, &count) || count > cursor->input.length || !buffer_append(display, "fn("))
+                return false;
+            if (!cursor_type_list(arena, cursor, display, count, ", ", depth + 1) ||
+                !buffer_append(display, ")->") || !cursor_type(arena, cursor, display, depth + 1))
+                return false;
+            return true;
+
+        case 'C':
+        case 'U':
+            if (!cursor_count_suffix(cursor, &count) || count > cursor->input.length ||
+                !buffer_append(display, tag == 'C' ? "struct{" : "union{"))
+                return false;
+            for (size_t i = 0; i < count; i++) {
+                String name;
+                if (!cursor_component(arena, cursor, &name))
+                    return false;
+                if (i != 0 && !buffer_append(display, ";"))
+                    return false;
+                if (!buffer_append_n(display, name.data, name.length) || !buffer_append(display, ":") ||
+                    !cursor_type(arena, cursor, display, depth + 1))
+                    return false;
+            }
+            return buffer_append(display, "}");
+
+        case 'E':
+            return buffer_append(display, "enum(") && cursor_type(arena, cursor, display, depth + 1) && buffer_append(display, ")");
+
+        default:
+            return false;
+    }
 }
 
 static String cursor_tagged_argument(Arena *arena, char tag, String value) {
-    if (value.length > SIZE_MAX - 3)
+    if (value.data == NULL || value.length > SIZE_MAX - 3)
         return (String){0};
     char *data = arena_calloc(arena, value.length + 3);
     if (data == NULL)
@@ -532,8 +618,8 @@ bool coda_demangle_symbol(Arena *arena, String mangled, CodaDemangledSymbol *sym
         .module_path = array_create(arena, sizeof(String)),
         .generic_arguments = array_create(arena, sizeof(String)),
     };
+    Array components = array_create(arena, sizeof(String));
 
-    Array(String) components = array_create(arena, sizeof(String));
     while (cursor.position < mangled.length && mangled.data[cursor.position] >= '0' && mangled.data[cursor.position] <= '9') {
         String component;
         if (!cursor_component(arena, &cursor, &component))
@@ -550,24 +636,30 @@ bool coda_demangle_symbol(Arena *arena, String mangled, CodaDemangledSymbol *sym
     }
 
     if (cursor.position < mangled.length && cursor_expect(&cursor, "_R")) {
-        if (!cursor_type_component(arena, &cursor, &result.receiver))
+        MangleBuffer receiver = {0};
+        if (!cursor_type(arena, &cursor, &receiver, 0)) {
+            buffer_discard(&receiver);
+            return false;
+        }
+        result.receiver = buffer_finish(arena, &receiver);
+        if (result.receiver.data == NULL)
             return false;
     }
 
     if (cursor.position < mangled.length && cursor_expect(&cursor, "_G")) {
         size_t argument_count;
-        if (!cursor_number(&cursor, &argument_count) || argument_count == 0 || argument_count > mangled.length)
+        if (!cursor_count_suffix(&cursor, &argument_count) || argument_count == 0 || argument_count > mangled.length)
             return false;
         for (size_t i = 0; i < argument_count; i++) {
-            if (cursor.position >= mangled.length)
+            MangleBuffer argument_buffer = {0};
+            if (!cursor_type(arena, &cursor, &argument_buffer, 0)) {
+                buffer_discard(&argument_buffer);
                 return false;
-            char tag = mangled.data[cursor.position++];
-            if (tag != 'T')
+            }
+            String value = buffer_finish(arena, &argument_buffer);
+            if (value.data == NULL)
                 return false;
-            String value;
-            if (!cursor_type_component(arena, &cursor, &value))
-                return false;
-            String tagged = cursor_tagged_argument(arena, tag, value);
+            String tagged = cursor_tagged_argument(arena, 'T', value);
             if (tagged.data == NULL)
                 return false;
             array_push(&result.generic_arguments, &tagged);
@@ -587,8 +679,7 @@ String coda_demangled_symbol_name(Arena *arena, const CodaDemangledSymbol *symbo
     MangleBuffer buffer = {0};
     bool ok = true;
     if (symbol->receiver.length != 0) {
-        ok = buffer_append_n(&buffer, symbol->receiver.data, symbol->receiver.length) &&
-             buffer_append(&buffer, ".");
+        ok = buffer_append_n(&buffer, symbol->receiver.data, symbol->receiver.length) && buffer_append(&buffer, ".");
     } else {
         for (size_t i = 0; ok && i < symbol->module_path.len; i++) {
             String part = ((String *)symbol->module_path.data)[i];
@@ -603,9 +694,9 @@ String coda_demangled_symbol_name(Arena *arena, const CodaDemangledSymbol *symbo
 
     if (ok)
         ok = buffer_append_n(&buffer, symbol->name.data, symbol->name.length);
-
     if (ok && symbol->generic_arguments.len != 0)
         ok = buffer_append(&buffer, "<");
+
     for (size_t i = 0; ok && i < symbol->generic_arguments.len; i++) {
         String argument = ((String *)symbol->generic_arguments.data)[i];
         if (argument.length >= 2 && argument.data[1] == ':' &&

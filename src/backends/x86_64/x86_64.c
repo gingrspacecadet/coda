@@ -1629,7 +1629,7 @@ static void emit_terminator(X86Function *function, const LirTerminator *terminat
             break;
 
         case LIR_TERM_UNREACHABLE:
-            fputs("ud2\n", function->out);
+            fputs("    ud2\n", function->out);
             break;
 
         default:

@@ -53,8 +53,8 @@ bool test_mangling(void) {
     array_push(&arguments, &argument_type);
 
     String mangled = coda_mangle_symbol(&sema, &function, arguments, true);
-    if (!string_eq(mangled, STRING("_C3foo3bar8identity_G1T5int32"))) {
-        fprintf(stderr, "mangling test: generic name is not compact and readable\n");
+    if (!string_eq(mangled, STRING("_C3foo3bar8identity_G1_B5int32"))) {
+        fprintf(stderr, "mangling test: generic name does not use structural type encoding\n");
         arena_destroy(arena);
         return false;
     }
@@ -82,14 +82,14 @@ bool test_mangling(void) {
     Array pointer_arguments = array_create(arena, sizeof(HirType *));
     array_push(&pointer_arguments, &pointer_argument);
     String pointer_mangled = coda_mangle_symbol(&sema, &function, pointer_arguments, true);
-    if (!string_eq(pointer_mangled, STRING("_C3foo3bar8identity_G1T8int32_2A"))) {
-        fprintf(stderr, "mangling test: punctuation in type arguments was not made assembler-safe\n");
+    if (!string_eq(pointer_mangled, STRING("_C3foo3bar8identity_G1_PB5int32"))) {
+        fprintf(stderr, "mangling test: pointer type was not structurally encoded\n");
         passed = false;
     } else {
         CodaDemangledSymbol pointer_decoded;
         if (!coda_demangle_symbol(arena, pointer_mangled, &pointer_decoded) ||
             !string_eq(coda_demangled_symbol_name(arena, &pointer_decoded), STRING("foo::bar::identity<int32*>"))) {
-            fprintf(stderr, "mangling test: escaped type argument did not round-trip\n");
+            fprintf(stderr, "mangling test: structural pointer type did not round-trip\n");
             passed = false;
         }
     }
@@ -137,10 +137,19 @@ bool test_mangling(void) {
     }
 
     CodaDemangledSymbol method;
-    String method_name = STRING("_C3foo3bar3baz_R21foo_3A_3Abar_3A_3ABox_G1T5int32");
+    String method_name = STRING("_C3foo3bar3baz_RN3_3foo3bar3Box_G1_B5int32");
     if (!coda_demangle_symbol(arena, method_name, &method) ||
         !string_eq(coda_demangled_symbol_name(arena, &method), STRING("foo::bar::Box.baz<int32>"))) {
         fprintf(stderr, "mangling test: method receiver was not reconstructed\n");
+        passed = false;
+    }
+
+    CodaDemangledSymbol generic_method;
+    String generic_method_name = STRING("_C3std6result6expect_RS2_V0V1_G2_B6uint64N3_3std2fs9FileError");
+    if (!coda_demangle_symbol(arena, generic_method_name, &generic_method) ||
+        !string_eq(coda_demangled_symbol_name(arena, &generic_method),
+                   STRING("(T0 | T1).expect<uint64, std::fs::FileError>"))) {
+        fprintf(stderr, "mangling test: generic receiver pattern was not reconstructed\n");
         passed = false;
     }
 
