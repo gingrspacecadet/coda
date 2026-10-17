@@ -256,9 +256,13 @@ bool sema_check_constraint_type(Sema *sema, Symbol *constraint_symbol, HirType *
     filtered.items = array_create(sema->arena, sizeof(AstConstraintItem));
     for (size_t i = 0; i < constraint_symbol->decl->constraint.items.len; i++) {
         AstConstraintItem *item = array_at(&constraint_symbol->decl->constraint.items, i);
-        if (item->kind == AST_CONSTRAINT_METHOD &&
-            (item->method->generics.len != 0 || item->method->body != NULL))
-            continue;
+        if (item->kind == AST_CONSTRAINT_METHOD) {
+            if (item->method->generics.len != 0)
+                continue;
+
+            if (item->method->body != NULL && sema_find_method(sema, concrete, item->method->name) == NULL)
+                continue;
+        }
         array_push(&filtered.items, item);
     }
 

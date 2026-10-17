@@ -297,7 +297,69 @@ static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_
 
 
 static bool sema_any_constraint_method_dispatchable(AstFnDecl *method) {
-    return method != NULL && method->generics.len == 0 && method->body == NULL;
+    return method != NULL && method->generics.len == 0;
+}
+
+static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl *method, HirType *concrete, Span span) {
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    if (constraint->owner_module != NULL)
+        sema->module = constraint->owner_module;
+    if (constraint->owner_scope != NULL && constraint->owner_scope != &sema->global_scope) {
+        sema->global_scope = *constraint->owner_scope;
+        sema->module_scope = constraint->owner_scope;
+    }
+
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    Scope *scope = sema_push_scope(sema);
+
+    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
+    Symbol self_binding = {
+        .kind = SYMBOL_TYPE,
+        .name = self_name,
+        .type = concrete,
+        .span = span,
+    };
+    scope_insert(scope, &self_binding);
+
+    if (!ast_name_equal(&constraint->name, &self_name)) {
+        Symbol constraint_binding = {
+            .kind = SYMBOL_TYPE,
+            .name = constraint->name,
+            .type = concrete,
+            .span = span,
+        };
+        scope_insert(scope, &constraint_binding);
+    }
+
+    AstDecl *decl = arena_calloc(sema->arena, sizeof(*decl));
+    *decl = (AstDecl){.kind = AST_DECL_FN, .fn = *method};
+    decl->fn.name = (AstName){
+        .kind = AST_NAME_IDENT,
+        .ident = format(sema->arena, ".L_coda_any_default_%zu", sema->next_generic_instance++),
+    };
+    decl->fn.generics = array_create(sema->arena, sizeof(AstGenericParam));
+
+    Symbol generated = {
+        .kind = SYMBOL_FN,
+        .decl = decl,
+        .name = decl->fn.name,
+        .span = method->span,
+        .owner_module = sema->module,
+        .owner_scope = sema->module_scope,
+    };
+    scope_insert(scope, &generated);
+    sema_fn_decl(sema, &decl->fn);
+    Symbol *result = sema_lookup(sema, decl->fn.name);
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    return result;
 }
 
 static HirExpr *sema_any_box(Sema *sema, HirExpr *value, HirType *target) {
@@ -323,10 +385,13 @@ static HirExpr *sema_any_box(Sema *sema, HirExpr *value, HirType *target) {
             continue;
 
         Symbol *method = sema_find_method(sema, value->type, item->method->name);
+        if (method == NULL && item->method->body != NULL)
+            method = sema_any_default_method(sema, constraint, item->method, value->type, value->span);
+
         if (method == NULL || method->decl == NULL || method->decl->kind != AST_DECL_FN ||
             method->decl->fn.generics.len != 0) {
             DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSATISFIED, value->span, STRING("type does not provide a required erased method"));
-            diag_note(&diagnostic, STRING("implement every non-generic constraint method without a default body"));
+            diag_note(&diagnostic, STRING("implement the method or provide a non-generic default body in the constraint"));
             diag_finish(&diagnostic);
             return NULL;
         }
@@ -998,6 +1063,55 @@ static HirExpr *sema_method_error(Sema *sema, Span span) {
     return expr;
 }
 
+static HirExpr *sema_any_default_argument(Sema *sema, Symbol *constraint, HirType *receiver_type, AstParam *param, HirType *param_type, Span span) {
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+    HirFunction *previous_fn = sema->current_fn;
+    bool previous_comptime = sema->comptime;
+
+    if (constraint->owner_module != NULL)
+        sema->module = constraint->owner_module;
+    if (constraint->owner_scope != NULL && constraint->owner_scope != &sema->global_scope) {
+        sema->global_scope = *constraint->owner_scope;
+        sema->module_scope = constraint->owner_scope;
+    }
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    Scope *scope = sema_push_scope(sema);
+
+    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
+    Symbol self_binding = {
+        .kind = SYMBOL_TYPE,
+        .name = self_name,
+        .type = receiver_type,
+        .span = span,
+    };
+    scope_insert(scope, &self_binding);
+
+    if (!ast_name_equal(&constraint->name, &self_name)) {
+        Symbol constraint_binding = {
+            .kind = SYMBOL_TYPE,
+            .name = constraint->name,
+            .type = receiver_type,
+            .span = span,
+        };
+        scope_insert(scope, &constraint_binding);
+    }
+
+    sema->current_fn = NULL;
+    sema->comptime = false;
+    HirExpr *value = sema_expr(sema, param->default_value, param_type);
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    sema->current_fn = previous_fn;
+    sema->comptime = previous_comptime;
+    return value;
+}
+
 static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExpr *receiver, HirType *receiver_type) {
     Symbol *constraint = receiver_type->any_constraint.constraint;
     if (constraint == NULL || constraint->kind != SYMBOL_CONSTRAINT || constraint->decl == NULL ||
@@ -1037,7 +1151,7 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
 
     if (!sema_any_constraint_method_dispatchable(required->method)) {
         DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("this constraint method cannot be called through any<C> yet"));
-        diag_note(&diagnostic, STRING("erased dispatch currently supports non-generic methods without default bodies"));
+        diag_note(&diagnostic, STRING("erased dispatch supports non-generic methods; generic constraint methods remain unsupported"));
         diag_finish(&diagnostic);
         return sema_method_error(sema, ast->span);
     }
@@ -1161,13 +1275,14 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
             continue;
         AstParam *param = array_at(&method->params, i);
         if (param->default_value != NULL) {
-            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("default arguments are not supported for erased method calls yet"));
-            diag_finish(&diagnostic);
+            values[i] = sema_any_default_argument(sema, constraint, receiver_type, param, parameter_types[i], ast->span);
+            if (values[i] == NULL || values[i]->kind == HIR_EXPR_ERROR)
+                return sema_method_error(sema, ast->span);
         } else {
             DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, ast->span, STRING("missing argument for erased constraint method"));
             diag_finish(&diagnostic);
+            return sema_method_error(sema, ast->span);
         }
-        return sema_method_error(sema, ast->span);
     }
 
     HirExpr *call = arena_calloc(sema->arena, sizeof(*call));

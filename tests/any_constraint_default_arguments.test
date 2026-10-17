@@ -1,0 +1,39 @@
+name: constrained any supports default method arguments
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Adder = {
+    fn uint64 Self.kind(uint64 value = 100);
+    fn uint64 Self.add(Self *self, uint64 amount = 2);
+}
+
+type Alpha = struct {
+    uint64 base;
+};
+
+fn uint64 Alpha.kind(uint64 value) {
+    return value;
+}
+
+fn uint64 Alpha.add(Alpha *self, uint64 amount) {
+    return self.base + amount;
+}
+
+fn int64 main() {
+    Alpha alpha = {40};
+    any<Adder> item = alpha;
+    if (item.kind() != 100) return 1;
+    if (item.kind(7) != 7) return 2;
+    if (item.add() != 42) return 3;
+    if (item.add(3) != 43) return 4;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

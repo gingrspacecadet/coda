@@ -1,0 +1,43 @@
+name: constrained any dispatches default method bodies
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Describer = {
+    fn uint64 Self.kind() { return 100; }
+    fn uint64 Self.value(Self *self, uint64 add = 2) { return self.base + add; }
+}
+
+type Alpha = struct {
+    uint64 base;
+};
+
+type Beta = struct {
+    uint64 base;
+};
+
+fn uint64 Beta.kind() {
+    return 200;
+}
+
+fn int64 main() {
+    Alpha alpha = {40};
+    any<Describer> first = alpha;
+    if (first.kind() != 100) return 1;
+    if (first.value() != 42) return 2;
+    if (first.value(3) != 43) return 3;
+
+    Beta beta = {50};
+    any<Describer> second = beta;
+    if (second.kind() != 200) return 4;
+    if (second.value() != 52) return 5;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0
