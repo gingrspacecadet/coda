@@ -147,21 +147,11 @@ bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments,
         };
         scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &binding);
 
-        AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
-        if (!ast_name_equal(&param->name, &self_name)) {
-            Symbol self_binding = {
-                .kind = SYMBOL_TYPE,
-                .name = self_name,
-                .type = concrete,
-                .span = param->span,
-            };
-            scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &self_binding);
-        }
-
         bool valid = true;
         for (size_t j = 0; j < param->constraints.len && valid; j++) {
             AstConstraintRef *ref = array_at(&param->constraints, j);
             AstConstraintDecl *constraint = NULL;
+            Symbol *constraint_symbol = NULL;
 
             if (ref->kind == AST_CONSTRAINTREF_INLINE) {
                 constraint = ref->_inline;
@@ -171,6 +161,7 @@ bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments,
                     valid = generic_constraint_error(sema, ref->span, E_GENERIC_CONSTRAINT_INVALID, STRING("unknown or invalid generic constraint"), STRING("reference a constraint declaration or use an inline constraint block"));
                 } else {
                     constraint = &symbol->decl->constraint;
+                    constraint_symbol = symbol;
                 }
             } else {
                 valid = generic_constraint_error(sema, ref->span, E_GENERIC_CONSTRAINT_INVALID, STRING("invalid generic constraint reference"), STRING("reference a named constraint or use an inline constraint block"));
@@ -178,6 +169,15 @@ bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments,
 
             if (valid && constraint == NULL)
                 valid = generic_constraint_error(sema, ref->span, E_GENERIC_CONSTRAINT_INVALID, STRING("empty generic constraint"), STRING("provide at least one required field or method"));
+            if (valid && constraint_symbol != NULL) {
+                Symbol constraint_binding = {
+                    .kind = SYMBOL_TYPE,
+                    .name = constraint_symbol->name,
+                    .type = concrete,
+                    .span = ref->span,
+                };
+                scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &constraint_binding);
+            }
             if (valid)
                 valid = generic_constraint_check_items(sema, constraint, concrete, span);
         }
@@ -233,24 +233,13 @@ bool sema_check_constraint_type(Sema *sema, Symbol *constraint_symbol, HirType *
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     Scope *scope = sema_push_scope(sema);
 
-    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
-    Symbol self_binding = {
+    Symbol constraint_binding = {
         .kind = SYMBOL_TYPE,
-        .name = self_name,
+        .name = constraint_symbol->name,
         .type = concrete,
         .span = span,
     };
-    scope_insert(scope, &self_binding);
-
-    if (!ast_name_equal(&constraint_symbol->name, &self_name)) {
-        Symbol constraint_binding = {
-            .kind = SYMBOL_TYPE,
-            .name = constraint_symbol->name,
-            .type = concrete,
-            .span = span,
-        };
-        scope_insert(scope, &constraint_binding);
-    }
+    scope_insert(scope, &constraint_binding);
 
     AstConstraintDecl filtered = constraint_symbol->decl->constraint;
     filtered.items = array_create(sema->arena, sizeof(AstConstraintItem));

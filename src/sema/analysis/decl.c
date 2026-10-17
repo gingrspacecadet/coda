@@ -2,6 +2,155 @@
 #include "../../mangle.h"
 #include "../../mangle.h"
 
+typedef struct {
+    Symbol *constraint;
+    AstName name;
+} LiftedConstraintType;
+
+static bool sema_fn_uses_name(AstFnDecl *fn, AstName name) {
+    for (size_t i = 0; i < fn->generics.len; i++) {
+        AstGenericParam *param = array_at(&fn->generics, i);
+        if (ast_name_equal(&param->name, &name))
+            return true;
+    }
+
+    for (size_t i = 0; i < fn->params.len; i++) {
+        AstParam *param = array_at(&fn->params, i);
+        if (ast_name_equal(&param->name, &name))
+            return true;
+    }
+
+    return false;
+}
+
+static LiftedConstraintType *sema_find_lifted_constraint_type(Array lifted, Symbol *constraint) {
+    Symbol *canonical = symbol_canonical(constraint);
+    for (size_t i = 0; i < lifted.len; i++) {
+        LiftedConstraintType *entry = array_at(&lifted, i);
+        if (symbol_canonical(entry->constraint) == canonical)
+            return entry;
+    }
+
+    return NULL;
+}
+
+static AstName sema_make_constraint_generic_name(Sema *sema, AstFnDecl *fn, size_t *next_name) {
+    for (;;) {
+        AstName name = {
+            .kind = AST_NAME_IDENT,
+            .ident = format(sema->arena, "_C%03zu", (*next_name)++),
+        };
+        if (!sema_fn_uses_name(fn, name))
+            return name;
+    }
+}
+
+static AstType *sema_lift_constraint_signature_type(Sema *sema, AstFnDecl *fn, Array *lifted, AstType *type, size_t *next_name) {
+    if (type == NULL)
+        return NULL;
+
+    switch (type->kind) {
+        case AST_TYPE_NAMED: {
+            Symbol *symbol = sema_lookup_path(sema, type->named.path);
+            if (symbol != NULL && symbol->kind == SYMBOL_CONSTRAINT && type->named.args.len == 0) {
+                LiftedConstraintType *entry = sema_find_lifted_constraint_type(*lifted, symbol);
+                if (entry == NULL) {
+                    AstName name = sema_make_constraint_generic_name(sema, fn, next_name);
+                    AstGenericParam param = {
+                        .span = type->span,
+                        .name = name,
+                        .constraints = array_create(sema->arena, sizeof(AstConstraintRef)),
+                    };
+                    AstConstraintRef constraint = {
+                        .span = type->span,
+                        .kind = AST_CONSTRAINTREF_NAMED,
+                        .path = type->named.path,
+                        .args = array_create(sema->arena, sizeof(AstType *)),
+                    };
+                    array_push(&param.constraints, &constraint);
+                    array_push(&fn->generics, &param);
+
+                    LiftedConstraintType new_entry = {
+                        .constraint = symbol_canonical(symbol),
+                        .name = name,
+                    };
+                    array_push(lifted, &new_entry);
+                    entry = array_at(lifted, lifted->len - 1);
+                }
+
+                type->named.path.parts = array_create(sema->arena, sizeof(AstName));
+                array_push(&type->named.path.parts, &entry->name);
+                type->named.args = array_create(sema->arena, sizeof(AstType *));
+                return type;
+            }
+
+            if (symbol != NULL && symbol->kind == SYMBOL_TYPE && symbol->decl == NULL &&
+                symbol->type != NULL && symbol->type->kind == HIR_TYPE_ANY)
+                return type;
+
+            for (size_t i = 0; i < type->named.args.len; i++)
+                ((AstType **)type->named.args.data)[i] = sema_lift_constraint_signature_type(sema, fn, lifted, ((AstType **)type->named.args.data)[i], next_name);
+            return type;
+        }
+
+        case AST_TYPE_POINTER:
+            type->pointer.pointee = sema_lift_constraint_signature_type(sema, fn, lifted, type->pointer.pointee, next_name);
+            break;
+
+        case AST_TYPE_ARRAY:
+            type->array.element = sema_lift_constraint_signature_type(sema, fn, lifted, type->array.element, next_name);
+            break;
+
+        case AST_TYPE_FN:
+            type->fn.ret = sema_lift_constraint_signature_type(sema, fn, lifted, type->fn.ret, next_name);
+            for (size_t i = 0; i < type->fn.params.len; i++)
+                ((AstType **)type->fn.params.data)[i] = sema_lift_constraint_signature_type(sema, fn, lifted, ((AstType **)type->fn.params.data)[i], next_name);
+            break;
+
+        case AST_TYPE_SUM:
+            for (size_t i = 0; i < type->sum.members.len; i++)
+                ((AstType **)type->sum.members.data)[i] = sema_lift_constraint_signature_type(sema, fn, lifted, ((AstType **)type->sum.members.data)[i], next_name);
+            break;
+
+        case AST_TYPE_STRUCT:
+            type->structure.base = sema_lift_constraint_signature_type(sema, fn, lifted, type->structure.base, next_name);
+            for (size_t i = 0; i < type->structure.fields.len; i++) {
+                AstField *field = array_at(&type->structure.fields, i);
+                field->type = sema_lift_constraint_signature_type(sema, fn, lifted, field->type, next_name);
+            }
+            break;
+
+        case AST_TYPE_UNION:
+            for (size_t i = 0; i < type->union_.fields.len; i++) {
+                AstField *field = array_at(&type->union_.fields, i);
+                field->type = sema_lift_constraint_signature_type(sema, fn, lifted, field->type, next_name);
+            }
+            break;
+
+        case AST_TYPE_ENUM:
+            type->_enum.underlying = sema_lift_constraint_signature_type(sema, fn, lifted, type->_enum.underlying, next_name);
+            break;
+
+        case AST_TYPE_ERROR:
+        case AST_TYPE_SPLICE:
+            break;
+    }
+
+    return type;
+}
+
+static void sema_lift_constraint_signature_types(Sema *sema, AstFnDecl *fn) {
+    Array lifted = array_create(sema->arena, sizeof(LiftedConstraintType));
+    size_t next_name = 1;
+
+    for (size_t i = 0; i < fn->params.len; i++) {
+        AstParam *param = array_at(&fn->params, i);
+        param->type = sema_lift_constraint_signature_type(sema, fn, &lifted, param->type, &next_name);
+    }
+
+    fn->ret = sema_lift_constraint_signature_type(sema, fn, &lifted, fn->ret, &next_name);
+}
+
 void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (ast->generics.len != 0) {
         sema_validate_param_defaults(sema, ast);
@@ -334,6 +483,7 @@ void sema_include_decl(Sema *sema, AstIncludeDecl *ast) {}
 void sema_decl(Sema *sema, AstDecl *ast) {
     switch (ast->kind) {
         case AST_DECL_FN:
+            sema_lift_constraint_signature_types(sema, &ast->fn);
             sema_fn_decl(sema, &ast->fn);
             break;
 

@@ -1,0 +1,40 @@
+name: constraint types in signatures are lifted to generic parameters
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Readable = {
+    fn uint64 Readable.read(Readable *self);
+}
+
+type File = struct {
+    uint64 size;
+};
+
+fn uint64 File.read(File *self) {
+    return self.size;
+}
+
+fn Readable identity(Readable value) {
+    return value;
+}
+
+fn uint64 read_size(Readable file) {
+    return file.read();
+}
+
+fn int64 main() {
+    File file = {42};
+    File copy = identity(file);
+    if (copy.size != 42) return 1;
+    if (read_size(file) != 42) return 2;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

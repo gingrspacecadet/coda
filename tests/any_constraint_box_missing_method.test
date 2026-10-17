@@ -5,7 +5,7 @@ errors: 1
 
 [source]
 constraint Readable = {
-    fn uint64 Self.read(Self *self);
+    fn uint64 Readable.read(Readable *self);
 }
 
 type Wrong = struct {};

@@ -5,8 +5,8 @@ errors: 0
 
 [source]
 constraint Adder = {
-    fn uint64 Self.kind(uint64 value = 100);
-    fn uint64 Self.add(Self *self, uint64 amount = 2);
+    fn uint64 Adder.kind(uint64 value = 100);
+    fn uint64 Adder.add(Adder *self, uint64 amount = 2);
 }
 
 type Alpha = struct {

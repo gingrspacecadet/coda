@@ -5,7 +5,7 @@ errors: 0
 
 [source]
 constraint Readable = {
-    fn uint64 Self.read(Self *self, uint8[] buffer);
+    fn uint64 Readable.read(Readable *self, uint8[] buffer);
 }
 
 type File = struct {

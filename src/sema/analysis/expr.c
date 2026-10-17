@@ -296,15 +296,20 @@ static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_
 }
 
 
-static bool sema_any_constraint_method_dispatchable(AstFnDecl *method) {
-    return method != NULL && method->generics.len == 0;
-}
+typedef struct {
+    AstModule *module;
+    Scope global_scope;
+    Scope *module_scope;
+    Array scopes;
+} SemaConstraintContext;
 
-static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl *method, HirType *concrete, Span span) {
-    AstModule *previous_module = sema->module;
-    Scope previous_global_scope = sema->global_scope;
-    Scope *previous_module_scope = sema->module_scope;
-    Array previous_scopes = sema->scopes;
+static SemaConstraintContext sema_constraint_context_begin(Sema *sema, Symbol *constraint, HirType *concrete, Span span) {
+    SemaConstraintContext previous = {
+        .module = sema->module,
+        .global_scope = sema->global_scope,
+        .module_scope = sema->module_scope,
+        .scopes = sema->scopes,
+    };
 
     if (constraint->owner_module != NULL)
         sema->module = constraint->owner_module;
@@ -315,25 +320,29 @@ static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl
 
     sema->scopes = array_create(sema->arena, sizeof(Scope));
     Scope *scope = sema_push_scope(sema);
-
-    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
-    Symbol self_binding = {
+    Symbol binding = {
         .kind = SYMBOL_TYPE,
-        .name = self_name,
+        .name = constraint->name,
         .type = concrete,
         .span = span,
     };
-    scope_insert(scope, &self_binding);
+    scope_insert(scope, &binding);
+    return previous;
+}
 
-    if (!ast_name_equal(&constraint->name, &self_name)) {
-        Symbol constraint_binding = {
-            .kind = SYMBOL_TYPE,
-            .name = constraint->name,
-            .type = concrete,
-            .span = span,
-        };
-        scope_insert(scope, &constraint_binding);
-    }
+static void sema_constraint_context_end(Sema *sema, SemaConstraintContext previous) {
+    sema->module = previous.module;
+    sema->global_scope = previous.global_scope;
+    sema->module_scope = previous.module_scope;
+    sema->scopes = previous.scopes;
+}
+
+static bool sema_any_constraint_method_dispatchable(AstFnDecl *method) {
+    return method != NULL && method->generics.len == 0;
+}
+
+static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl *method, HirType *concrete, Span span) {
+    SemaConstraintContext previous = sema_constraint_context_begin(sema, constraint, concrete, span);
 
     AstDecl *decl = arena_calloc(sema->arena, sizeof(*decl));
     *decl = (AstDecl){.kind = AST_DECL_FN, .fn = *method};
@@ -351,14 +360,11 @@ static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl
         .owner_module = sema->module,
         .owner_scope = sema->module_scope,
     };
-    scope_insert(scope, &generated);
+    scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &generated);
     sema_fn_decl(sema, &decl->fn);
     Symbol *result = sema_lookup(sema, decl->fn.name);
 
-    sema->module = previous_module;
-    sema->global_scope = previous_global_scope;
-    sema->module_scope = previous_module_scope;
-    sema->scopes = previous_scopes;
+    sema_constraint_context_end(sema, previous);
     return result;
 }
 
@@ -1064,51 +1070,17 @@ static HirExpr *sema_method_error(Sema *sema, Span span) {
 }
 
 static HirExpr *sema_any_default_argument(Sema *sema, Symbol *constraint, HirType *receiver_type, AstParam *param, HirType *param_type, Span span) {
-    AstModule *previous_module = sema->module;
-    Scope previous_global_scope = sema->global_scope;
-    Scope *previous_module_scope = sema->module_scope;
-    Array previous_scopes = sema->scopes;
+    SemaConstraintContext previous = sema_constraint_context_begin(sema, constraint, receiver_type, span);
     HirFunction *previous_fn = sema->current_fn;
     bool previous_comptime = sema->comptime;
-
-    if (constraint->owner_module != NULL)
-        sema->module = constraint->owner_module;
-    if (constraint->owner_scope != NULL && constraint->owner_scope != &sema->global_scope) {
-        sema->global_scope = *constraint->owner_scope;
-        sema->module_scope = constraint->owner_scope;
-    }
-    sema->scopes = array_create(sema->arena, sizeof(Scope));
-    Scope *scope = sema_push_scope(sema);
-
-    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
-    Symbol self_binding = {
-        .kind = SYMBOL_TYPE,
-        .name = self_name,
-        .type = receiver_type,
-        .span = span,
-    };
-    scope_insert(scope, &self_binding);
-
-    if (!ast_name_equal(&constraint->name, &self_name)) {
-        Symbol constraint_binding = {
-            .kind = SYMBOL_TYPE,
-            .name = constraint->name,
-            .type = receiver_type,
-            .span = span,
-        };
-        scope_insert(scope, &constraint_binding);
-    }
 
     sema->current_fn = NULL;
     sema->comptime = false;
     HirExpr *value = sema_expr(sema, param->default_value, param_type);
 
-    sema->module = previous_module;
-    sema->global_scope = previous_global_scope;
-    sema->module_scope = previous_module_scope;
-    sema->scopes = previous_scopes;
     sema->current_fn = previous_fn;
     sema->comptime = previous_comptime;
+    sema_constraint_context_end(sema, previous);
     return value;
 }
 
@@ -1157,38 +1129,7 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
     }
 
     AstFnDecl *method = required->method;
-    AstModule *previous_module = sema->module;
-    Scope previous_global_scope = sema->global_scope;
-    Scope *previous_module_scope = sema->module_scope;
-    Array previous_scopes = sema->scopes;
-
-    if (constraint->owner_module != NULL)
-        sema->module = constraint->owner_module;
-    if (constraint->owner_scope != NULL && constraint->owner_scope != &sema->global_scope) {
-        sema->global_scope = *constraint->owner_scope;
-        sema->module_scope = constraint->owner_scope;
-    }
-    sema->scopes = array_create(sema->arena, sizeof(Scope));
-    Scope *scope = sema_push_scope(sema);
-
-    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
-    Symbol self_binding = {
-        .kind = SYMBOL_TYPE,
-        .name = self_name,
-        .type = receiver_type,
-        .span = ast->span,
-    };
-    scope_insert(scope, &self_binding);
-
-    if (!ast_name_equal(&constraint->name, &self_name)) {
-        Symbol constraint_binding = {
-            .kind = SYMBOL_TYPE,
-            .name = constraint->name,
-            .type = receiver_type,
-            .span = ast->span,
-        };
-        scope_insert(scope, &constraint_binding);
-    }
+    SemaConstraintContext previous = sema_constraint_context_begin(sema, constraint, receiver_type, ast->span);
 
     HirType *return_type = sema_type(sema, method->ret);
     HirType **parameter_types = arena_calloc(sema->arena, sizeof(HirType *) * method->params.len);
@@ -1209,16 +1150,13 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
             type_equal(first_type->pointer.pointee, receiver_type);
     }
 
-    sema->module = previous_module;
-    sema->global_scope = previous_global_scope;
-    sema->module_scope = previous_module_scope;
-    sema->scopes = previous_scopes;
+    sema_constraint_context_end(sema, previous);
 
     if (!signature_valid)
         return sema_method_error(sema, ast->span);
 
     if (type_equal(return_type, receiver_type)) {
-        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot return Self by value"));
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot return the constrained type by value"));
         diag_note(&diagnostic, STRING("use a concrete return type or return an explicitly erased any<C> value"));
         diag_finish(&diagnostic);
         return sema_method_error(sema, ast->span);
@@ -1227,12 +1165,10 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
     size_t receiver_offset = has_receiver ? 1 : 0;
     for (size_t i = receiver_offset; i < method->params.len; i++) {
         HirType *param_type = parameter_types[i];
-        bool self_value = type_equal(param_type, receiver_type) ||
-            (param_type->kind == HIR_TYPE_POINTER && type_equal(param_type->pointer.pointee, receiver_type));
-        if (self_value) {
-            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot take Self as an ordinary argument"));
-            diag_note(&diagnostic, STRING("Self is supported only as the implicit instance receiver for dynamic dispatch"));
-            diag_finish(&diagnostic);
+        bool constrained_value = type_equal(param_type, receiver_type) || (param_type->kind == HIR_TYPE_POINTER && type_equal(param_type->pointer.pointee, receiver_type));
+        if (constrained_value) {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot take the constrained type as an ordinary argument"));
+            diag_note(&diagnostic, STRING("the constrained type is supported only as the implicit instance receiver for dynamic dispatch"));
             return sema_method_error(sema, ast->span);
         }
     }

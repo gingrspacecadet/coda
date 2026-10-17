@@ -5,8 +5,8 @@ errors: 0
 
 [source]
 constraint Describer = {
-    fn uint64 Self.kind();
-    fn uint64 Self.value(Self *self, uint64 add);
+    fn uint64 Describer.kind();
+    fn uint64 Describer.value(Describer *self, uint64 add);
 }
 
 type Alpha = struct {
