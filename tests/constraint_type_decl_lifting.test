@@ -1,0 +1,35 @@
+name: constraint types in type declarations are lifted to generic parameters
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Readable = {
+    fn uint64 Readable.read(Readable *self);
+}
+
+type Box = struct {
+    Readable value;
+};
+
+type File = struct {
+    uint64 size;
+};
+
+fn uint64 File.read(File *self) {
+    return self.size;
+}
+
+fn int64 main() {
+    File file = {42};
+    Box<File> box = {file};
+    if (box.value.read() != 42) return 1;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0
