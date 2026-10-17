@@ -1,0 +1,31 @@
+name: constrained any boxes temporary values
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+constraint Readable = {
+    fn uint64 Readable.read(Readable *self);
+}
+
+type File = struct {
+    uint64 size;
+};
+
+fn uint64 File.read(File *self) {
+    return self.size;
+}
+
+fn File make_file() {
+    File file = {42};
+    return file;
+}
+
+fn none consume(any<Readable> file) {
+    return;
+}
+
+fn int64 main() {
+    consume(make_file());
+    return 0;
+}

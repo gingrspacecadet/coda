@@ -362,7 +362,7 @@ static Symbol *sema_any_default_method(Sema *sema, Symbol *constraint, AstFnDecl
     };
     scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &generated);
     sema_fn_decl(sema, &decl->fn);
-    Symbol *result = sema_lookup(sema, decl->fn.name);
+    Symbol *result = sema_lookup_fn_decl(sema, &decl->fn);
 
     sema_constraint_context_end(sema, previous);
     return result;

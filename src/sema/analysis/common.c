@@ -45,19 +45,22 @@ Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl) {
 }
 
 Symbol *sema_lookup(Sema *sema, AstName name) {
+    return sema_lookup_non_method(sema, name);
+}
+
+Symbol *sema_lookup_fn_decl(Sema *sema, AstFnDecl *decl) {
     for (size_t i = sema->scopes.len; i > 0; --i) {
         Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
-        Symbol *symbol = scope_lookup(scope, name);
-
+        Symbol *symbol = scope_lookup_fn_decl(scope, decl);
         if (symbol != NULL)
             return symbol;
     }
 
-    Symbol *symbol = scope_lookup(&sema->global_scope, name);
+    Symbol *symbol = scope_lookup_fn_decl(&sema->global_scope, decl);
     if (symbol != NULL)
         return symbol;
 
-    return scope_lookup(&sema->builtin_scope, name);
+    return scope_lookup_fn_decl(&sema->builtin_scope, decl);
 }
 
 Symbol *sema_lookup_non_method(Sema *sema, AstName name) {
@@ -106,7 +109,7 @@ Symbol *sema_lookup_path(Sema *sema, Path path) {
         part = (AstName *)array_at(&path.parts, i);
 
         if (symbol->kind == SYMBOL_NAMESPACE) {
-            symbol = scope_lookup(symbol->namespace_scope, *part);
+            symbol = scope_lookup_non_method(symbol->namespace_scope, *part);
         } else if (i == path.parts.len - 1) {
             symbol = sema_lookup_enum_item(symbol, *part);
         } else {

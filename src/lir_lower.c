@@ -535,7 +535,21 @@ static void lir_register_witness_global(LirModule *module, HirExpr *expr) {
 static LirOperand lir_lower_any_box(LirLower *lower, HirExpr *expr) {
     lir_register_witness_global(lower->module, expr);
 
-    LirOperand address = lir_lower_expr(lower, expr->any_box.address);
+    HirExpr *address_expr = expr->any_box.address;
+    HirExpr *value_expr = address_expr->unary.operand;
+    LirOperand address;
+
+    if (lir_expr_is_place(value_expr)) {
+        address = lir_lower_expr(lower, address_expr);
+    } else {
+        LirOperand value = lir_lower_expr(lower, value_expr);
+        LirValueId storage_id = lir_emit(lower->function, lower->block, LIR_OP_ZERO, value_expr->type, (Array){0});
+        LirOperand storage = lir_operand_value(storage_id, value_expr->type);
+        HirType *storage_pointer_type = lir_address_type(lower, value_expr->type);
+        LirValueId address_id = lir_emit(lower->function, lower->block, LIR_OP_ADDR, storage_pointer_type, (Array){.data = &storage, .len = 1});
+        address = lir_operand_value(address_id, storage_pointer_type);
+        lir_lower_store(lower, (LirPlace){.address = address, .type = value_expr->type}, value);
+    }
     LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, expr->type, (Array){0});
     LirOperand aggregate = lir_operand_value(zero, expr->type);
 

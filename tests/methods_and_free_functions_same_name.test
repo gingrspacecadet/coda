@@ -1,0 +1,31 @@
+name: methods and free functions can share a name regardless of declaration order
+expect: pass
+stop: run
+errors: 0
+
+[source]
+type File = struct {
+    uint64 size;
+};
+
+fn uint64 read(File *file) {
+    return 1;
+}
+
+fn uint64 File.read(File *self) {
+    return self.size;
+}
+
+fn int64 main() {
+    File file = {42};
+    if (read(&file) != 1) return 1;
+    if (file.read() != 42) return 1;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

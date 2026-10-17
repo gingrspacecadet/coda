@@ -160,7 +160,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (sema_fn_has_unbound_receiver_generics(sema, ast))
         return;
 
-    Symbol *symbol = sema_lookup(sema, ast->name);
+    Symbol *symbol = sema_lookup_fn_decl(sema, ast);
 
     if (symbol == NULL) {
         //! TODO: internal compiler error
@@ -592,7 +592,7 @@ void collect_decls(Sema *sema, Array(AstDecl *) decls) {
             bool is_method = d->kind == AST_DECL_FN && d->fn.receiver != NULL;
 
             if (!is_method) {
-                Symbol *s = sema_lookup(sema, sym->name);
+                Symbol *s = sema_lookup_non_method(sema, sym->name);
                 if (s != NULL) {
                     error_duplicate_symbol(sema->diags, sym->name.ident, d->span, s->span);
                     continue;

@@ -178,7 +178,11 @@ bool sema_check_generic_constraints(Sema *sema, Array generics, Array arguments,
                 };
                 scope_insert((Scope *)array_at(&sema->scopes, sema->scopes.len - 1), &constraint_binding);
             }
-            if (valid)
+            bool erased_satisfies_constraint = valid && constraint_symbol != NULL &&
+                concrete->kind == HIR_TYPE_ANY_CONSTRAINT &&
+                symbol_canonical(concrete->any_constraint.constraint) == symbol_canonical(constraint_symbol);
+
+            if (valid && !erased_satisfies_constraint)
                 valid = generic_constraint_check_items(sema, constraint, concrete, span);
         }
 
