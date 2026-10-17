@@ -1,0 +1,21 @@
+name: constrained any rejects types missing required methods
+expect: fail
+stop: lir
+errors: 1
+
+[source]
+constraint Readable = {
+    fn uint64 Self.read(Self *self);
+}
+
+type Wrong = struct {};
+
+fn none consume(any<Readable> value) {
+    return;
+}
+
+fn int64 main() {
+    Wrong item = {};
+    consume(item);
+    return 0;
+}

@@ -1,0 +1,9 @@
+name: dynamic any requires a constraint argument
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn none invalid(any<uint64> value) {
+    return;
+}

@@ -1,0 +1,38 @@
+name: constrained any boxes values with witness tables
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Describer = {
+    fn uint64 Self.kind();
+    fn uint64 Self.value(Self *self, uint64 add);
+}
+
+type Alpha = struct {
+    uint64 base;
+};
+
+fn uint64 Alpha.kind() {
+    return 100;
+}
+
+fn uint64 Alpha.value(Alpha *self, uint64 add) {
+    return self.base + add;
+}
+
+fn int64 consume(any<Describer> item) {
+    return 0;
+}
+
+fn int64 main() {
+    Alpha alpha = {40};
+    return consume(alpha);
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

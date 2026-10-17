@@ -250,6 +250,13 @@ static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, 
         case HIR_TYPE_UNION:
             return buffer_append_fields(buffer, sema, type->union_.fields, true, depth);
 
+        case HIR_TYPE_ANY:
+            return buffer_append(buffer, "Y");
+
+        case HIR_TYPE_ANY_CONSTRAINT:
+            return buffer_append(buffer, "V") &&
+                   buffer_append_nominal_identity(buffer, symbol_canonical(type->any_constraint.constraint));
+
         case HIR_TYPE_ENUM:
             return buffer_append(buffer, "E") && buffer_append_type(buffer, sema, type->_enum.underlying, depth + 1);
     }

@@ -167,6 +167,9 @@ static bool abi_is_aggregate(HirType *type) {
     if (type == NULL)
         return false;
 
+    if (type->kind == HIR_TYPE_ANY || type->kind == HIR_TYPE_ANY_CONSTRAINT)
+        return true;
+
     return type->kind == HIR_TYPE_STRUCT || type->kind == HIR_TYPE_UNION ||
            type->kind == HIR_TYPE_ARRAY || type->kind == HIR_TYPE_SLICE ||
            type->kind == HIR_TYPE_SUM;
@@ -221,6 +224,12 @@ static void abi_classify_at(HirType *type, size_t offset, X86AbiClassification *
     }
 
     switch (type->kind) {
+        case HIR_TYPE_ANY:
+        case HIR_TYPE_ANY_CONSTRAINT:
+            abi_mark(classification, offset, sizeof(void *), X86_ABI_INTEGER);
+            abi_mark(classification, offset + sizeof(void *), sizeof(void *), X86_ABI_INTEGER);
+            return;
+
         case HIR_TYPE_BUILTIN:
         case HIR_TYPE_POINTER:
         case HIR_TYPE_ENUM:
@@ -707,6 +716,10 @@ static void load_operand(X86Function *function, const LirOperand *operand, X86Re
             break;
 
         case LIR_OPERAND_SYMBOL:
+            String name = symbol_link_name(operand->symbol);
+            fprintf(function->out, "    lea %s, %.*s[rip]\n", reg_name(reg, 8), (int)name.length, name.data);
+            break;
+
         case LIR_OPERAND_FLOAT:
         case LIR_OPERAND_INVALID:
             assert(!"unsupported operand");
@@ -1257,9 +1270,18 @@ static void emit_abi_stack_copy(X86Function *function, const LirOperand *operand
 
 static void emit_call(X86Function *function, const LirInstruction *instruction) {
     LirOperand *operands = instruction->operands.data;
-    Symbol *symbol = operands[0].symbol;
+    bool indirect_call = operands[0].kind != LIR_OPERAND_SYMBOL;
+    Symbol *symbol = indirect_call ? NULL : operands[0].symbol;
     size_t arg_count = instruction->operands.len - 1;
-    HirType *callee_type = base_type(symbol->type);
+    HirType *callee_type;
+    if (indirect_call) {
+        HirType *pointer_type = base_type(operands[0].type);
+        assert(pointer_type != NULL && pointer_type->kind == HIR_TYPE_POINTER);
+        callee_type = base_type(pointer_type->pointer.pointee);
+    } else {
+        assert(symbol != NULL);
+        callee_type = base_type(symbol->type);
+    }
     assert(callee_type != NULL && callee_type->kind == HIR_TYPE_FUNCTION);
 
     HirType *return_type = base_type(callee_type->function.ret);
@@ -1326,8 +1348,13 @@ static void emit_call(X86Function *function, const LirInstruction *instruction) 
         }
     }
 
-    String name = symbol_link_name(symbol);
-    fprintf(function->out, "    call %.*s\n", (int)name.length, name.data);
+    if (indirect_call) {
+        load_operand(function, &operands[0], X86_R10);
+        fprintf(function->out, "    call r10\n");
+    } else {
+        String name = symbol_link_name(symbol);
+        fprintf(function->out, "    call %.*s\n", (int)name.length, name.data);
+    }
     if (stack_size != 0)
         fprintf(function->out, "    add rsp, %zu\n", stack_size);
 

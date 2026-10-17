@@ -295,6 +295,92 @@ static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_
     return expr;
 }
 
+
+static bool sema_any_constraint_method_dispatchable(AstFnDecl *method) {
+    return method != NULL && method->generics.len == 0 && method->body == NULL;
+}
+
+static HirExpr *sema_any_box(Sema *sema, HirExpr *value, HirType *target) {
+    Symbol *constraint = target->any_constraint.constraint;
+    if (value->type == NULL || !sema_check_constraint_type(sema, constraint, value->type, value->span))
+        return NULL;
+
+    AstConstraintDecl *decl = &constraint->decl->constraint;
+    Array methods = array_create(sema->arena, sizeof(Symbol *));
+    HirType *entry_type = pointer_type(sema, builtin_type(sema, BUILTIN_UINT8), false);
+    HirType *vtable_type = arena_calloc(sema->arena, sizeof(*vtable_type));
+    *vtable_type = (HirType){
+        .kind = HIR_TYPE_STRUCT,
+        .mutable = false,
+        .align = entry_type->align,
+        .structure.fields = array_create(sema->arena, sizeof(HirField)),
+    };
+
+    size_t offset = 0;
+    for (size_t i = 0; i < decl->items.len; i++) {
+        AstConstraintItem *item = array_at(&decl->items, i);
+        if (item->kind != AST_CONSTRAINT_METHOD || !sema_any_constraint_method_dispatchable(item->method))
+            continue;
+
+        Symbol *method = sema_find_method(sema, value->type, item->method->name);
+        if (method == NULL || method->decl == NULL || method->decl->kind != AST_DECL_FN ||
+            method->decl->fn.generics.len != 0) {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSATISFIED, value->span, STRING("type does not provide a required erased method"));
+            diag_note(&diagnostic, STRING("implement every non-generic constraint method without a default body"));
+            diag_finish(&diagnostic);
+            return NULL;
+        }
+
+        array_push(&methods, &method);
+        Symbol *field_symbol = arena_calloc(sema->arena, sizeof(*field_symbol));
+        *field_symbol = (Symbol){
+            .kind = SYMBOL_FIELD,
+            .name = item->method->name,
+            .type = entry_type,
+            .span = item->span,
+        };
+        HirField field = {.symbol = field_symbol, .type = entry_type, .offset = offset};
+        array_push(&vtable_type->structure.fields, &field);
+        offset += entry_type->size;
+    }
+    vtable_type->size = offset;
+
+    String witness_name = format(sema->arena, ".L_coda_witness_%zu", sema->next_witness_table++);
+    Symbol *vtable = arena_calloc(sema->arena, sizeof(*vtable));
+    *vtable = (Symbol){
+        .kind = SYMBOL_GLOBAL,
+        .name = {.kind = AST_NAME_IDENT, .ident = witness_name},
+        .link_name = witness_name,
+        .type = vtable_type,
+        .span = value->span,
+        .owner_module = sema->module,
+        .owner_scope = sema->module_scope,
+    };
+    vtable->canonical = vtable;
+
+    HirExpr *address = arena_calloc(sema->arena, sizeof(*address));
+    *address = (HirExpr){
+        .span = value->span,
+        .kind = HIR_EXPR_UNARY,
+        .type = pointer_type(sema, value->type, false),
+        .unary = {.op = AST_UNARY_ADDRESS, .operand = value},
+    };
+
+    HirExpr *boxed = arena_calloc(sema->arena, sizeof(*boxed));
+    *boxed = (HirExpr){
+        .span = value->span,
+        .kind = HIR_EXPR_ANY_BOX,
+        .type = target,
+        .any_box = {
+            .address = address,
+            .vtable = vtable,
+            .vtable_type = vtable_type,
+            .methods = methods,
+        },
+    };
+    return boxed;
+}
+
 HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr == NULL || type == NULL)
         return expr;
@@ -318,6 +404,30 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
     if (expr->type != NULL) {
         if (type_equal(expr->type, type))
             return expr;
+
+        if (type->kind == HIR_TYPE_ANY_CONSTRAINT)
+            return sema_any_box(sema, expr, type);
+
+        HirType *source = sema_unwrap_type(expr->type);
+        HirType *target = sema_unwrap_type(type);
+        HirType *target_function = target != NULL && target->kind == HIR_TYPE_POINTER
+            ? sema_unwrap_type(target->pointer.pointee)
+            : NULL;
+
+        if (source != NULL && source->kind == HIR_TYPE_FUNCTION &&
+            target_function != NULL && target_function->kind == HIR_TYPE_FUNCTION &&
+            type_equal(source, target_function) &&
+            expr->kind == HIR_EXPR_VALUE && expr->value.symbol != NULL &&
+            expr->value.symbol->kind == SYMBOL_FN) {
+            HirExpr *cast = arena_calloc(sema->arena, sizeof(*cast));
+            *cast = (HirExpr){
+                .span = expr->span,
+                .kind = HIR_EXPR_CAST,
+                .type = type,
+                .cast = {.type = type, .operand = expr},
+            };
+            return cast;
+        }
 
         if (expr->type->kind == HIR_TYPE_ARRAY && type->kind == HIR_TYPE_SLICE) {
             HirExpr *slice = sema_array_to_slice(sema, expr, type);
@@ -463,10 +573,20 @@ static HirType *call_type(Sema *sema, HirExpr *callee) {
     if (callee->type == NULL)
         return NULL;
 
-    if (callee->type->kind != HIR_TYPE_FUNCTION)
+    HirType *type = sema_unwrap_type(callee->type);
+    if (type == NULL)
         return NULL;
 
-    return callee->type;
+    if (type->kind == HIR_TYPE_FUNCTION)
+        return type;
+
+    if (type->kind == HIR_TYPE_POINTER) {
+        HirType *pointee = sema_unwrap_type(type->pointer.pointee);
+        if (pointee != NULL && pointee->kind == HIR_TYPE_FUNCTION)
+            return pointee;
+    }
+
+    return NULL;
 }
 
 static HirField *field_lookup(Array(HirField) fields, AstName name) {
@@ -878,6 +998,201 @@ static HirExpr *sema_method_error(Sema *sema, Span span) {
     return expr;
 }
 
+static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExpr *receiver, HirType *receiver_type) {
+    Symbol *constraint = receiver_type->any_constraint.constraint;
+    if (constraint == NULL || constraint->kind != SYMBOL_CONSTRAINT || constraint->decl == NULL ||
+        constraint->decl->kind != AST_DECL_CONSTRAINT)
+        return sema_method_error(sema, ast->span);
+
+    if (ast->call.generic_args.len != 0) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_ARGUMENTS_ON_NON_GENERIC, ast->span, STRING("type arguments supplied to a non-generic erased method"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    AstConstraintDecl *constraint_decl = &constraint->decl->constraint;
+    AstConstraintItem *required = NULL;
+    size_t method_index = 0;
+    size_t next_method_index = 0;
+    for (size_t i = 0; i < constraint_decl->items.len; i++) {
+        AstConstraintItem *item = array_at(&constraint_decl->items, i);
+        if (item->kind != AST_CONSTRAINT_METHOD)
+            continue;
+
+        if (ast_name_equal(&item->method->name, &ast->call.callee->member.member)) {
+            required = item;
+            method_index = next_method_index;
+            break;
+        }
+
+        if (sema_any_constraint_method_dispatchable(item->method))
+            next_method_index++;
+    }
+
+    if (required == NULL) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNKNOWN_NAME, ast->span, format(sema->diags->arena, "constraint has no method '%.*s'", string_fmt(ast->call.callee->member.member.ident)));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (!sema_any_constraint_method_dispatchable(required->method)) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("this constraint method cannot be called through any<C> yet"));
+        diag_note(&diagnostic, STRING("erased dispatch currently supports non-generic methods without default bodies"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    AstFnDecl *method = required->method;
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    if (constraint->owner_module != NULL)
+        sema->module = constraint->owner_module;
+    if (constraint->owner_scope != NULL && constraint->owner_scope != &sema->global_scope) {
+        sema->global_scope = *constraint->owner_scope;
+        sema->module_scope = constraint->owner_scope;
+    }
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    Scope *scope = sema_push_scope(sema);
+
+    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
+    Symbol self_binding = {
+        .kind = SYMBOL_TYPE,
+        .name = self_name,
+        .type = receiver_type,
+        .span = ast->span,
+    };
+    scope_insert(scope, &self_binding);
+
+    if (!ast_name_equal(&constraint->name, &self_name)) {
+        Symbol constraint_binding = {
+            .kind = SYMBOL_TYPE,
+            .name = constraint->name,
+            .type = receiver_type,
+            .span = ast->span,
+        };
+        scope_insert(scope, &constraint_binding);
+    }
+
+    HirType *return_type = sema_type(sema, method->ret);
+    HirType **parameter_types = arena_calloc(sema->arena, sizeof(HirType *) * method->params.len);
+    bool signature_valid = return_type != NULL && return_type->kind != HIR_TYPE_ERROR;
+    for (size_t i = 0; i < method->params.len; i++) {
+        AstParam *param = array_at(&method->params, i);
+        parameter_types[i] = sema_type(sema, param->type);
+        if (parameter_types[i] == NULL || parameter_types[i]->kind == HIR_TYPE_ERROR)
+            signature_valid = false;
+    }
+
+    bool has_receiver = false;
+    if (method->params.len != 0) {
+        AstParam *first = array_at(&method->params, 0);
+        HirType *first_type = parameter_types[0];
+        has_receiver = first->name.kind == AST_NAME_IDENT && string_eq(first->name.ident, STRING("self")) &&
+            first_type != NULL && first_type->kind == HIR_TYPE_POINTER &&
+            type_equal(first_type->pointer.pointee, receiver_type);
+    }
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+
+    if (!signature_valid)
+        return sema_method_error(sema, ast->span);
+
+    if (type_equal(return_type, receiver_type)) {
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot return Self by value"));
+        diag_note(&diagnostic, STRING("use a concrete return type or return an explicitly erased any<C> value"));
+        diag_finish(&diagnostic);
+        return sema_method_error(sema, ast->span);
+    }
+
+    size_t receiver_offset = has_receiver ? 1 : 0;
+    for (size_t i = receiver_offset; i < method->params.len; i++) {
+        HirType *param_type = parameter_types[i];
+        bool self_value = type_equal(param_type, receiver_type) ||
+            (param_type->kind == HIR_TYPE_POINTER && type_equal(param_type->pointer.pointee, receiver_type));
+        if (self_value) {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("erased methods cannot take Self as an ordinary argument"));
+            diag_note(&diagnostic, STRING("Self is supported only as the implicit instance receiver for dynamic dispatch"));
+            diag_finish(&diagnostic);
+            return sema_method_error(sema, ast->span);
+        }
+    }
+
+    HirType *byte_type = builtin_type(sema, BUILTIN_UINT8);
+    HirType *byte_pointer_type = pointer_type(sema, byte_type, false);
+    HirType *function_type = arena_calloc(sema->arena, sizeof(*function_type));
+    *function_type = (HirType){
+        .kind = HIR_TYPE_FUNCTION,
+        .size = sizeof(void *),
+        .align = __alignof(void *),
+        .function = {
+            .ret = return_type,
+            .params = array_create(sema->arena, sizeof(HirType *)),
+        },
+    };
+    if (has_receiver)
+        array_push(&function_type->function.params, &byte_pointer_type);
+    for (size_t i = receiver_offset; i < method->params.len; i++)
+        array_push(&function_type->function.params, &parameter_types[i]);
+
+    size_t param_count = method->params.len;
+    size_t *arg_params = arena_calloc(sema->arena, sizeof(size_t) * ast->call.args.len);
+    bool *provided = arena_calloc(sema->arena, sizeof(bool) * param_count);
+    HirExpr **values = arena_calloc(sema->arena, sizeof(HirExpr *) * param_count);
+    if (!sema_map_call_arguments(sema, ast, method, receiver_offset, arg_params, provided))
+        return sema_method_error(sema, ast->span);
+
+    for (size_t i = 0; i < ast->call.args.len; i++) {
+        AstCallArg *arg = array_at(&ast->call.args, i);
+        size_t parameter = arg_params[i];
+        HirExpr *value = sema_expr(sema, arg->value, parameter_types[parameter]);
+        if (value == NULL || value->kind == HIR_EXPR_ERROR)
+            return sema_method_error(sema, ast->span);
+        values[parameter] = value;
+    }
+
+    for (size_t i = receiver_offset; i < param_count; i++) {
+        if (values[i] != NULL)
+            continue;
+        AstParam *param = array_at(&method->params, i);
+        if (param->default_value != NULL) {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_GENERIC_CONSTRAINT_UNSUPPORTED, ast->span, STRING("default arguments are not supported for erased method calls yet"));
+            diag_finish(&diagnostic);
+        } else {
+            DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, ast->span, STRING("missing argument for erased constraint method"));
+            diag_finish(&diagnostic);
+        }
+        return sema_method_error(sema, ast->span);
+    }
+
+    HirExpr *call = arena_calloc(sema->arena, sizeof(*call));
+    *call = (HirExpr){
+        .span = ast->span,
+        .kind = HIR_EXPR_ANY_CALL,
+        .type = return_type,
+        .any_call = {
+            .object = receiver,
+            .function_type = function_type,
+            .function_pointer_type = pointer_type(sema, function_type, false),
+            .byte_pointer_type = byte_pointer_type,
+            .method_index = method_index,
+            .has_receiver = has_receiver,
+            .args = array_create(sema->arena, sizeof(HirExpr *)),
+        },
+    };
+    for (size_t i = receiver_offset; i < param_count; i++) {
+        HirExpr *value = values[i];
+        array_push(&call->any_call.args, &value);
+    }
+
+    return call;
+}
+
 static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bool *handled) {
     *handled = false;
     if (ast->call.callee == NULL || ast->call.callee->kind != AST_EXPR_MEMBER)
@@ -908,6 +1223,20 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         dispatch_type = dispatch_type->pointer.pointee;
     if (dispatch_type == NULL)
         return NULL;
+
+    if (dispatch_type->kind == HIR_TYPE_ANY_CONSTRAINT) {
+        if (receiver_type->kind == HIR_TYPE_POINTER)
+            receiver = implicit_deref(sema, receiver);
+        *handled = true;
+        HirExpr *call = sema_any_constraint_method_call(sema, ast, receiver, dispatch_type);
+        if (call == NULL || call->kind == HIR_EXPR_ERROR)
+            return call;
+        if (expected != NULL) {
+            HirExpr *coerced = sema_coerce(sema, call, expected);
+            return coerced != NULL ? coerced : sema_method_error(sema, ast->span);
+        }
+        return call;
+    }
 
     Symbol *method = sema_find_method(sema, dispatch_type, callee->member.member);
     if (method == NULL)
@@ -1501,8 +1830,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
-            if (callee->kind != HIR_EXPR_VALUE || callee->value.symbol->kind != SYMBOL_FN ||
-                callee->value.symbol->decl == NULL || callee->value.symbol->decl->kind != AST_DECL_FN) {
+            bool direct_function = callee->kind == HIR_EXPR_VALUE &&
+                callee->value.symbol != NULL &&
+                callee->value.symbol->kind == SYMBOL_FN &&
+                callee->value.symbol->decl != NULL &&
+                callee->value.symbol->decl->kind == AST_DECL_FN;
+
+            if (!direct_function) {
                 for (size_t i = 0; i < ast->call.args.len; i++) {
                     AstCallArg *arg = array_at(&ast->call.args, i);
                     if (arg->name.kind != AST_NAME_ERROR) {
@@ -1517,8 +1851,32 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }
-                //! TODO: function pointers / callable values
-                hir->kind = HIR_EXPR_ERROR;
+
+                HirType *callee_layout = sema_unwrap_type(callee->type);
+                HirType *callee_function = callee_layout != NULL && callee_layout->kind == HIR_TYPE_POINTER
+                    ? sema_unwrap_type(callee_layout->pointer.pointee)
+                    : NULL;
+                if (callee_function == NULL || callee_function->kind != HIR_TYPE_FUNCTION) {
+                    error_expected_function(sema->diags, callee->type, ast->call.callee->span);
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                hir->call.callee = callee;
+                for (size_t i = 0; i < ast->call.args.len; i++) {
+                    AstCallArg *arg = array_at(&ast->call.args, i);
+                    HirType *param_type = ((HirType **)function_type->function.params.data)[i];
+                    HirExpr *value = sema_expr(sema, arg->value, param_type);
+                    if (value == NULL || value->kind == HIR_EXPR_ERROR) {
+                        hir->kind = HIR_EXPR_ERROR;
+                        return hir;
+                    }
+                    array_push(&hir->call.args, &value);
+                }
+
+                hir->type = function_type->function.ret;
+                if (expected != NULL)
+                    return expr_coerce(sema, hir, expected);
                 return hir;
             }
 

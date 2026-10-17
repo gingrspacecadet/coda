@@ -32,6 +32,7 @@ bool sema_complete_call_arguments(Sema *sema, Symbol *symbol, size_t first_param
 HirType *type_with_mutability(Sema *sema, HirType *type, bool mutable);
 HirType *builtin_type(Sema *sema, BuiltinType builtin);
 bool type_equal(HirType *a, HirType *b);
+bool sema_check_constraint_type(Sema *sema, Symbol *constraint, HirType *concrete, Span span);
 
 void sema_decl(Sema *sema, AstDecl *ast);
 void sema_constraint_decl(Sema *sema, AstConstraintDecl *ast);

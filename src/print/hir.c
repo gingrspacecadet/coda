@@ -19,6 +19,8 @@ static const char *type_kind_name(HirTypeKind kind) {
     case HIR_TYPE_STRUCT:  return "struct";
     case HIR_TYPE_UNION:   return "union";
     case HIR_TYPE_ENUM:    return "enum";
+    case HIR_TYPE_ANY:     return "any";
+    case HIR_TYPE_ANY_CONSTRAINT: return "any_constraint";
     }
 
     return "?";
@@ -38,6 +40,8 @@ static const char *expr_kind_name(HirExprKind kind) {
     case HIR_EXPR_INIT:      return "init";
     case HIR_EXPR_VLA_ALLOC: return "vla_alloc";
     case HIR_EXPR_LAMBDA:    return "lambda";
+    case HIR_EXPR_ANY_BOX:   return "any_box";
+    case HIR_EXPR_ANY_CALL:  return "any_call";
     }
 
     return "?";
@@ -188,6 +192,19 @@ static void print_type(FILE *out, const HirType *type, unsigned depth) {
         }
         break;
 
+    case HIR_TYPE_ANY:
+        break;
+
+    case HIR_TYPE_ANY_CONSTRAINT:
+        indent(out, depth + 1);
+        fputs("constraint ", out);
+        if (type->any_constraint.constraint != NULL && type->any_constraint.constraint->name.kind == AST_NAME_IDENT)
+            fprintf(out, "%.*s", (int)type->any_constraint.constraint->name.ident.length, type->any_constraint.constraint->name.ident.data);
+        else
+            fputs("<null>", out);
+        fputc('\n', out);
+        break;
+
     case HIR_TYPE_ERROR:
         break;
     }
@@ -258,9 +275,14 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
 
     case HIR_EXPR_CALL:
         indent(out, depth + 1);
-        fputs("function ", out);
-        print_symbol(out, expr->call.function);
-        fputc('\n', out);
+        if (expr->call.function != NULL) {
+            fputs("function ", out);
+            print_symbol(out, expr->call.function);
+            fputc('\n', out);
+        } else {
+            fputs("callee\n", out);
+            print_expr(out, expr->call.callee, depth + 2);
+        }
 
         for (size_t i = 0; i < expr->call.args.len; i++) {
             HirExpr *arg =
@@ -313,6 +335,22 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
         break;
 
     case HIR_EXPR_LAMBDA:
+        break;
+
+    case HIR_EXPR_ANY_BOX:
+        indent(out, depth + 1);
+        fputs("witness ", out);
+        print_symbol(out, expr->any_box.vtable);
+        fputc('\n', out);
+        print_expr(out, expr->any_box.address, depth + 1);
+        break;
+
+    case HIR_EXPR_ANY_CALL:
+        indent(out, depth + 1);
+        fprintf(out, "method slot %zu%s\n", expr->any_call.method_index, expr->any_call.has_receiver ? " (instance)" : " (type)");
+        print_expr(out, expr->any_call.object, depth + 1);
+        for (size_t i = 0; i < expr->any_call.args.len; i++)
+            print_expr(out, ((HirExpr **)expr->any_call.args.data)[i], depth + 1);
         break;
 
     case HIR_EXPR_ERROR:

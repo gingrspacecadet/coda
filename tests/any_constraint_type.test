@@ -1,0 +1,17 @@
+name: dynamic any and constrained any have semantic types
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+constraint Readable = {
+    fn uint64 Self.read(Self *self, uint8[] buffer);
+}
+
+fn none accept_dynamic(any value) {
+    return;
+}
+
+fn none accept_readable(any<Readable> value) {
+    return;
+}

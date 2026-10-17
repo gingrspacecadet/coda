@@ -242,6 +242,7 @@ static bool expr_contains_call(HirExpr *expr) {
 
     switch (expr->kind) {
         case HIR_EXPR_CALL:
+        case HIR_EXPR_ANY_CALL:
             return true;
 
         case HIR_EXPR_UNARY:

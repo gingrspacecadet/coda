@@ -181,6 +181,15 @@ bool type_equal(HirType *a, HirType *b) {
 
             return true;
 
+        case HIR_TYPE_ANY:
+            return true;
+
+        case HIR_TYPE_ANY_CONSTRAINT: {
+            Symbol *ac = a->any_constraint.constraint;
+            Symbol *bc = b->any_constraint.constraint;
+            return ac != NULL && bc != NULL && symbol_canonical(ac) == symbol_canonical(bc);
+        }
+
         case HIR_TYPE_ENUM:
             if (!type_equal(a->_enum.underlying, b->_enum.underlying))
                 return false;
@@ -286,6 +295,16 @@ static HirField sema_make_field(Sema *sema, String name, HirType *type, size_t o
     };
 }
 
+static HirType *sema_any_type_error(Sema *sema, HirType *type, AstType *ast, DiagCode code, String message, String note) {
+    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, code, ast->span, message);
+    if (note.length != 0)
+        diag_note(&diagnostic, note);
+    diag_finish(&diagnostic);
+    type->kind = HIR_TYPE_ERROR;
+    type->align = 1;
+    return type;
+}
+
 HirType *sema_type(Sema *sema, AstType *ast) {
     HirType *hir = arena_calloc(sema->arena, sizeof(HirType));
 
@@ -305,6 +324,41 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 AstName *name = array_at(&ast->named.path.parts, ast->named.path.parts.len - 1);
                 error_expected_type_symbol(sema->diags, name->ident, ast->span);
                 hir->kind = HIR_TYPE_ERROR;
+                return hir;
+            }
+
+            if (symbol->decl == NULL && symbol->type != NULL && symbol->type->kind == HIR_TYPE_ANY) {
+                if (ast->named.args.len == 0) {
+                    *hir = *symbol->type;
+                    hir->mutable = ast->mutable;
+                    return hir;
+                }
+
+                if (ast->named.args.len != 1)
+                    return sema_any_type_error(sema, hir, ast, E_GENERIC_ARGUMENT_COUNT,
+                        STRING("any accepts either no type arguments or one constraint"),
+                        STRING("use any for runtime typing or any<C> for constrained dispatch"));
+
+                AstType *constraint_ast = ((AstType **)ast->named.args.data)[0];
+                if (constraint_ast->kind != AST_TYPE_NAMED || constraint_ast->named.args.len != 0)
+                    return sema_any_type_error(sema, hir, ast, E_GENERIC_CONSTRAINT_INVALID,
+                        STRING("any<T> requires a constraint name"),
+                        STRING("use the name of a declared constraint, such as any<Allocator>"));
+
+                Symbol *constraint = sema_lookup_path(sema, constraint_ast->named.path);
+                if (constraint == NULL || constraint->kind != SYMBOL_CONSTRAINT ||
+                    constraint->decl == NULL || constraint->decl->kind != AST_DECL_CONSTRAINT)
+                    return sema_any_type_error(sema, hir, ast, E_GENERIC_CONSTRAINT_INVALID,
+                        STRING("any<T> requires a declared constraint"),
+                        STRING("the argument must name a constraint, not a concrete type"));
+
+                *hir = (HirType){
+                    .kind = HIR_TYPE_ANY_CONSTRAINT,
+                    .mutable = ast->mutable,
+                    .size = sema->target->pointer.size * 2,
+                    .align = sema->target->pointer.align,
+                    .any_constraint = {.constraint = symbol_canonical(constraint)},
+                };
                 return hir;
             }
 
@@ -926,6 +980,24 @@ static void insert_builtin_type(Sema *sema, String name, BuiltinType builtin) {
     scope_insert(&sema->builtin_scope, symbol);
 }
 
+static void insert_builtin_any(Sema *sema) {
+    Symbol *symbol = arena_calloc(sema->arena, sizeof(*symbol));
+    HirType *type = arena_calloc(sema->arena, sizeof(*type));
+    *type = (HirType){
+        .kind = HIR_TYPE_ANY,
+        .mutable = false,
+        .size = sema->target->pointer.size * 2,
+        .align = sema->target->pointer.align,
+    };
+    *symbol = (Symbol){
+        .kind = SYMBOL_TYPE,
+        .name = {.kind = AST_NAME_IDENT, .ident = STRING("any")},
+        .decl = NULL,
+        .type = type,
+    };
+    scope_insert(&sema->builtin_scope, symbol);
+}
+
 void sema_insert_builtin_types(Sema *sema) {
     insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
     insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
@@ -941,6 +1013,8 @@ void sema_insert_builtin_types(Sema *sema) {
     insert_builtin_type(sema, STRING("float64"), BUILTIN_FLOAT64);
 
     insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
-
+    
     insert_builtin_type(sema, STRING("none"), BUILTIN_NONE);
+    
+    insert_builtin_any(sema);
 }

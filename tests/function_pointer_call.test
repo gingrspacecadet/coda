@@ -1,0 +1,29 @@
+name: function pointer indirect call
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn uint64 increment(uint64 value) {
+    return value + 1;
+}
+
+fn uint64 apply(fn uint64(uint64) *callback, uint64 value) {
+    return callback(value);
+}
+
+fn int64 main() {
+    if (apply(increment, 41) != 42) return 1;
+
+    fn uint64(uint64) *local = increment;
+    if (local(41) != 42) return 2;
+
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

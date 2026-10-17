@@ -212,3 +212,61 @@ bool sema_check_symbol_generic_constraints(Sema *sema, Symbol *generic, Array ge
     sema->scopes = previous_scopes;
     return valid;
 }
+
+
+bool sema_check_constraint_type(Sema *sema, Symbol *constraint_symbol, HirType *concrete, Span span) {
+    if (constraint_symbol == NULL || constraint_symbol->kind != SYMBOL_CONSTRAINT ||
+        constraint_symbol->decl == NULL || constraint_symbol->decl->kind != AST_DECL_CONSTRAINT)
+        return generic_constraint_error(sema, span, E_GENERIC_CONSTRAINT_INVALID, STRING("invalid erased constraint"), STRING("any<C> requires a declared constraint"));
+
+    AstModule *previous_module = sema->module;
+    Scope previous_global_scope = sema->global_scope;
+    Scope *previous_module_scope = sema->module_scope;
+    Array previous_scopes = sema->scopes;
+
+    if (constraint_symbol->owner_module != NULL)
+        sema->module = constraint_symbol->owner_module;
+    if (constraint_symbol->owner_scope != NULL && constraint_symbol->owner_scope != &sema->global_scope) {
+        sema->global_scope = *constraint_symbol->owner_scope;
+        sema->module_scope = constraint_symbol->owner_scope;
+    }
+    sema->scopes = array_create(sema->arena, sizeof(Scope));
+    Scope *scope = sema_push_scope(sema);
+
+    AstName self_name = {.kind = AST_NAME_IDENT, .ident = STRING("Self")};
+    Symbol self_binding = {
+        .kind = SYMBOL_TYPE,
+        .name = self_name,
+        .type = concrete,
+        .span = span,
+    };
+    scope_insert(scope, &self_binding);
+
+    if (!ast_name_equal(&constraint_symbol->name, &self_name)) {
+        Symbol constraint_binding = {
+            .kind = SYMBOL_TYPE,
+            .name = constraint_symbol->name,
+            .type = concrete,
+            .span = span,
+        };
+        scope_insert(scope, &constraint_binding);
+    }
+
+    AstConstraintDecl filtered = constraint_symbol->decl->constraint;
+    filtered.items = array_create(sema->arena, sizeof(AstConstraintItem));
+    for (size_t i = 0; i < constraint_symbol->decl->constraint.items.len; i++) {
+        AstConstraintItem *item = array_at(&constraint_symbol->decl->constraint.items, i);
+        if (item->kind == AST_CONSTRAINT_METHOD &&
+            (item->method->generics.len != 0 || item->method->body != NULL))
+            continue;
+        array_push(&filtered.items, item);
+    }
+
+    bool valid = generic_constraint_check_items(sema, &filtered, concrete, span);
+
+    sema->module = previous_module;
+    sema->global_scope = previous_global_scope;
+    sema->module_scope = previous_module_scope;
+    sema->scopes = previous_scopes;
+    return valid;
+}

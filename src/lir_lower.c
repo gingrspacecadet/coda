@@ -501,6 +501,55 @@ static size_t lir_sum_payload_offset(HirType *type) {
     return remainder == 0 ? tag_size : tag_size + payload_align - remainder;
 }
 
+
+static HirType *lir_address_type(LirLower *lower, HirType *pointee);
+
+static void lir_register_witness_global(LirModule *module, HirExpr *expr) {
+    for (size_t i = 0; i < module->globals.len; i++) {
+        LirGlobal *existing = array_at(&module->globals, i);
+        if (existing->symbol == expr->any_box.vtable)
+            return;
+    }
+
+    LirGlobal global = {
+        .symbol = expr->any_box.vtable,
+        .type = expr->any_box.vtable_type,
+        .data = array_create(module->arena, sizeof(LirData)),
+        .is_mutable = false,
+        .is_export = false,
+    };
+    for (size_t i = 0; i < expr->any_box.methods.len; i++) {
+        HirField *field = array_at(&expr->any_box.vtable_type->structure.fields, i);
+        Symbol *method = ((Symbol **)expr->any_box.methods.data)[i];
+        LirData entry = {
+            .offset = field->offset,
+            .type = field->type,
+            .kind = LIR_DATA_ADDRESS,
+            .symbol = method,
+        };
+        array_push(&global.data, &entry);
+    }
+    array_push(&module->globals, &global);
+}
+
+static LirOperand lir_lower_any_box(LirLower *lower, HirExpr *expr) {
+    lir_register_witness_global(lower->module, expr);
+
+    LirOperand address = lir_lower_expr(lower, expr->any_box.address);
+    LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, expr->type, (Array){0});
+    LirOperand aggregate = lir_operand_value(zero, expr->type);
+
+    LirOperand data_operands[3] = {aggregate, lir_operand_offset(0), address};
+    LirValueId with_data = lir_emit(lower->function, lower->block, LIR_OP_INSERT, expr->type, (Array){.data = data_operands, .len = 3});
+    aggregate = lir_operand_value(with_data, expr->type);
+
+    HirType *table_pointer_type = lir_address_type(lower, expr->any_box.vtable_type);
+    LirOperand table_pointer = lir_operand_symbol(expr->any_box.vtable, table_pointer_type);
+    LirOperand table_operands[3] = {aggregate, lir_operand_offset(sizeof(void *)), table_pointer};
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, expr->type, (Array){.data = table_operands, .len = 3});
+    return lir_operand_value(result, expr->type);
+}
+
 static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
@@ -582,8 +631,12 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         case HIR_EXPR_CALL: {
             size_t operand_count = expr->call.args.len + 1;
             LirOperand *operands = arena_calloc(lower->function->arena, sizeof(LirOperand) * operand_count);
-
-            operands[0] = lir_operand_symbol(expr->call.function, expr->call.function->type);
+            if (expr->call.function != NULL)
+                operands[0] = lir_operand_symbol(expr->call.function, expr->call.function->type);
+            else {
+                assert(expr->call.callee != NULL);
+                operands[0] = lir_lower_expr(lower, expr->call.callee);
+            }
 
             for (size_t i = 0; i < expr->call.args.len; i++) {
                 operands[i + 1] = lir_lower_expr(lower, ((HirExpr **)expr->call.args.data)[i]);
@@ -595,6 +648,40 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 return lir_operand_invalid();
             }
 
+            return lir_operand_value(result, expr->type);
+        }
+
+        case HIR_EXPR_ANY_BOX:
+            return lir_lower_any_box(lower, expr);
+
+        case HIR_EXPR_ANY_CALL: {
+            LirOperand object = lir_lower_expr(lower, expr->any_call.object);
+            LirOperand data_operands[2] = {object, lir_operand_offset(0)};
+            LirValueId data_id = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->any_call.byte_pointer_type, (Array){.data = data_operands, .len = 2});
+            LirOperand data = lir_operand_value(data_id, expr->any_call.byte_pointer_type);
+
+            LirOperand table_operands[2] = {object, lir_operand_offset(sizeof(void *))};
+            LirValueId table_id = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->any_call.byte_pointer_type, (Array){.data = table_operands, .len = 2});
+            LirOperand table = lir_operand_value(table_id, expr->any_call.byte_pointer_type);
+
+            LirOperand slot_offset = lir_operand_uint((uint64_t)(expr->any_call.method_index * sizeof(void *)), lir_sum_tag_type(lower));
+            LirOperand address_operands[2] = {table, slot_offset};
+            LirValueId address_id = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, expr->any_call.byte_pointer_type, (Array){.data = address_operands, .len = 2});
+            LirOperand address = lir_operand_value(address_id, expr->any_call.byte_pointer_type);
+            LirValueId function_id = lir_emit(lower->function, lower->block, LIR_OP_LOAD, expr->any_call.function_pointer_type, (Array){.data = &address, .len = 1});
+
+            size_t operand_count = expr->any_call.args.len + (expr->any_call.has_receiver ? 1 : 0) + 1;
+            LirOperand *operands = arena_calloc(lower->function->arena, sizeof(LirOperand) * operand_count);
+            operands[0] = lir_operand_value(function_id, expr->any_call.function_pointer_type);
+            size_t operand = 1;
+            if (expr->any_call.has_receiver)
+                operands[operand++] = data;
+            for (size_t i = 0; i < expr->any_call.args.len; i++)
+                operands[operand++] = lir_lower_expr(lower, ((HirExpr **)expr->any_call.args.data)[i]);
+
+            LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CALL, expr->type, (Array){.data = operands, .len = operand_count});
+            if (expr->type->kind == HIR_TYPE_BUILTIN && expr->type->builtin == BUILTIN_NONE)
+                return lir_operand_invalid();
             return lir_operand_value(result, expr->type);
         }
 
@@ -1523,7 +1610,19 @@ static void lir_collect_address_taken_expr(Array(Symbol *) *symbols, HirExpr *ex
             lir_collect_address_taken_expr(symbols, expr->binary.right);
             return;
 
+        case HIR_EXPR_ANY_BOX:
+            lir_collect_address_taken_expr(symbols, expr->any_box.address);
+            return;
+
+        case HIR_EXPR_ANY_CALL:
+            lir_collect_address_taken_expr(symbols, expr->any_call.object);
+            for (size_t i = 0; i < expr->any_call.args.len; i++)
+                lir_collect_address_taken_expr(symbols, ((HirExpr **)expr->any_call.args.data)[i]);
+            return;
+
         case HIR_EXPR_CALL:
+            if (expr->call.callee != NULL)
+                lir_collect_address_taken_expr(symbols, expr->call.callee);
             for (size_t i = 0; i < expr->call.args.len; i++)
                 lir_collect_address_taken_expr(symbols, ((HirExpr **)expr->call.args.data)[i]);
             return;

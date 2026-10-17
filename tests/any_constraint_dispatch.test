@@ -1,0 +1,37 @@
+name: constrained any dispatches type and instance methods
+expect: pass
+stop: run
+errors: 0
+
+[source]
+constraint Describer = {
+    fn uint64 Self.kind();
+    fn uint64 Self.value(Self *self, uint64 add);
+}
+
+type Alpha = struct {
+    uint64 base;
+};
+
+fn uint64 Alpha.kind() {
+    return 100;
+}
+
+fn uint64 Alpha.value(Alpha *self, uint64 add) {
+    return self.base + add;
+}
+
+fn int64 main() {
+    Alpha alpha = {40};
+    any<Describer> item = alpha;
+    if (item.kind() != 100) return 1;
+    if (item.value(2) != 42) return 2;
+    return 0;
+}
+
+[stdout]
+
+[stderr]
+
+[exit]
+0

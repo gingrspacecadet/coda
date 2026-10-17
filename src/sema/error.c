@@ -63,6 +63,16 @@ static String sema_type_string(Arena *arena, HirType *type) {
         case HIR_TYPE_UNION:
             return STRING("union");
 
+        case HIR_TYPE_ANY:
+            return STRING("any");
+
+        case HIR_TYPE_ANY_CONSTRAINT: {
+            Symbol *constraint = type->any_constraint.constraint;
+            if (constraint == NULL || constraint->name.kind != AST_NAME_IDENT)
+                return STRING("any<?>");
+            return format(arena, "any<%.*s>", (int)constraint->name.ident.length, constraint->name.ident.data);
+        }
+
         case HIR_TYPE_ENUM:
             return STRING("enum");
     }

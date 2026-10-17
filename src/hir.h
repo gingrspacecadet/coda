@@ -32,6 +32,8 @@ typedef enum {
     HIR_TYPE_STRUCT,
     HIR_TYPE_UNION,
     HIR_TYPE_ENUM,
+    HIR_TYPE_ANY,
+    HIR_TYPE_ANY_CONSTRAINT,
 } HirTypeKind;
 
 typedef enum {
@@ -102,6 +104,10 @@ struct HirType {
             HirType *underlying;
             Array(HirEnumItem) items;
         } _enum;
+
+        struct {
+            Symbol *constraint;
+        } any_constraint;
     };
 };
 
@@ -150,6 +156,8 @@ typedef enum {
     HIR_EXPR_SUM_INJECT,
     HIR_EXPR_VLA_ALLOC,
     HIR_EXPR_LAMBDA,
+    HIR_EXPR_ANY_BOX,
+    HIR_EXPR_ANY_CALL,
 } HirExprKind;
 
 struct HirExpr {
@@ -177,6 +185,7 @@ struct HirExpr {
 
         struct {
             Symbol *function;
+            HirExpr *callee;
             Array(HirExpr *) args;
         } call;
 
@@ -214,6 +223,23 @@ struct HirExpr {
             HirType *element;
             HirExpr *length;
         } vla_alloc;
+
+        struct {
+            HirExpr *address;
+            Symbol *vtable;
+            HirType *vtable_type;
+            Array(Symbol *) methods;
+        } any_box;
+
+        struct {
+            HirExpr *object;
+            HirType *function_type;
+            HirType *function_pointer_type;
+            HirType *byte_pointer_type;
+            size_t method_index;
+            bool has_receiver;
+            Array(HirExpr *) args;
+        } any_call;
 
     };
 };
