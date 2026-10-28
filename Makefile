@@ -13,7 +13,7 @@ TARGET = codac
 
 BACKEND_DIRS = $(shell find $(SRC)/backends -mindepth 1 -maxdepth 1 -type d | sed 's|.*/||')
 BACKEND_SRCS = $(shell find $(SRC)/backends -type f -name "*.c" 2>/dev/null)
-BACKEND_OBJS = $(patsubst $(SRC)/%.c,build/backends/%.o,$(BACKEND_SRCS))
+BACKEND_OBJS = $(filter-out $(NATIVE_BACKEND_OBJS),$(patsubst $(SRC)/backends/%.c,build/backends/%.o,$(BACKEND_SRCS)))
 BACKEND_PIC_OBJS = $(patsubst $(SRC)/backends/%.c,build/backends-pic/%.o,$(BACKEND_SRCS))
 BACKENDS_SO = $(patsubst %,$(addprefix build/backends/,%.$(SOEXT)),$(BACKEND_DIRS))
 
@@ -86,8 +86,8 @@ $(LIB): $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	ar rcs $@ $^
 
-$(TARGET): $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS) -rdynamic $(LDLIBS)
+$(TARGET): $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS) $(BACKEND_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(CLI_OBJ) $(LIB) $(NATIVE_BACKEND_OBJS) $(BACKEND_OBJS) -rdynamic $(LDLIBS)
 
 build/%.o: $(SRC)/%.c
 	@mkdir -p $(dir $@)

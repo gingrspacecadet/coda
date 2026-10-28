@@ -57,11 +57,25 @@ static const TargetInfo target_riscv64_linux = {
     .features = UINT64_C(1) << TARGET_FEATURE_RV64I,
 };
 
+static const TargetInfo target_orion = {
+    .name = "orion",
+    .arch = TARGET_ARCH_ORION,
+    .os = TARGET_OS_NONE,
+    .abi = TARGET_ABI_ORION,
+    .object = TARGET_OBJECT_NONE,
+    .endian = TARGET_ENDIAN_LITTLE,
+    .pointer = {
+        .size = 4,
+        .align = 4,
+    },
+};
+
 static const TargetInfo *targets[] = {
     &target_x86_64_linux,
     &target_aarch64_linux,
     &target_armhf_linux,
     &target_riscv64_linux,
+    &target_orion,
 };
 
 const TargetInfo *target_native(void) {
