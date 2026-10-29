@@ -4,6 +4,7 @@ HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes) {
     HirModule *hmod = arena_calloc(sema->arena, sizeof(HirModule));
 
     *hmod = (HirModule) {
+        .owner_module = module,
         .functions = array_create(sema->arena, sizeof(HirFunction)),
         .globals = array_create(sema->arena, sizeof(HirGlobal)),
     };

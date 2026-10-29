@@ -343,11 +343,13 @@ struct HirGlobal {
     HirType *type;
     HirExpr *init;
 
+    bool is_extern;
     bool is_export;
     CompGlobalState comp_state;
 };
 
 struct HirModule {
+    AstModule *owner_module;
     Array(HirFunction) functions;
     Array(HirGlobal) globals;
     String name;

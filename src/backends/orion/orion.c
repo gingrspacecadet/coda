@@ -62,13 +62,22 @@ static bool type_is_float(HirType *type) {
            (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
 }
 
+static bool type_is_void_like(HirType *type) {
+    type = base_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           type->builtin == BUILTIN_NONE && type->size == 0 && type->align == 1;
+}
+
 static bool type_is_supported_orion_scalar(HirType *type) {
     type = base_type(type);
     if (type == NULL)
         return false;
 
     if (type->kind == HIR_TYPE_POINTER)
-        return type->size == 4 && type->align == 4;
+        return type->size <= 8 && type->align <= 8;
+
+    if (type_is_void_like(type))
+        return true;
 
     if (type_is_float(type))
         return false;
@@ -126,7 +135,9 @@ static bool type_is_supported_orion_global(HirType *type) {
     if (type == NULL)
         return false;
     if (type->kind == HIR_TYPE_POINTER)
-        return type->size == 4 && type->align == 4;
+        return type->size <= 8 && type->align <= 8;
+    if (type_is_void_like(type))
+        return true;
     if (type_is_float(type))
         return false;
     if (type->kind == HIR_TYPE_ENUM)
@@ -181,7 +192,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
         const LirData *data = &((LirData *)global->data.data)[i];
 
         if (data->offset > offset)
-            fprintf(out, "    .zero %zu\n", data->offset - offset);
+            fprintf(out, "    .zero #%zu\n", data->offset - offset);
 
         switch (data->kind) {
             case LIR_DATA_INTEGER: {
@@ -191,16 +202,16 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
                     return false;
                 }
                 if (size == 1) {
-                    fprintf(out, "    .byte %" PRIu32 "\n", (uint32_t)(uint8_t)data->integer);
+                    fprintf(out, "    .byte #%" PRIu32 "\n", (uint32_t)(uint8_t)data->integer);
                 } else {
-                    fprintf(out, "    .word %" PRIu32 "\n", (uint32_t)data->integer);
+                    fprintf(out, "    .word #%" PRIu32 "\n", (uint32_t)data->integer);
                 }
                 offset = data->offset + size;
                 break;
             }
 
             case LIR_DATA_BOOL: {
-                fprintf(out, "    .byte %d\n", data->boolean ? 1 : 0);
+                fprintf(out, "    .byte #%d\n", data->boolean ? 1 : 0);
                 offset = data->offset + 1;
                 break;
             }
@@ -212,14 +223,14 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
 
             case LIR_DATA_BYTES: {
                 for (size_t j = 0; j < data->bytes.length; j++)
-                    fprintf(out, "    .byte %u\n", (unsigned char)data->bytes.data[j]);
+                    fprintf(out, "    .byte #%u\n", (unsigned char)data->bytes.data[j]);
                 offset = data->offset + data->bytes.length;
                 break;
             }
 
             case LIR_DATA_ADDRESS: {
                 String symbol_name = symbol_link_name(data->symbol);
-                fprintf(out, "    .word %.*s\n", string_fmt(symbol_name));
+                fprintf(out, "    .word $%.*s\n", string_fmt(symbol_name));
                 offset = data->offset + type_size(data->type);
                 break;
             }
@@ -227,7 +238,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
     }
 
     if (offset < type_size(global->type))
-        fprintf(out, "    .zero %zu\n", type_size(global->type) - offset);
+        fprintf(out, "    .zero #%zu\n", type_size(global->type) - offset);
 
     return true;
 }
@@ -237,10 +248,10 @@ static void emit_string(FILE *out, const LirString *string) {
 
     fprintf(out, "\n.section .rodata\n%.*s:\n", string_fmt(name));
     if (string->bytes.length == 0) {
-        fprintf(out, "    .zero 1\n");
+        fprintf(out, "    .zero #1\n");
     } else {
         for (size_t i = 0; i < string->bytes.length; i++)
-            fprintf(out, "    .byte %u\n", (unsigned char)string->bytes.data[i]);
+            fprintf(out, "    .byte #%u\n", (unsigned char)string->bytes.data[i]);
     }
 }
 
@@ -301,13 +312,27 @@ static size_t next_label(OrionFunction *function) {
     return function->next_label_id++;
 }
 
+static void emit_mem_operand(FILE *out, int base_reg, int64_t offset) {
+    if (offset == 0) {
+        fprintf(out, "[r%d]", base_reg);
+        return;
+    }
+    if (offset > 0) {
+        fprintf(out, "[r%d + #%ld]", base_reg, offset);
+        return;
+    }
+    fprintf(out, "[r%d - #%ld]", base_reg, -offset);
+}
+
 static void emit_stack_load(OrionFunction *function, LirValueId value, int destination_reg) {
     int64_t offset = value_slot_offset(function, value);
     if (offset < 0) {
         fprintf(function->out, "    mov r%d, #0\n", destination_reg);
         return;
     }
-    fprintf(function->out, "    ldr r%d, [r15, #%ld]\n", destination_reg, offset);
+    fprintf(function->out, "    ldr r%d, ", destination_reg);
+    emit_mem_operand(function->out, 15, offset);
+    fprintf(function->out, "\n");
 }
 
 static void emit_stack_load64(OrionFunction *function, LirValueId value, int low_reg, int high_reg) {
@@ -317,23 +342,33 @@ static void emit_stack_load64(OrionFunction *function, LirValueId value, int low
         fprintf(function->out, "    mov r%d, #0\n", high_reg);
         return;
     }
-    fprintf(function->out, "    ldr r%d, [r15, #%ld]\n", low_reg, offset);
-    fprintf(function->out, "    ldr r%d, [r15, #%ld]\n", high_reg, offset + 4);
+    fprintf(function->out, "    ldr r%d, ", low_reg);
+    emit_mem_operand(function->out, 15, offset);
+    fprintf(function->out, "\n");
+    fprintf(function->out, "    ldr r%d, ", high_reg);
+    emit_mem_operand(function->out, 15, offset + 4);
+    fprintf(function->out, "\n");
 }
 
 static void emit_stack_store(OrionFunction *function, LirValueId value, int source_reg) {
     int64_t offset = value_slot_offset(function, value);
     if (offset < 0)
         return;
-    fprintf(function->out, "    str r%d, [r15, #%ld]\n", source_reg, offset);
+    fprintf(function->out, "    str r%d, ", source_reg);
+    emit_mem_operand(function->out, 15, offset);
+    fprintf(function->out, "\n");
 }
 
 static void emit_stack_store64(OrionFunction *function, LirValueId value, int low_reg, int high_reg) {
     int64_t offset = value_slot_offset(function, value);
     if (offset < 0)
         return;
-    fprintf(function->out, "    str r%d, [r15, #%ld]\n", low_reg, offset);
-    fprintf(function->out, "    str r%d, [r15, #%ld]\n", high_reg, offset + 4);
+    fprintf(function->out, "    str r%d, ", low_reg);
+    emit_mem_operand(function->out, 15, offset);
+    fprintf(function->out, "\n");
+    fprintf(function->out, "    str r%d, ", high_reg);
+    emit_mem_operand(function->out, 15, offset + 4);
+    fprintf(function->out, "\n");
 }
 
 static bool emit_operand(OrionFunction *function, const LirOperand *operand, int destination_reg) {
@@ -352,7 +387,7 @@ static bool emit_operand(OrionFunction *function, const LirOperand *operand, int
             return true;
         case LIR_OPERAND_SYMBOL: {
             String name = symbol_link_name(operand->symbol);
-            fprintf(function->out, "    mov r%d, %.*s\n", destination_reg, (int)name.length, name.data);
+            fprintf(function->out, "    mov r%d, $%.*s\n", destination_reg, (int)name.length, name.data);
             return true;
         }
         case LIR_OPERAND_VALUE: {
@@ -431,13 +466,14 @@ static void allocate_slots(OrionFunction *function) {
 }
 
 static bool orion_value_type_supported(HirType *type) {
-    return type_is_supported_orion_scalar(type) || type_is_supported_orion_aggregate(type);
+    return type_is_void_like(type) || type_is_supported_orion_scalar(type) || type_is_supported_orion_aggregate(type);
 }
 
 static bool emit_instruction(OrionFunction *function, const LirInstruction *instruction) {
     LirOperand *operands = instruction->operands.data;
 
-    if (instruction->result != LIR_INVALID_VALUE && function->value_types[instruction->result] != NULL && !orion_value_type_supported(function->value_types[instruction->result])) {
+    if (instruction->result != LIR_INVALID_VALUE && function->value_types[instruction->result] != NULL &&
+        !orion_value_type_supported(function->value_types[instruction->result])) {
         fprintf(stderr, "Orion backend: unsupported instruction result type (opcode=%d, result=%u, kind=%d, size=%zu, align=%zu)\n",
                 instruction->opcode,
                 instruction->result,
@@ -523,15 +559,21 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
                 return false;
             if (size == 8) {
                 int high_reg = value == 14 ? 0 : value + 1;
-                fprintf(function->out, "    ldr r%d, [r%d]\n", value, addr);
-                fprintf(function->out, "    ldr r%d, [r%d, #4]\n", high_reg, addr);
+                fprintf(function->out, "    ldr r%d, ", value);
+                emit_mem_operand(function->out, addr, 0);
+                fprintf(function->out, "\n");
+                fprintf(function->out, "    ldr r%d, ", high_reg);
+                emit_mem_operand(function->out, addr, 4);
+                fprintf(function->out, "\n");
                 emit_stack_store64(function, instruction->result, value, high_reg);
                 return true;
             }
             if (size == 1)
-                fprintf(function->out, "    ldrb r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    ldrb r%d, ", value);
             else
-                fprintf(function->out, "    ldr r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    ldr r%d, ", value);
+            emit_mem_operand(function->out, addr, 0);
+            fprintf(function->out, "\n");
             emit_stack_store(function, instruction->result, value);
             return true;
         }
@@ -547,20 +589,26 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
                 return false;
             if (size == 8) {
                 int high_reg = value == 14 ? 0 : value + 1;
-                fprintf(function->out, "    str r%d, [r%d]\n", value, addr);
-                fprintf(function->out, "    str r%d, [r%d, #4]\n", high_reg, addr);
+                fprintf(function->out, "    str r%d, ", value);
+                emit_mem_operand(function->out, addr, 0);
+                fprintf(function->out, "\n");
+                fprintf(function->out, "    str r%d, ", high_reg);
+                emit_mem_operand(function->out, addr, 4);
+                fprintf(function->out, "\n");
                 return true;
             }
             if (size == 1)
-                fprintf(function->out, "    strb r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    strb r%d, ", value);
             else
-                fprintf(function->out, "    str r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    str r%d, ", value);
+            emit_mem_operand(function->out, addr, 0);
+            fprintf(function->out, "\n");
             return true;
         }
         case LIR_OP_ADDR: {
             if (operands[0].kind == LIR_OPERAND_SYMBOL) {
                 String name = symbol_link_name(operands[0].symbol);
-                fprintf(function->out, "    mov r0, %.*s\n", (int)name.length, name.data);
+                fprintf(function->out, "    mov r0, $%.*s\n", (int)name.length, name.data);
                 emit_stack_store(function, instruction->result, 0);
             } else {
                 int tmp = next_temp_reg(function);
@@ -609,10 +657,10 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
                 if (rhs_lo == 14) rhs_hi = 0; else rhs_hi = rhs_lo + 1;
                 fprintf(function->out, "    mov r0, #0\n");
                 if (instruction->opcode == LIR_OP_EQ || instruction->opcode == LIR_OP_NE) {
-                    fprintf(function->out, "    jne r%d, r%d, ", lhs_lo, rhs_lo);
+                    fprintf(function->out, "    jne r%d, r%d, $", lhs_lo, rhs_lo);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
-                    fprintf(function->out, "    jne r%d, r%d, ", lhs_hi, rhs_hi);
+                    fprintf(function->out, "    jne r%d, r%d, $", lhs_hi, rhs_hi);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     if (instruction->opcode == LIR_OP_NE) {
@@ -634,32 +682,32 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
 
             switch (instruction->opcode) {
                 case LIR_OP_LT:
-                    fprintf(function->out, "    %s r%d, r%d, ", unsigned_compare ? "jgeu" : "jge", lhs, rhs);
+                    fprintf(function->out, "    %s r%d, r%d, $", unsigned_compare ? "jgeu" : "jge", lhs, rhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
                 case LIR_OP_LE:
-                    fprintf(function->out, "    %s r%d, r%d, ", unsigned_compare ? "jltu" : "jlt", rhs, lhs);
+                    fprintf(function->out, "    %s r%d, r%d, $", unsigned_compare ? "jltu" : "jlt", rhs, lhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
                 case LIR_OP_GT:
-                    fprintf(function->out, "    %s r%d, r%d, ", unsigned_compare ? "jgeu" : "jge", rhs, lhs);
+                    fprintf(function->out, "    %s r%d, r%d, $", unsigned_compare ? "jgeu" : "jge", rhs, lhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
                 case LIR_OP_GE:
-                    fprintf(function->out, "    %s r%d, r%d, ", unsigned_compare ? "jltu" : "jlt", lhs, rhs);
+                    fprintf(function->out, "    %s r%d, r%d, $", unsigned_compare ? "jltu" : "jlt", lhs, rhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
                 case LIR_OP_EQ:
-                    fprintf(function->out, "    jne r%d, r%d, ", lhs, rhs);
+                    fprintf(function->out, "    jne r%d, r%d, $", lhs, rhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
                 case LIR_OP_NE:
-                    fprintf(function->out, "    jeq r%d, r%d, ", lhs, rhs);
+                    fprintf(function->out, "    jeq r%d, r%d, $", lhs, rhs);
                     emit_label_ref(function, false_label, function->out);
                     fprintf(function->out, "\n");
                     break;
@@ -699,14 +747,16 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
                 fprintf(function->out, "    callr r%d\n", func_reg);
             }
 
-            if (instruction->result != LIR_INVALID_VALUE) {
+            if (instruction->result != LIR_INVALID_VALUE && !type_is_void_like(function->value_types[instruction->result])) {
                 if (type_size(function->value_types[instruction->result]) == 8) {
                     emit_stack_store64(function, instruction->result, 0, 1);
                 } else if (type_is_supported_orion_aggregate(function->value_types[instruction->result])) {
                     size_t aggregate_size = type_size(function->value_types[instruction->result]);
                     for (size_t i = 0; i < aggregate_size; i += 4) {
                         int reg = (int)(i / 4);
-                        fprintf(function->out, "    str r%d, [r15, #%ld]\n", reg, value_slot_offset(function, instruction->result) + (int64_t)i);
+                        fprintf(function->out, "    str r%d, ", reg);
+                        emit_mem_operand(function->out, 15, value_slot_offset(function, instruction->result) + (int64_t)i);
+                        fprintf(function->out, "\n");
                     }
                 } else {
                     emit_stack_store(function, instruction->result, 0);
@@ -725,15 +775,21 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
             fprintf(function->out, "    add r%d, r%d, r%d\n", addr, base, offset);
             if (type_size(instruction->result_type) == 8) {
                 int high_reg = value == 14 ? 0 : value + 1;
-                fprintf(function->out, "    ldr r%d, [r%d]\n", value, addr);
-                fprintf(function->out, "    ldr r%d, [r%d, #4]\n", high_reg, addr);
+                fprintf(function->out, "    ldr r%d, ", value);
+                emit_mem_operand(function->out, addr, 0);
+                fprintf(function->out, "\n");
+                fprintf(function->out, "    ldr r%d, ", high_reg);
+                emit_mem_operand(function->out, addr, 4);
+                fprintf(function->out, "\n");
                 emit_stack_store64(function, instruction->result, value, high_reg);
                 return true;
             }
             if (type_size(instruction->result_type) == 1)
-                fprintf(function->out, "    ldrb r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    ldrb r%d, ", value);
             else
-                fprintf(function->out, "    ldr r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    ldr r%d, ", value);
+            emit_mem_operand(function->out, addr, 0);
+            fprintf(function->out, "\n");
             emit_stack_store(function, instruction->result, value);
             return true;
         }
@@ -750,14 +806,20 @@ static bool emit_instruction(OrionFunction *function, const LirInstruction *inst
             fprintf(function->out, "    add r%d, r%d, r%d\n", addr, base, offset);
             if (type_size(operands[2].type) == 8) {
                 int high_reg = value == 14 ? 0 : value + 1;
-                fprintf(function->out, "    str r%d, [r%d]\n", value, addr);
-                fprintf(function->out, "    str r%d, [r%d, #4]\n", high_reg, addr);
+                fprintf(function->out, "    str r%d, ", value);
+                emit_mem_operand(function->out, addr, 0);
+                fprintf(function->out, "\n");
+                fprintf(function->out, "    str r%d, ", high_reg);
+                emit_mem_operand(function->out, addr, 4);
+                fprintf(function->out, "\n");
                 return true;
             }
             if (type_size(operands[2].type) == 1)
-                fprintf(function->out, "    strb r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    strb r%d, ", value);
             else
-                fprintf(function->out, "    str r%d, [r%d]\n", value, addr);
+                fprintf(function->out, "    str r%d, ", value);
+            emit_mem_operand(function->out, addr, 0);
+            fprintf(function->out, "\n");
             return true;
         }
         case LIR_OP_STACK_SAVE: {
@@ -817,7 +879,7 @@ static void emit_block_label(OrionFunction *function, size_t block_index) {
 static bool emit_terminator(OrionFunction *function, LirBlock *block, size_t block_index) {
     switch (block->terminator.kind) {
         case LIR_TERM_JUMP: {
-            fprintf(function->out, "    jmp ");
+            fprintf(function->out, "    jmp $");
             emit_label_ref(function, block->terminator.jump.target, function->out);
             fprintf(function->out, "\n");
             return true;
@@ -830,10 +892,10 @@ static bool emit_terminator(OrionFunction *function, LirBlock *block, size_t blo
             } else if (!emit_operand(function, &block->terminator.branch.condition, cond_reg)) {
                 return false;
             }
-            fprintf(function->out, "    jeq r%d, #0, ", cond_reg);
+            fprintf(function->out, "    jeq r%d, #0, $", cond_reg);
             emit_label_ref(function, block->terminator.branch.else_block, function->out);
             fprintf(function->out, "\n");
-            fprintf(function->out, "    jmp ");
+            fprintf(function->out, "    jmp $");
             emit_label_ref(function, block->terminator.branch.then_block, function->out);
             fprintf(function->out, "\n");
             return true;
@@ -846,7 +908,7 @@ static bool emit_terminator(OrionFunction *function, LirBlock *block, size_t blo
             }
             if (function->frame_size > 0) {
                 fprintf(function->out, "    mov r12, #%zu\n", function->frame_size);
-                fprintf(function->out, "    add r15, r12\n");
+                fprintf(function->out, "    add r15, r15, r12\n");
             }
             fprintf(function->out, "    ret\n");
             return true;
@@ -869,7 +931,7 @@ static bool emit_function(OrionFunction *function) {
 
     if (function->frame_size > 0) {
         fprintf(function->out, "    mov r12, #%zu\n", function->frame_size);
-        fprintf(function->out, "    sub r15, r12\n");
+        fprintf(function->out, "    sub r15, r15, r12\n");
     }
 
     for (size_t i = 0; i < function->function->params.len; i++) {
@@ -877,7 +939,9 @@ static bool emit_function(OrionFunction *function) {
         int reg = (int)i;
         if (reg >= 4)
             reg = 0;
-        fprintf(function->out, "    str r%d, [r15, #%ld]\n", reg, value_slot_offset(function, param->value));
+        fprintf(function->out, "    str r%d, ", reg);
+        emit_mem_operand(function->out, 15, value_slot_offset(function, param->value));
+        fprintf(function->out, "\n");
     }
 
     for (size_t i = 0; i < function->function->blocks.len; i++) {

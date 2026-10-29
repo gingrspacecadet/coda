@@ -4,6 +4,7 @@
 
 #include "backends/orion/orion.h"
 #include "lir.h"
+#include "lir_lower.h"
 #include "target.h"
 #include "test.h"
 
@@ -26,6 +27,79 @@ static Symbol *make_symbol(Arena *arena, const char *name) {
         .link_name = { .data = (char *)name, .length = strlen(name) },
     };
     return symbol;
+}
+
+bool test_extern_lowering(void) {
+    Arena *arena = arena_create();
+    AstModule current = {0};
+    HirModule hir = {
+        .owner_module = &current,
+        .globals = array_create(arena, sizeof(HirGlobal)),
+        .functions = array_create(arena, sizeof(HirFunction)),
+    };
+
+    AstModule foreign = {0};
+
+    HirType *int32_type = arena_calloc(arena, sizeof(*int32_type));
+    *int32_type = (HirType){ .kind = HIR_TYPE_BUILTIN, .builtin = BUILTIN_INT32, .size = 4, .align = 4 };
+
+    Symbol *extern_global_symbol = arena_calloc(arena, sizeof(*extern_global_symbol));
+    *extern_global_symbol = (Symbol){
+        .kind = SYMBOL_GLOBAL,
+        .name = (AstName){ .kind = AST_NAME_IDENT, .ident = STRING("extern_global") },
+        .owner_module = &foreign,
+    };
+
+    HirGlobal extern_global = {
+        .symbol = extern_global_symbol,
+        .type = int32_type,
+        .is_extern = true,
+        .is_export = false,
+    };
+    array_push(&hir.globals, &extern_global);
+
+    Symbol *local_fn_symbol = arena_calloc(arena, sizeof(*local_fn_symbol));
+    *local_fn_symbol = (Symbol){
+        .kind = SYMBOL_FN,
+        .name = (AstName){ .kind = AST_NAME_IDENT, .ident = STRING("local_fn") },
+        .owner_module = &current,
+        .link_name = STRING("local_fn"),
+    };
+
+    HirFunction local_fn = {
+        .symbol = local_fn_symbol,
+        .return_type = int32_type,
+        .params = array_create(arena, sizeof(HirParam)),
+        .locals = array_create(arena, sizeof(HirLocal)),
+        .is_extern = false,
+        .is_export = false,
+        .body = NULL,
+    };
+    array_push(&hir.functions, &local_fn);
+
+    Symbol *foreign_fn_symbol = arena_calloc(arena, sizeof(*foreign_fn_symbol));
+    *foreign_fn_symbol = (Symbol){
+        .kind = SYMBOL_FN,
+        .name = (AstName){ .kind = AST_NAME_IDENT, .ident = STRING("foreign_fn") },
+        .owner_module = &foreign,
+        .link_name = STRING("foreign_fn"),
+    };
+
+    HirFunction foreign_fn = {
+        .symbol = foreign_fn_symbol,
+        .return_type = int32_type,
+        .params = array_create(arena, sizeof(HirParam)),
+        .locals = array_create(arena, sizeof(HirLocal)),
+        .is_extern = false,
+        .is_export = false,
+        .body = NULL,
+    };
+    array_push(&hir.functions, &foreign_fn);
+
+    LirModule *lowered = lir_lower_module(arena, &hir);
+    bool ok = lowered->globals.len == 0 && lowered->functions.len == 1 && ((LirFunction **)lowered->functions.data)[0]->symbol == local_fn_symbol;
+    arena_destroy(arena);
+    return ok;
 }
 
 bool test_orion_backend(void) {

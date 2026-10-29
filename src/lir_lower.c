@@ -1918,27 +1918,44 @@ static void lir_collect_static_data(LirModule *module, Array(LirData) *data, Hir
     }
 }
 
-static void lir_lower_global(LirModule *module, HirGlobal *hir) {
-    LirGlobal global = {
-        .symbol = hir->symbol,
-        .type = hir->type,
+static bool hir_symbol_belongs_to_module(const HirModule *hir, const Symbol *symbol) {
+    return symbol == NULL || symbol->owner_module == NULL || symbol->owner_module == hir->owner_module;
+}
+
+static void lir_lower_global(LirModule *module, HirModule *hir, HirGlobal *global) {
+    if (global->symbol != NULL && global->symbol->owner_module != NULL && global->symbol->owner_module != hir->owner_module)
+        return;
+
+    if (global->is_extern)
+        return;
+
+    LirGlobal lowered = {
+        .symbol = global->symbol,
+        .type = global->type,
         .data = array_create(module->arena, sizeof(LirData)),
-        .is_mutable = hir->type->mutable,
-        .is_export = hir->is_export,
+        .is_mutable = global->type->mutable,
+        .is_export = global->is_export,
     };
 
-    lir_collect_static_data(module, &global.data, hir->init, 0);
-    array_push(&module->globals, &global);
+    lir_collect_static_data(module, &lowered.data, global->init, 0);
+    array_push(&module->globals, &lowered);
 }
 
 LirModule *lir_lower_module(Arena *arena, HirModule *hir) {
     LirModule *module = lir_module_create(arena);
 
-    for (size_t i = 0; i < hir->globals.len; i++)
-        lir_lower_global(module, &((HirGlobal *)hir->globals.data)[i]);
+    for (size_t i = 0; i < hir->globals.len; i++) {
+        HirGlobal *global = &((HirGlobal *)hir->globals.data)[i];
+        if (hir_symbol_belongs_to_module(hir, global->symbol) && !global->is_extern)
+            lir_lower_global(module, hir, global);
+    }
 
-    for (size_t i = 0; i < hir->functions.len; i++)
-        lir_lower_function(module, &((HirFunction *)hir->functions.data)[i]);
+    for (size_t i = 0; i < hir->functions.len; i++) {
+        HirFunction *function = &((HirFunction *)hir->functions.data)[i];
+        if (!hir_symbol_belongs_to_module(hir, function->symbol))
+            continue;
+        lir_lower_function(module, function);
+    }
 
     return module;
 }

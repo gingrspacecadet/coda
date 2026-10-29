@@ -166,6 +166,15 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (sema_fn_has_unbound_receiver_generics(sema, ast))
         return;
 
+    bool is_extern = false;
+    for (size_t i = 0; i < ast->attrs.len; i++) {
+        AstAttribute *attribute = array_at(&ast->attrs, i);
+        if (string_eq(attribute->name, STRING("extern"))) {
+            is_extern = true;
+            break;
+        }
+    }
+
     Symbol *symbol = sema_lookup_fn_decl(sema, ast);
 
     if (symbol == NULL) {
@@ -227,6 +236,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         .return_type = symbol->type->function.ret,
         .params = array_create(sema->arena, sizeof(HirParam)),
         .locals = array_create(sema->arena, sizeof(HirLocal)),
+        .is_extern = is_extern,
         .is_comptime = ast->comptime,
     };
 
@@ -439,9 +449,20 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
     if (type == NULL || type->kind == HIR_TYPE_ERROR)
         return false;
 
+    bool is_extern = false;
+    if (symbol->decl != NULL) {
+        for (size_t i = 0; i < symbol->decl->attrs.len; i++) {
+            AstAttribute *attribute = array_at(&symbol->decl->attrs, i);
+            if (string_eq(attribute->name, STRING("extern"))) {
+                is_extern = true;
+                break;
+            }
+        }
+    }
+
     HirExpr *init = NULL;
 
-    if (ast->init != NULL) {
+    if (!is_extern && ast->init != NULL) {
         init = sema_expr(sema, ast->init, type);
 
         if (init == NULL || init->kind == HIR_EXPR_ERROR)
@@ -476,6 +497,7 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
         .symbol = symbol,
         .type = type,
         .init = init,
+        .is_extern = is_extern,
         .is_export = symbol->is_exported,
     };
 
