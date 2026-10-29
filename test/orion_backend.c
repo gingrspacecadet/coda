@@ -34,22 +34,48 @@ bool test_orion_backend(void) {
     const TargetInfo *target = target_builtin("orion");
     const BackendApi *backend = orion_backend();
 
-    HirType *float_type = builtin_type(arena, BUILTIN_FLOAT32, 4, 4);
-    HirType *int_type = builtin_type(arena, BUILTIN_INT32, 4, 4);
-    Symbol *function_symbol = make_symbol(arena, "reject_float");
+    HirType *int64_type = builtin_type(arena, BUILTIN_INT64, 8, 8);
+    HirType *pair_type = arena_calloc(arena, sizeof(*pair_type));
+    *pair_type = (HirType){
+        .kind = HIR_TYPE_STRUCT,
+        .size = 16,
+        .align = 8,
+        .structure = {
+            .fields = array_create(arena, sizeof(HirField)),
+        },
+    };
+    HirField x_field = { .symbol = make_symbol(arena, "x"), .type = int64_type, .offset = 0 };
+    HirField y_field = { .symbol = make_symbol(arena, "y"), .type = int64_type, .offset = 8 };
+    array_push(&pair_type->structure.fields, &x_field);
+    array_push(&pair_type->structure.fields, &y_field);
 
-    LirFunction *function = lir_function_create(module, function_symbol, int_type, false, false);
+    Symbol *pair_symbol = make_symbol(arena, "make_pair");
+    LirFunction *function = lir_function_create(module, pair_symbol, pair_type, false, false);
     LirBlockId block = lir_block_create(function);
-    Array(LirOperand) operands = array_create(arena, sizeof(LirOperand));
-    LirValueId value = lir_emit(function, block, LIR_OP_ZERO, float_type, operands);
-    (void)value;
 
-    LirOperand ret = lir_operand_value(0, float_type);
+    LirValueId x_value = lir_function_add_param(function, make_symbol(arena, "x"), int64_type);
+    LirValueId y_value = lir_function_add_param(function, make_symbol(arena, "y"), int64_type);
+
+    LirOperand zero = lir_operand_int(0, int64_type);
+    LirOperand x_op = lir_operand_value(x_value, int64_type);
+    LirOperand y_op = lir_operand_value(y_value, int64_type);
+
+    LirOperand zero_insert_operands[3] = { lir_operand_value(LIR_INVALID_VALUE, pair_type), lir_operand_offset(0), x_op };
+    (void)zero_insert_operands;
+    LirOperand struct_base = lir_operand_value(0, pair_type);
+    LirOperand init_zero[3] = { struct_base, lir_operand_offset(0), zero };
+    LirValueId value0 = lir_emit(function, block, LIR_OP_INSERT, pair_type, (Array){ .data = init_zero, .len = 3 });
+
+    LirOperand insert_x_operands[3] = { lir_operand_value(value0, pair_type), lir_operand_offset(0), x_op };
+    LirValueId value1 = lir_emit(function, block, LIR_OP_INSERT, pair_type, (Array){ .data = insert_x_operands, .len = 3 });
+    LirOperand insert_y_operands[3] = { lir_operand_value(value1, pair_type), lir_operand_offset(8), y_op };
+    LirValueId result = lir_emit(function, block, LIR_OP_INSERT, pair_type, (Array){ .data = insert_y_operands, .len = 3 });
+
     lir_set_terminator(function, block, (LirTerminator){
         .kind = LIR_TERM_RETURN,
         ._return = {
             .has_value = true,
-            .value = ret,
+            .value = lir_operand_value(result, pair_type),
         },
     });
 
@@ -59,8 +85,10 @@ bool test_orion_backend(void) {
     bool ok = backend->emit(&(Backend){.api = backend}, target, module, out);
     fclose(out);
 
+    bool produced_output = generated_len > 0;
+    bool stack_pointer_not_reused = strstr(generated, "ldr r15, ") == NULL && strstr(generated, "str r15, ") == NULL;
     free(generated);
     arena_destroy(arena);
 
-    return !ok;
+    return ok && produced_output && stack_pointer_not_reused;
 }

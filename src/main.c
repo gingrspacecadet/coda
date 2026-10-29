@@ -293,6 +293,7 @@ int main(int argc, char **argv) {
     compiler.output = output;
     if (options.run && fputs(".globl main\n", output) < 0) {
         fclose(output);
+        unlink(output_path);
         if (run_directory_created)
             cleanup_run_files(run_directory, run_assembly_path, run_executable_path);
         cli_options_destroy(&options);
@@ -302,6 +303,7 @@ int main(int argc, char **argv) {
 
     if (!coda_compile(&compiler, &source, CODA_STAGE_CODEGEN)) {
         fclose(output);
+        unlink(output_path);
         print_diags(&diags);
         if (run_directory_created)
             cleanup_run_files(run_directory, run_assembly_path, run_executable_path);
