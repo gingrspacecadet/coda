@@ -104,6 +104,7 @@ static LirOpcode lir_lower_unary_op(AstUnaryOp op) {
             return LIR_OP_NEG;
 
         case AST_UNARY_NOT:
+        case AST_UNARY_BIT_NOT:
             return LIR_OP_NOT;
 
         case AST_UNARY_DEREF:
@@ -1796,9 +1797,6 @@ static void lir_lower_function(LirModule *module, HirFunction *hir, const Target
         return;
 
     LirFunction *function = lir_function_create(module, hir->symbol, hir->return_type, hir->is_extern, hir->is_export);
-
-    if (hir->is_extern)
-        return;
 
     Array(Symbol *) address_taken = array_create(module->arena, sizeof(Symbol *));
     lir_collect_address_taken_stmt(&address_taken, hir->body);

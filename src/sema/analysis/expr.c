@@ -1772,8 +1772,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->kind = HIR_EXPR_UNARY;
             hir->unary.op = ast->unary.op;
 
-            HirType *operand_expected = sema_type_is_float(expected) &&
-                (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) ? expected : NULL;
+            HirType *operand_expected = sema_type_is_float(expected) && (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) ? expected : NULL;
             HirExpr *operand = sema_expr(sema, ast->unary.operand, operand_expected);
 
             if (operand == NULL || operand->kind == HIR_EXPR_ERROR) {

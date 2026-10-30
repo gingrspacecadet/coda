@@ -44,7 +44,7 @@ static bool fail(OrionFunction *function, const char *message) {
     fprintf(stderr, "Orion backend: %s", message);
     if (function != NULL && function->function != NULL) {
         String name = symbol_link_name(function->function->symbol);
-        fprintf(stderr, " in %.*s", (int)name.length, name.data != NULL ? name.data : "");
+        fprintf(stderr, " in %.*s", string_fmt(name) != NULL ? name.data : "");
     }
     fputc('\n', stderr);
     return false;
@@ -201,20 +201,7 @@ static void emit_mem_operand(FILE *out, int base, int64_t offset) {
 }
 
 static void emit_mov_imm(FILE *out, int reg, uint32_t value) {
-    uint16_t high = (uint16_t)(value >> 16);
-    uint16_t low = (uint16_t)value;
-    int32_t signed_low = (int16_t)low;
-
-    if (value <= UINT32_C(0x7fff) || value >= UINT32_C(0xffff8000)) {
-        fprintf(out, "    xor r%d, r%d, r%d\n", reg, reg, reg);
-        if (signed_low != 0)
-            fprintf(out, "    add r%d, r%d, #%" PRId32 "\n", reg, reg, signed_low);
-        return;
-    }
-
-    fprintf(out, "    lui r%d, #%u\n", reg, (unsigned)high);
-    if (low != 0)
-        fprintf(out, "    or r%d, r%d, #%u\n", reg, reg, (unsigned)low);
+    fprintf(out, "    mov r%d, #%" PRId32 "\n", reg, value);
 }
 
 static void emit_mov_size(FILE *out, int reg, size_t value) {
@@ -445,7 +432,7 @@ static bool emit_operand_address(OrionFunction *function, const LirOperand *oper
         String name = symbol_link_name(operand->symbol);
         if (name.data == NULL || name.length == 0)
             return fail(function, "symbol operand has no link name");
-        fprintf(function->out, "    mov r%d, $%.*s\n", dest, (int)name.length, name.data);
+        fprintf(function->out, "    mov r%d, $%.*s\n", dest, string_fmt(name));
         return true;
     }
     if (operand->kind == LIR_OPERAND_VALUE && type_is_aggregate(operand->type))
@@ -480,7 +467,7 @@ static bool emit_operand_chunk(OrionFunction *function, const LirOperand *operan
             String name = symbol_link_name(operand->symbol);
             if (name.data == NULL || name.length == 0)
                 return fail(function, "symbol operand has no link name");
-            fprintf(function->out, "    mov r%d, $%.*s\n", dest, (int)name.length, name.data);
+            fprintf(function->out, "    mov r%d, $%.*s\n", dest, string_fmt(name));
             return true;
         }
         case LIR_OPERAND_VALUE: {
@@ -568,16 +555,16 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
 
     fprintf(out, "\n.section %s\n", section);
     if (global->is_export)
-        fprintf(out, ".global %.*s\n", (int)name.length, name.data);
+        fprintf(out, ".global %.*s\n", string_fmt(name));
     fprintf(out, ".align #%zu\n", type_align(global->type));
-    fprintf(out, "%.*s:\n", (int)name.length, name.data);
+    fprintf(out, "%.*s:\n", string_fmt(name));
 
     size_t offset = 0;
     for (size_t i = 0; i < global->data.len; i++) {
         const LirData *data = &((LirData *)global->data.data)[i];
         if (data->offset < offset) {
             fprintf(stderr, "Orion backend: overlapping or unsorted data entries in %.*s\n",
-                    (int)name.length, name.data);
+                    string_fmt(name));
             return false;
         }
         emit_data_zeros(out, data->offset - offset);
@@ -625,7 +612,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
 
     if (offset > type_size(global->type)) {
         fprintf(stderr, "Orion backend: global initializer exceeds object size for %.*s\n",
-                (int)name.length, name.data);
+                string_fmt(name));
         return false;
     }
     emit_data_zeros(out, type_size(global->type) - offset);
@@ -634,7 +621,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
 
 static void emit_string(FILE *out, const LirString *string) {
     String name = symbol_link_name(string->symbol);
-    fprintf(out, "\n.section .rodata\n%.*s:\n", (int)name.length, name.data);
+    fprintf(out, "\n.section .rodata\n%.*s:\n", string_fmt(name));
     if (string->bytes.length == 0) {
         fprintf(out, "    .byte #0\n");
         return;
@@ -654,12 +641,12 @@ static LirBlock *find_block(OrionFunction *function, LirBlockId id) {
 
 static void emit_block_label(OrionFunction *function, LirBlockId id) {
     String name = symbol_link_name(function->function->symbol);
-    fprintf(function->out, "%.*s_L%u:\n", (int)name.length, name.data, id);
+    fprintf(function->out, "%.*s_L%u:\n", string_fmt(name), id);
 }
 
 static void emit_block_ref(OrionFunction *function, LirBlockId id) {
     String name = symbol_link_name(function->function->symbol);
-    fprintf(function->out, "$%.*s_L%u", (int)name.length, name.data, id);
+    fprintf(function->out, "$%.*s_L%u", string_fmt(name), id);
 }
 
 static size_t next_label(OrionFunction *function) {
@@ -668,7 +655,7 @@ static size_t next_label(OrionFunction *function) {
 
 static void emit_local_label(OrionFunction *function, size_t id) {
     String name = symbol_link_name(function->function->symbol);
-    fprintf(function->out, "%.*s__orion_%zu", (int)name.length, name.data, id);
+    fprintf(function->out, "%.*s_LL%zu", string_fmt(name), id);
 }
 
 static void emit_local_ref(OrionFunction *function, size_t id) {
@@ -676,8 +663,7 @@ static void emit_local_ref(OrionFunction *function, size_t id) {
     emit_local_label(function, id);
 }
 
-static void emit_branch_to_label(OrionFunction *function, const char *condition,
-                                 int lhs, int rhs, size_t target) {
+static void emit_branch_to_label(OrionFunction *function, const char *condition, int lhs, int rhs, size_t target) {
     size_t skip = next_label(function);
     fprintf(function->out, "    %s r%d, r%d, #1\n", condition, lhs, rhs);
     fprintf(function->out, "    jmp ");
@@ -1140,7 +1126,7 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
         String name = symbol_link_name(operands[0].symbol);
         if (name.data == NULL || name.length == 0)
             return fail(function, "callee symbol has no link name");
-        fprintf(function->out, "    call $%.*s\n", (int)name.length, name.data);
+        fprintf(function->out, "    call $%.*s\n", string_fmt(name));
     } else {
         if (!emit_operand_chunk(function, &operands[0], 0, ORION_R14))
             return false;
@@ -1646,8 +1632,8 @@ static bool emit_function(OrionFunction *function) {
 
     fprintf(function->out, "\n.section .text\n");
     if (function->function->is_export)
-        fprintf(function->out, ".global %.*s\n", (int)name.length, name.data);
-    fprintf(function->out, "%.*s:\n", (int)name.length, name.data);
+        fprintf(function->out, ".global %.*s\n", string_fmt(name));
+    fprintf(function->out, "%.*s:\n", string_fmt(name));
 
     fputs("    sub r15, r15, #4\n", function->out);
     emit_store_word_at(function, ORION_SP, 0, ORION_FP);

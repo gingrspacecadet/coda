@@ -178,7 +178,6 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup_fn_decl(sema, ast);
 
     if (symbol == NULL) {
-        //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
@@ -186,7 +185,6 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     symbol->span = ast->span;
 
     if (symbol->kind != SYMBOL_FN) {
-        //! TODO: internal compiler error
         fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
         return;
     }
