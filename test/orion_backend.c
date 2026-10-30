@@ -96,7 +96,7 @@ bool test_extern_lowering(void) {
     };
     array_push(&hir.functions, &foreign_fn);
 
-    LirModule *lowered = lir_lower_module(arena, &hir);
+    LirModule *lowered = lir_lower_module(arena, &hir, &(TargetInfo){.pointer = {.size = 4, .align = 4}});
     bool ok = lowered->globals.len == 0 && lowered->functions.len == 1 && ((LirFunction **)lowered->functions.data)[0]->symbol == local_fn_symbol;
     arena_destroy(arena);
     return ok;

@@ -1,0 +1,36 @@
+name: none* arithmetic
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn none *advance(none *p, uint64 i) {
+    return p + i;
+}
+
+fn none *retreat(none *p, uint64 i) {
+    return p - i;
+}
+
+fn int64 distance(none *a, none *b) {
+    return a - b;
+}
+
+[lir]
+advance:
+    block0(%0, %1):
+        %2 = mul %1, 1
+        %3 = addr_add %0, %2
+        return %3
+
+retreat:
+    block0(%0, %1):
+        %2 = mul %1, 1
+        %3 = sub 0, %2
+        %4 = addr_add %0, %3
+        return %4
+
+distance:
+    block0(%0, %1):
+        %2 = addr_diff %0, %1, $1
+        return %2

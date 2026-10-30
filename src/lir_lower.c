@@ -368,6 +368,11 @@ static LirOperand lir_lower_scaled_index(LirLower *lower, LirOperand index, size
     return lir_operand_value(result, index.type);
 }
 
+static size_t hir_type_pointer_stride(HirType *type) {
+    size_t size = type->pointer.pointee->size;
+    return size != 0 ? size : 1;
+}
+
 static bool hir_type_is_pointer(HirType *type);
 
 static bool symbol_is_extern(const Symbol *symbol) {
@@ -386,7 +391,7 @@ static bool symbol_is_extern(const Symbol *symbol) {
 static LirOperand lir_lower_binary_values(LirLower *lower, AstBinaryOp op, HirType *type, LirOperand left, LirOperand right) {
     if ((op == AST_BINARY_ADD || op == AST_BINARY_SUB) &&
         hir_type_is_pointer(left.type) && hir_type_is_integer(right.type)) {
-        LirOperand offset = lir_lower_scaled_index(lower, right, left.type->pointer.pointee->size);
+        LirOperand offset = lir_lower_scaled_index(lower, right, hir_type_pointer_stride(left.type));
         if (op == AST_BINARY_SUB) {
             LirOperand zero = hir_type_is_signed_integer(offset.type)
                 ? lir_operand_int(0, offset.type)
@@ -401,14 +406,14 @@ static LirOperand lir_lower_binary_values(LirLower *lower, AstBinaryOp op, HirTy
     }
 
     if (op == AST_BINARY_ADD && hir_type_is_integer(left.type) && hir_type_is_pointer(right.type)) {
-        LirOperand offset = lir_lower_scaled_index(lower, left, right.type->pointer.pointee->size);
+        LirOperand offset = lir_lower_scaled_index(lower, left, hir_type_pointer_stride(right.type));
         LirOperand operands[2] = {right, offset};
         LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, type, (Array){.data = operands, .len = 2});
         return lir_operand_value(result, type);
     }
 
     if (op == AST_BINARY_SUB && hir_type_is_pointer(left.type) && hir_type_is_pointer(right.type)) {
-        LirOperand element_size = lir_operand_offset(left.type->pointer.pointee->size);
+        LirOperand element_size = lir_operand_offset(hir_type_pointer_stride(left.type));
         LirOperand operands[3] = {left, right, element_size};
         LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_ADDR_DIFF, type, (Array){.data = operands, .len = 3});
         return lir_operand_value(result, type);

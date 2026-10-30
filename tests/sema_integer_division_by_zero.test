@@ -1,0 +1,25 @@
+name: reject integer division and remainder by zero
+expect: fail
+stop: hir
+errors: 4
+
+[source]
+fn int32 divide(int32 value) {
+    return value / 0;
+}
+
+fn int32 remainder(int32 value) {
+    return value % 0;
+}
+
+fn int32 compound_divide(int32 value) {
+    mut int32 result = value;
+    result /= 0;
+    return result;
+}
+
+fn int32 compound_remainder(int32 value) {
+    mut int32 result = value;
+    result %= 0;
+    return result;
+}

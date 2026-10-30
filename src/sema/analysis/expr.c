@@ -640,6 +640,29 @@ static HirType *binary_result_type(Sema *sema, AstBinaryOp op, HirType *left, Hi
     }
 }
 
+static bool sema_is_integer_zero_literal(HirExpr *expr) {
+    return expr != NULL &&
+           expr->kind == HIR_EXPR_LITERAL &&
+           expr->literal.kind == HIR_LITERAL_INTEGER &&
+           expr->literal.integer == 0;
+}
+
+static bool sema_check_integer_divisor(Sema *sema, AstBinaryOp op, HirType *operand_type, HirExpr *divisor) {
+    if ((op == AST_BINARY_DIV || op == AST_BINARY_MOD) &&
+        is_integer(sema_unwrap_type(operand_type)) &&
+        sema_is_integer_zero_literal(divisor)) {
+        String message = op == AST_BINARY_DIV
+            ? STRING("integer division by zero")
+            : STRING("integer remainder by zero");
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_DIVISION_BY_ZERO, divisor->span, message);
+        diag_note(&diagnostic, STRING("the divisor is a compile-time constant zero"));
+        diag_finish(&diagnostic);
+        return false;
+    }
+
+    return true;
+}
+
 static HirType *call_type(Sema *sema, HirExpr *callee) {
     if (callee->type == NULL)
         return NULL;
@@ -1822,6 +1845,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            if (!sema_check_integer_divisor(sema, ast->binary.op, operand_type, right)) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->binary.left = left;
             hir->binary.right = right;
             hir->type = binary_result_type(sema, ast->binary.op, left->type, right->type, operand_type);
@@ -2585,6 +2613,9 @@ HirStmt *sema_assignment_stmt(Sema *sema, AstExpr *ast) {
             return stmt;
         }
     }
+
+    if (!sema_check_integer_divisor(sema, op, target->type, value))
+        return stmt;
 
     *stmt = (HirStmt){
         .span = ast->span,
