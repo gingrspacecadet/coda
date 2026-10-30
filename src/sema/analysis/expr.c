@@ -1178,8 +1178,8 @@ static HirExpr *sema_any_constraint_method_call(Sema *sema, AstExpr *ast, HirExp
     HirType *function_type = arena_calloc(sema->arena, sizeof(*function_type));
     *function_type = (HirType){
         .kind = HIR_TYPE_FUNCTION,
-        .size = sizeof(void *),
-        .align = __alignof(void *),
+        .size = sema->target->pointer.size,
+        .align = sema->target->pointer.align,
         .function = {
             .ret = return_type,
             .params = array_create(sema->arena, sizeof(HirType *)),

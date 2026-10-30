@@ -32,6 +32,8 @@ typedef struct {
     Array(Symbol *) address_taken;
     Array(LirOperand) stack_saves;
     Array(LirLoop) loops;
+
+    const TargetInfo *target;
 } LirLower;
 
 static LirBlock *lir_lower_block(LirLower *lower) {
@@ -368,6 +370,19 @@ static LirOperand lir_lower_scaled_index(LirLower *lower, LirOperand index, size
 
 static bool hir_type_is_pointer(HirType *type);
 
+static bool symbol_is_extern(const Symbol *symbol) {
+    if (symbol == NULL || symbol->decl == NULL)
+        return false;
+
+    for (size_t i = 0; i < symbol->decl->attrs.len; i++) {
+        AstAttribute *attribute = array_at(&symbol->decl->attrs, i);
+        if (attribute != NULL && string_eq(attribute->name, STRING("extern")))
+            return true;
+    }
+
+    return false;
+}
+
 static LirOperand lir_lower_binary_values(LirLower *lower, AstBinaryOp op, HirType *type, LirOperand left, LirOperand right) {
     if ((op == AST_BINARY_ADD || op == AST_BINARY_SUB) &&
         hir_type_is_pointer(left.type) && hir_type_is_integer(right.type)) {
@@ -559,7 +574,7 @@ static LirOperand lir_lower_any_box(LirLower *lower, HirExpr *expr) {
 
     HirType *table_pointer_type = lir_address_type(lower, expr->any_box.vtable_type);
     LirOperand table_pointer = lir_operand_symbol(expr->any_box.vtable, table_pointer_type);
-    LirOperand table_operands[3] = {aggregate, lir_operand_offset(sizeof(void *)), table_pointer};
+    LirOperand table_operands[3] = {aggregate, lir_operand_offset(lower->target->pointer.size), table_pointer};
     LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_INSERT, expr->type, (Array){.data = table_operands, .len = 3});
     return lir_operand_value(result, expr->type);
 }
@@ -585,6 +600,14 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
                 }
 
                 case SYMBOL_GLOBAL: {
+                    if (symbol->decl != NULL) {
+                        for (size_t i = 0; i < symbol->decl->attrs.len; i++) {
+                            AstAttribute *attribute = array_at(&symbol->decl->attrs, i);
+                        }
+                    }
+                    if (symbol_is_extern(symbol))
+                        return lir_operand_symbol(symbol, expr->type);
+
                     LirPlace place = lir_lower_place(lower, expr);
                     return lir_lower_load(lower, place);
                 }
@@ -674,11 +697,11 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             LirValueId data_id = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->any_call.byte_pointer_type, (Array){.data = data_operands, .len = 2});
             LirOperand data = lir_operand_value(data_id, expr->any_call.byte_pointer_type);
 
-            LirOperand table_operands[2] = {object, lir_operand_offset(sizeof(void *))};
+            LirOperand table_operands[2] = {object, lir_operand_offset(lower->target->pointer.size)};
             LirValueId table_id = lir_emit(lower->function, lower->block, LIR_OP_EXTRACT, expr->any_call.byte_pointer_type, (Array){.data = table_operands, .len = 2});
             LirOperand table = lir_operand_value(table_id, expr->any_call.byte_pointer_type);
 
-            LirOperand slot_offset = lir_operand_uint((uint64_t)(expr->any_call.method_index * sizeof(void *)), lir_sum_tag_type(lower));
+            LirOperand slot_offset = lir_operand_uint((uint64_t)(expr->any_call.method_index * sizeof(lower->target->pointer.size)), lir_sum_tag_type(lower));
             LirOperand address_operands[2] = {table, slot_offset};
             LirValueId address_id = lir_emit(lower->function, lower->block, LIR_OP_ADDR_ADD, expr->any_call.byte_pointer_type, (Array){.data = address_operands, .len = 2});
             LirOperand address = lir_operand_value(address_id, expr->any_call.byte_pointer_type);
@@ -890,8 +913,8 @@ static HirType *lir_address_type(LirLower *lower, HirType *pointee) {
     *type = (HirType){
         .kind = HIR_TYPE_POINTER,
         .mutable = false,
-        .size = sizeof(void *),
-        .align = _Alignof(void *),
+        .size = lower->target->pointer.size,
+        .align = lower->target->pointer.align,
         .pointer = {.pointee = pointee, .optional = false},
     };
     return type;
@@ -987,22 +1010,16 @@ static LirPlace lir_lower_place(LirLower *lower, HirExpr *expr) {
                 *pointer_type = (HirType) {
                     .kind = HIR_TYPE_POINTER,
                     .mutable = false,
-                    .size = sizeof(void *),
-                    .align = _Alignof(void *),
+                    .size = lower->target->pointer.size,
+                    .align = lower->target->pointer.align,
                     .pointer = {
                         .pointee = expr->type,
                         .optional = false,
                     },
                 };
 
-                LirOperand symbol_operand = lir_operand_symbol(symbol, pointer_type);
-                LirValueId address = lir_emit(lower->function, lower->block, LIR_OP_ADDR, pointer_type, (Array) {
-                    .data = &symbol_operand,
-                    .len = 1,
-                });
-
                 return (LirPlace) {
-                    .address = lir_operand_value(address, pointer_type),
+                    .address = lir_operand_symbol(symbol, pointer_type),
                     .type = expr->type,
                 };
             }
@@ -1758,8 +1775,8 @@ static LirOperand lir_allocate_address_storage(LirLower *lower, Symbol *symbol, 
     *pointer_type = (HirType){
         .kind = HIR_TYPE_POINTER,
         .mutable = false,
-        .size = sizeof(void *),
-        .align = _Alignof(void *),
+        .size = lower->target->pointer.size,
+        .align = lower->target->pointer.align,
         .pointer = {.pointee = type, .optional = false},
     };
 
@@ -1769,7 +1786,7 @@ static LirOperand lir_allocate_address_storage(LirLower *lower, Symbol *symbol, 
     return address;
 }
 
-static void lir_lower_function(LirModule *module, HirFunction *hir) {
+static void lir_lower_function(LirModule *module, HirFunction *hir, const TargetInfo *target) {
     if (hir->is_comptime)
         return;
 
@@ -1789,6 +1806,7 @@ static void lir_lower_function(LirModule *module, HirFunction *hir) {
         .address_taken = address_taken,
         .stack_saves = array_create(module->arena, sizeof(LirOperand)),
         .loops = array_create(module->arena, sizeof(LirLoop)),
+        .target = target,
     };
 
     lower.block = lir_block_create(function);
@@ -1941,7 +1959,7 @@ static void lir_lower_global(LirModule *module, HirModule *hir, HirGlobal *globa
     array_push(&module->globals, &lowered);
 }
 
-LirModule *lir_lower_module(Arena *arena, HirModule *hir) {
+LirModule *lir_lower_module(Arena *arena, HirModule *hir, const TargetInfo *target) {
     LirModule *module = lir_module_create(arena);
 
     for (size_t i = 0; i < hir->globals.len; i++) {
@@ -1954,7 +1972,7 @@ LirModule *lir_lower_module(Arena *arena, HirModule *hir) {
         HirFunction *function = &((HirFunction *)hir->functions.data)[i];
         if (!hir_symbol_belongs_to_module(hir, function->symbol))
             continue;
-        lir_lower_function(module, function);
+        lir_lower_function(module, function, target);
     }
 
     return module;

@@ -137,8 +137,8 @@ static inline HirType *pointer_type(Sema *sema, HirType *pointee, bool optional)
     HirType *type = arena_calloc(sema->arena, sizeof(*type));
 
     type->kind = HIR_TYPE_POINTER;
-    type->size = sizeof(void *);
-    type->align = __alignof(void *);
+    type->size = sema->target->pointer.size;
+    type->align = sema->target->pointer.align;
     type->pointer.pointee = pointee;
     type->pointer.optional = optional;
 
