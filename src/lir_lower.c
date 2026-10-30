@@ -786,7 +786,12 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
             HirType *member_type = lir_unwrap_type(
                 ((HirType **)sum_type->sum.members.data)[expr->sum_inject.member_index]
             );
-            LirOperand value = lir_lower_expr(lower, expr->sum_inject.value);
+
+            LirOperand value = {0};
+            if (expr->sum_inject.value != NULL)
+                value = lir_lower_expr(lower, expr->sum_inject.value);
+            else
+                assert(member_type->size == 0);
 
             LirValueId zero = lir_emit(lower->function, lower->block, LIR_OP_ZERO, expr->type, (Array){0});
             LirOperand aggregate = lir_operand_value(zero, expr->type);
@@ -1102,12 +1107,46 @@ static void lir_snapshot_operands(Array(LirBinding) *snapshot, Array(LirOperand)
     }
 }
 
+static LirOperand lir_lower_cast_value(LirLower *lower, LirOperand value, HirType *type) {
+    if (type == NULL || value.type == type)
+        return value;
+
+    /* Mutability does not affect LIR representation, but block arguments
+     * still carry the exact type pointer chosen for the block parameter. */
+    if (type_equal(value.type, type)) {
+        value.type = type;
+        return value;
+    }
+
+    LirValueId result = lir_emit(lower->function, lower->block, LIR_OP_CAST, type,
+                                 (Array){.data = &value, .len = 1});
+    return lir_operand_value(result, type);
+}
+
+static LirOperand lir_lower_compound_assignment_value(LirLower *lower, HirStmt *stmt,
+                                                       LirOperand left, LirOperand right) {
+    /* Preserve the type identity of the current SSA binding (e.g. a loop
+     * block parameter), rather than the possibly differently-qualified HIR
+     * place type. */
+    HirType *target_type = left.type;
+    if (stmt->assign.operation_type == NULL)
+        return lir_lower_binary_values(lower, stmt->assign.op, target_type, left, right);
+
+    left = lir_lower_cast_value(lower, left, stmt->assign.operation_type);
+    right = lir_lower_cast_value(lower, right, stmt->assign.right_type);
+
+    LirOperand result = lir_lower_binary_values(lower, stmt->assign.op,
+                                                stmt->assign.operation_type, left, right);
+    return lir_lower_cast_value(lower, result, target_type);
+}
+
 static void lir_lower_stmt(LirLower *lower, HirStmt *stmt);
 
 static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
     LirFunction *function = lower->function;
-    LirBlockId entry_block = lower->block;
     LirOperand condition = lir_lower_expr(lower, stmt->_if.cond);
+    /* Logical conditions may create blocks; branch from their final block. */
+    LirBlockId entry_block = lower->block;
 
     Array(LirBinding) snapshot = array_create(function->arena, sizeof(LirBinding));
 
@@ -1266,6 +1305,7 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
     lir_bind_snapshot_params(lower, header, &snapshot);
 
     LirOperand condition = lir_lower_expr(lower, stmt->_while.cond);
+    LirBlockId condition_block = lower->block;
 
     Array(LirOperand) exit_args = array_create(function->arena, sizeof(LirOperand));
     lir_collect_branch_args(lower, &snapshot, &exit_args);
@@ -1508,6 +1548,14 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                         if (address != NULL) {
                             lir_lower_store(lower, (LirPlace){.address = address->operand, .type = target->type}, value);
                         } else {
+                            /* Keep an SSA variable's type identity stable across
+                             * assignments. sema_coerce may leave a structurally
+                             * equal value with a different HirType pointer (for
+                             * example, a mutable parameter assigned an immutable
+                             * global of the same underlying type). */
+                            LirBinding *binding = lir_find_binding(lower, symbol);
+                            HirType *type = binding != NULL ? binding->operand.type : target->type;
+                            value = lir_lower_cast_value(lower, value, type);
                             lir_bind(lower, symbol, value);
                         }
                         return;
@@ -1537,7 +1585,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
                 if ((symbol->kind == SYMBOL_LOCAL || symbol->kind == SYMBOL_PARAMETER) && lir_find_address(lower, symbol) == NULL) {
                     LirOperand left = lir_lower_expr(lower, target);
                     LirOperand right = lir_lower_expr(lower, stmt->assign.value);
-                    LirOperand value = lir_lower_binary_values(lower, stmt->assign.op, target->type, left, right);
+                    LirOperand value = lir_lower_compound_assignment_value(lower, stmt, left, right);
                     lir_bind(lower, symbol, value);
                     return;
                 }
@@ -1546,7 +1594,7 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt) {
             LirPlace place = lir_lower_place(lower, target);
             LirOperand left = lir_lower_load(lower, place);
             LirOperand right = lir_lower_expr(lower, stmt->assign.value);
-            LirOperand value = lir_lower_binary_values(lower, stmt->assign.op, target->type, left, right);
+            LirOperand value = lir_lower_compound_assignment_value(lower, stmt, left, right);
             lir_lower_store(lower, place, value);
             return;
         }

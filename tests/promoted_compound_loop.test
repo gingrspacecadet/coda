@@ -1,0 +1,21 @@
+name: promoted compound assignment preserves loop value types
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn uint32 get_start32() {
+    return 0;
+}
+
+fn int64 get_start64() {
+    return 0;
+}
+
+fn none loop_compound_assignment() {
+    for (mut uint32 i = get_start32(); i < 4; i += 1) {
+    }
+
+    for (mut int64 j = get_start64(); j < 4; j += 1) {
+    }
+}

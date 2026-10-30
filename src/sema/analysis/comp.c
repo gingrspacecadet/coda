@@ -882,13 +882,33 @@ case HIR_STMT_ASSIGN: {
         if (left == NULL || right == NULL || !comp_expr_is_evaluable(left) || !comp_expr_is_evaluable(right))
             return (CompExecResult){.kind = COMP_EXEC_ERROR};
 
+        if (stmt->assign.operation_type != NULL) {
+            left = sema_coerce(context->sema, left, stmt->assign.operation_type);
+            right = sema_coerce(context->sema, right, stmt->assign.right_type);
+            if (left == NULL || right == NULL)
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
+
+            left = comp_eval_expr(context, left);
+            right = comp_eval_expr(context, right);
+            if (left == NULL || right == NULL)
+                return (CompExecResult){.kind = COMP_EXEC_ERROR};
+        }
+
         HirExpr binary = {
             .span = stmt->span,
             .kind = HIR_EXPR_BINARY,
-            .type = stmt->assign.target->type,
+            .type = stmt->assign.operation_type != NULL
+                ? stmt->assign.operation_type
+                : stmt->assign.target->type,
             .binary = {.op = stmt->assign.op, .left = left, .right = right},
         };
         value = comp_eval_expr(context, &binary);
+
+        if (value != NULL && stmt->assign.operation_type != NULL) {
+            value = sema_coerce(context->sema, value, stmt->assign.target->type);
+            if (value != NULL)
+                value = comp_eval_expr(context, value);
+        }
     }
 
     if (value == NULL || !comp_expr_is_evaluable(value))

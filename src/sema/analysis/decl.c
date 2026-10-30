@@ -278,10 +278,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     }
 
     HirType *return_type = fn->return_type;
-    bool returns_none =
-        return_type != NULL &&
-        return_type->kind == HIR_TYPE_BUILTIN &&
-        return_type->builtin == BUILTIN_NONE;
+    bool returns_none = sema_type_allows_empty_return(return_type);
 
     if (!returns_none && !hir_stmt_terminates(fn->body))
         error_missing_return_value(sema->diags, return_type, ast->body->span);
@@ -294,6 +291,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         } else if (returns_none) {
             HirStmt *ret = arena_calloc(sema->arena, sizeof(*ret));
             ret->kind = HIR_STMT_RETURN;
+            ret->_return.value = sema_make_empty_sum_return(sema, return_type, ast->body->span);
             array_push(&fn->body->block.stmts, &ret);
         }
     }

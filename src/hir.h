@@ -281,6 +281,8 @@ struct HirStmt {
 
         struct {
             AstBinaryOp op;
+            HirType *operation_type;
+            HirType *right_type;
             HirExpr *target;
             HirExpr *value;
         } assign;

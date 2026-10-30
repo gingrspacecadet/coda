@@ -1,0 +1,29 @@
+name: sum returns permit an empty result
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type FreeError = enum: uint8 {
+    BadPage = 1,
+}
+
+type Result = (none | FreeError);
+
+fn (none | FreeError) alloc_empty() {
+    return;
+}
+
+fn (none | FreeError) free_empty() {
+}
+
+fn (none | FreeError) return_error() {
+    return FreeError::BadPage;
+}
+
+fn Result implicit_alias() {
+}
+
+fn Result bare_alias() {
+    return;
+}

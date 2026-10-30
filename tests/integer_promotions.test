@@ -1,0 +1,42 @@
+name: integer promotions and usual arithmetic conversions
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+fn int32 add_bytes(uint8 a, uint16 b) {
+    return a + b;
+}
+
+fn uint8 add_narrow(uint8 a, uint8 b) {
+    return a + b;
+}
+
+fn bool compare_mixed(int8 a, uint16 b) {
+    return a < b;
+}
+
+fn uint32 mixed_signedness(int32 a, uint32 b) {
+    return a + b;
+}
+
+fn int32 shift_byte(uint8 value, uint16 amount) {
+    return value >> amount;
+}
+
+fn int32 complement_byte(uint8 value) {
+    return ~value;
+}
+
+fn uint32 widen(uint8 value) {
+    return value;
+}
+
+fn uint8 narrow(uint32 value) {
+    return value;
+}
+
+fn none compound(mut uint8 *value, uint32 rhs) {
+    *value += rhs;
+    *value <<= rhs;
+}

@@ -613,18 +613,16 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
             }
 
             HirType *return_type = sema->current_fn->return_type;
-            bool returns_none =
-                return_type != NULL &&
-                return_type->kind == HIR_TYPE_BUILTIN &&
-                return_type->builtin == BUILTIN_NONE;
+            bool returns_none = sema_type_is_none(return_type);
 
             if (ast->_return.value == NULL) {
-                if (!returns_none) {
+                if (!sema_type_allows_empty_return(return_type)) {
                     error_missing_return_value(sema->diags, return_type, ast->span);
                     hir->kind = HIR_STMT_ERROR;
                     return hir;
                 }
 
+                hir->_return.value = sema_make_empty_sum_return(sema, return_type, ast->span);
                 return hir;
             }
 

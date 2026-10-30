@@ -92,6 +92,13 @@ static bool sema_is_untyped_integer_expression(AstExpr *ast) {
                 case AST_BINARY_MUL:
                 case AST_BINARY_DIV:
                 case AST_BINARY_MOD:
+                case AST_BINARY_BIT_AND:
+                case AST_BINARY_BIT_OR:
+                case AST_BINARY_BIT_XOR:
+                case AST_BINARY_SHL:
+                case AST_BINARY_SHR:
+                case AST_BINARY_NAND:
+                case AST_BINARY_NOR:
                     return sema_is_untyped_integer_expression(ast->binary.left) &&
                            sema_is_untyped_integer_expression(ast->binary.right);
 
@@ -133,6 +140,117 @@ static bool sema_retype_integer_expression(AstExpr *ast, HirExpr *expr, HirType 
     }
 
     expr->type = type;
+    return true;
+}
+
+static bool sema_is_integer_binary_op(AstBinaryOp op) {
+    switch (op) {
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BIT_AND:
+        case AST_BINARY_BIT_OR:
+        case AST_BINARY_BIT_XOR:
+        case AST_BINARY_SHL:
+        case AST_BINARY_SHR:
+        case AST_BINARY_NAND:
+        case AST_BINARY_NOR:
+        case AST_BINARY_EQUAL:
+        case AST_BINARY_NOT_EQUAL:
+        case AST_BINARY_LT:
+        case AST_BINARY_LTE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GTE:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static bool sema_is_shift_op(AstBinaryOp op) {
+    return op == AST_BINARY_SHL || op == AST_BINARY_SHR;
+}
+
+static HirType *sema_integer_promotion(Sema *sema, HirType *type) {
+    type = sema_unwrap_type(type);
+    if (!is_integer(type))
+        return NULL;
+
+    HirType *int_type = builtin_type(sema, BUILTIN_INT32);
+    assert(int_type != NULL);
+
+    /* int32 represents every value of uint8 and uint16. */
+    return type->size < int_type->size ? int_type : type;
+}
+
+static HirType *sema_unsigned_counterpart(Sema *sema, HirType *type) {
+    type = sema_unwrap_type(type);
+    assert(type != NULL && type->kind == HIR_TYPE_BUILTIN);
+
+    switch (type->builtin) {
+        case BUILTIN_INT8:  return builtin_type(sema, BUILTIN_UINT8);
+        case BUILTIN_INT16: return builtin_type(sema, BUILTIN_UINT16);
+        case BUILTIN_INT32: return builtin_type(sema, BUILTIN_UINT32);
+        case BUILTIN_INT64: return builtin_type(sema, BUILTIN_UINT64);
+        default:            return type;
+    }
+}
+
+static HirType *sema_integer_common_type(Sema *sema, HirType *left, HirType *right) {
+    left = sema_integer_promotion(sema, left);
+    right = sema_integer_promotion(sema, right);
+    if (left == NULL || right == NULL)
+        return NULL;
+
+    bool left_signed = is_signed(left);
+    bool right_signed = is_signed(right);
+
+    if (left_signed == right_signed)
+        return left->size >= right->size ? left : right;
+
+    HirType *unsigned_type = left_signed ? right : left;
+    HirType *signed_type = left_signed ? left : right;
+
+    if (unsigned_type->size >= signed_type->size)
+        return unsigned_type;
+
+    if (signed_type->size > unsigned_type->size)
+        return signed_type;
+
+    return sema_unsigned_counterpart(sema, signed_type);
+}
+
+static bool sema_integer_binary_types(Sema *sema, AstBinaryOp op,
+                                      HirType *left, HirType *right,
+                                      HirType **left_type, HirType **right_type,
+                                      HirType **result_type) {
+    if (!sema_is_integer_binary_op(op) ||
+        !is_integer(sema_unwrap_type(left)) ||
+        !is_integer(sema_unwrap_type(right)))
+        return false;
+
+    HirType *promoted_left = sema_integer_promotion(sema, left);
+    HirType *promoted_right = sema_integer_promotion(sema, right);
+    if (promoted_left == NULL || promoted_right == NULL)
+        return false;
+
+    if (sema_is_shift_op(op)) {
+        *left_type = promoted_left;
+        *right_type = promoted_right;
+        *result_type = promoted_left;
+        return true;
+    }
+
+    HirType *common = sema_integer_common_type(sema, promoted_left, promoted_right);
+    if (common == NULL)
+        return false;
+
+    *left_type = common;
+    *right_type = common;
+    *result_type = common;
     return true;
 }
 
@@ -281,10 +399,10 @@ static HirExpr *sema_array_to_slice(Sema *sema, HirExpr *expr, HirType *type) {
     return slice;
 }
 
-static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_t member_index) {
+static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_t member_index, Span span) {
     HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr) {
-        .span = value->span,
+        .span = value != NULL ? value->span : span,
         .kind = HIR_EXPR_SUM_INJECT,
         .type = type,
         .sum_inject = {
@@ -293,6 +411,45 @@ static HirExpr *sema_sum_inject(Sema *sema, HirExpr *value, HirType *type, size_
         },
     };
     return expr;
+}
+
+bool sema_type_is_none(HirType *type) {
+    type = sema_unwrap_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           type->builtin == BUILTIN_NONE;
+}
+
+bool sema_type_allows_empty_return(HirType *type) {
+    type = sema_unwrap_type(type);
+    if (sema_type_is_none(type))
+        return true;
+
+    if (type == NULL || type->kind != HIR_TYPE_SUM)
+        return false;
+
+    for (size_t i = 0; i < type->sum.members.len; i++) {
+        HirType *member = sema_unwrap_type(((HirType **)type->sum.members.data)[i]);
+        if (member != NULL && member->kind == HIR_TYPE_BUILTIN &&
+            member->builtin == BUILTIN_NONE)
+            return true;
+    }
+
+    return false;
+}
+
+HirExpr *sema_make_empty_sum_return(Sema *sema, HirType *type, Span span) {
+    HirType *sum = sema_unwrap_type(type);
+    if (sum == NULL || sum->kind != HIR_TYPE_SUM)
+        return NULL;
+
+    for (size_t i = 0; i < sum->sum.members.len; i++) {
+        HirType *member = sema_unwrap_type(((HirType **)sum->sum.members.data)[i]);
+        if (member != NULL && member->kind == HIR_TYPE_BUILTIN &&
+            member->builtin == BUILTIN_NONE)
+            return sema_sum_inject(sema, NULL, type, i, span);
+    }
+
+    return NULL;
 }
 
 
@@ -481,6 +638,19 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
 
         HirType *source = sema_unwrap_type(expr->type);
         HirType *target = sema_unwrap_type(type);
+
+        /* Integer conversions are implicit in value-conversion contexts. */
+        if (is_integer(source) && is_integer(target)) {
+            HirExpr *cast = arena_calloc(sema->arena, sizeof(*cast));
+            *cast = (HirExpr){
+                .span = expr->span,
+                .kind = HIR_EXPR_CAST,
+                .type = type,
+                .cast = {.type = type, .operand = expr},
+            };
+            return cast;
+        }
+
         HirType *target_function = target != NULL && target->kind == HIR_TYPE_POINTER
             ? sema_unwrap_type(target->pointer.pointee)
             : NULL;
@@ -512,7 +682,7 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
             for (size_t i = 0; i < sum->sum.members.len; i++) {
                 HirType *member = ((HirType **)sum->sum.members.data)[i];
                 if (type_equal(expr->type, member))
-                    return sema_sum_inject(sema, expr, type, i);
+                    return sema_sum_inject(sema, expr, type, i, expr->span);
             }
         }
 
@@ -641,6 +811,9 @@ static HirType *binary_result_type(Sema *sema, AstBinaryOp op, HirType *left, Hi
 }
 
 static bool sema_is_integer_zero_literal(HirExpr *expr) {
+    if (expr != NULL && expr->kind == HIR_EXPR_CAST)
+        return sema_is_integer_zero_literal(expr->cast.operand);
+
     return expr != NULL &&
            expr->kind == HIR_EXPR_LITERAL &&
            expr->literal.kind == HIR_LITERAL_INTEGER &&
@@ -746,10 +919,10 @@ static HirType *unary_type(Sema *sema, AstUnaryOp op, HirExpr *operand) {
     switch (op) {
         case AST_UNARY_POS:
         case AST_UNARY_NEG:
-            return operand->type;
+            return sema_type_is_numeric(operand->type) ? operand->type : NULL;
 
         case AST_UNARY_BIT_NOT:
-            return sema_type_is_float(operand->type) ? NULL : operand->type;
+            return is_integer(sema_unwrap_type(operand->type)) ? operand->type : NULL;
 
         case AST_UNARY_NOT:
             if (operand->type->kind != HIR_TYPE_BUILTIN ||
@@ -1780,6 +1953,18 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return hir;
             }
 
+            if ((hir->unary.op == AST_UNARY_POS ||
+                 hir->unary.op == AST_UNARY_NEG ||
+                 hir->unary.op == AST_UNARY_BIT_NOT) &&
+                is_integer(sema_unwrap_type(operand->type))) {
+                HirType *promoted = sema_integer_promotion(sema, operand->type);
+                operand = sema_coerce(sema, operand, promoted);
+                if (operand == NULL || operand->kind == HIR_EXPR_ERROR) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+            }
+
             HirType *type = unary_type(sema, hir->unary.op, operand);
 
             if (type == NULL) {
@@ -1824,19 +2009,31 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     sema_retype_integer_expression(ast->binary.left, left, right->type);
             }
 
-            HirType *operand_type = binop_type(sema, ast->binary.op, left, right, expected);
+            HirType *operand_type = NULL;
+            HirType *left_type = NULL;
+            HirType *right_type = NULL;
 
-            if (operand_type == NULL) {
-                error_type_mismatch(sema->diags, expected, left->type != NULL ? left->type : right->type, ast->span);
-                hir->kind = HIR_EXPR_ERROR;
-                return hir;
+            if (sema_integer_binary_types(sema, ast->binary.op,
+                                          left != NULL ? left->type : NULL,
+                                          right != NULL ? right->type : NULL,
+                                          &left_type, &right_type, &operand_type)) {
+                left = sema_coerce(sema, left, left_type);
+                right = sema_coerce(sema, right, right_type);
+            } else {
+                operand_type = binop_type(sema, ast->binary.op, left, right, expected);
+
+                if (operand_type == NULL) {
+                    error_type_mismatch(sema->diags, expected, left->type != NULL ? left->type : right->type, ast->span);
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                if (left->type == NULL)
+                    left = sema_coerce(sema, left, operand_type);
+
+                if (right->type == NULL)
+                    right = sema_coerce(sema, right, operand_type);
             }
-
-            if (left->type == NULL)
-                left = sema_coerce(sema, left, operand_type);
-
-            if (right->type == NULL)
-                right = sema_coerce(sema, right, operand_type);
 
             if (left == NULL || right == NULL) {
                 error_invalid_binary_operation(sema->diags, binary_op_name(ast->binary.op), left ? left->type : NULL, right ? right->type : NULL, ast->span);
@@ -1858,6 +2055,9 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
             }
+
+            if (expected != NULL)
+                return expr_coerce(sema, hir, expected);
 
             return hir;
         }
@@ -2594,26 +2794,39 @@ HirStmt *sema_assignment_stmt(Sema *sema, AstExpr *ast) {
     }
 
     HirType *right_expected = target->type;
-    if (op != AST_BINARY_ASSIGN && (op == AST_BINARY_ADD || op == AST_BINARY_SUB) && is_pointer(target->type))
+    if (op != AST_BINARY_ASSIGN &&
+        (is_integer(sema_unwrap_type(target->type)) ||
+         ((op == AST_BINARY_ADD || op == AST_BINARY_SUB) && is_pointer(target->type))))
         right_expected = NULL;
 
     HirExpr *value = sema_expr(sema, ast->binary.right, right_expected);
     if (value == NULL || value->kind == HIR_EXPR_ERROR || value->type == NULL)
         return stmt;
 
+    HirType *operation_type = NULL;
+    HirType *right_type = NULL;
+
     if (op != AST_BINARY_ASSIGN) {
-        HirType *result = binop_type(sema, op, target, value, target->type);
-        if (result == NULL) {
-            error_invalid_binary_operation(sema->diags, binary_op_name(op), target->type, value->type, ast->span);
-            return stmt;
-        }
-        if (!type_equal(result, target->type)) {
-            error_type_mismatch(sema->diags, target->type, result, ast->span);
-            return stmt;
+        HirType *left_operation_type = NULL;
+        HirType *result_type = NULL;
+
+        if (sema_integer_binary_types(sema, op, target->type, value->type,
+                                      &left_operation_type, &right_type, &result_type)) {
+            operation_type = result_type;
+        } else {
+            HirType *result = binop_type(sema, op, target, value, target->type);
+            if (result == NULL) {
+                error_invalid_binary_operation(sema->diags, binary_op_name(op), target->type, value->type, ast->span);
+                return stmt;
+            }
+            if (!type_equal(result, target->type)) {
+                error_type_mismatch(sema->diags, target->type, result, ast->span);
+                return stmt;
+            }
         }
     }
 
-    if (!sema_check_integer_divisor(sema, op, target->type, value))
+    if (!sema_check_integer_divisor(sema, op, operation_type != NULL ? operation_type : target->type, value))
         return stmt;
 
     *stmt = (HirStmt){
@@ -2621,6 +2834,8 @@ HirStmt *sema_assignment_stmt(Sema *sema, AstExpr *ast) {
         .kind = HIR_STMT_ASSIGN,
         .assign = {
             .op = op,
+            .operation_type = operation_type,
+            .right_type = right_type,
             .target = target,
             .value = value,
         },
