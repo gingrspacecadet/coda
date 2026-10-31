@@ -1,14 +1,16 @@
 module std::string;
 
-fn bool contains(string, string);
+include std::types : _;
 
-fn bool starts_with(string, string);
-fn bool ends_with(string, string);
+fn bool string.contains(string this, string that);
 
-fn string[] split(string, string separator);
+fn bool string.starts_with(string this, string that);
+fn bool string.ends_with(string this, string that);
 
-fn string trim(string);
+fn string[] string.split(string this, string separator);
 
-fn bool is_alpha(char);
-fn bool is_digit(char);
-fn bool is_space(char);
+fn string string.trim(string this);
+
+fn bool char.is_alpha(char this);
+fn bool char.is_digit(char this);
+fn bool char.is_space(char this);
