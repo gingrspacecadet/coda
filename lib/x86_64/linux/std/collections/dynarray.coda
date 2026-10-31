@@ -1,6 +1,7 @@
 module std::collections;
 
 include std::allocator : _;
+include std::types : _;
 
 @export
 type DynArray<T>: Sequence<T> = struct {
