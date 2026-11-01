@@ -1145,7 +1145,6 @@ static void lir_lower_stmt(LirLower *lower, HirStmt *stmt);
 static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
     LirFunction *function = lower->function;
     LirOperand condition = lir_lower_expr(lower, stmt->_if.cond);
-    /* Logical conditions may create blocks; branch from their final block. */
     LirBlockId entry_block = lower->block;
 
     Array(LirBinding) snapshot = array_create(function->arena, sizeof(LirBinding));
@@ -1160,6 +1159,8 @@ static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
 
     lower->block = then;
     lir_lower_stmt(lower, stmt->_if.then);
+
+    LirBlockId then_end = lower->block;
     bool then_falls_through = !lir_lower_block_terminated(lower);
 
     Array(LirOperand) then_args = array_create(function->arena, sizeof(LirOperand));
@@ -1172,10 +1173,13 @@ static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
 
     bool else_falls_through = false;
     Array(LirOperand) else_args = array_create(function->arena, sizeof(LirOperand));
+    LirBlockId else_end = LIR_INVALID_BLOCK;
 
     if (_else != LIR_INVALID_BLOCK) {
         lower->block = _else;
         lir_lower_stmt(lower, stmt->_if._else);
+
+        else_end = lower->block;
         else_falls_through = !lir_lower_block_terminated(lower);
 
         if (else_falls_through) {
@@ -1202,15 +1206,13 @@ static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
     }
 
     if (then_falls_through) {
-        lower->block = then;
-        lir_jump(function, then, merge_block, then_args);
+        lower->block = then_end;
+        lir_jump(function, then_end, merge_block, then_args);
     }
 
-    if (_else != LIR_INVALID_BLOCK) {
-        if (else_falls_through) {
-            lower->block = _else;
-            lir_jump(function, _else, merge_block, else_args);
-        }
+    if (_else != LIR_INVALID_BLOCK && else_falls_through) {
+        lower->block = else_end;
+        lir_jump(function, else_end, merge_block, else_args);
     }
 
     Array(LirOperand) entry_else_args = array_create(function->arena, sizeof(LirOperand));
@@ -1310,7 +1312,7 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
     Array(LirOperand) exit_args = array_create(function->arena, sizeof(LirOperand));
     lir_collect_branch_args(lower, &snapshot, &exit_args);
 
-    lir_branch(function, header, condition, body, (Array){0}, exit, exit_args);
+    lir_branch(function, condition_block, condition, body, (Array){0}, exit, exit_args);
 
     LirLoop loop = {
         .header = header,

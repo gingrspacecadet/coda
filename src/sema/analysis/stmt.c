@@ -429,6 +429,44 @@ static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
                 break;
             }
 
+            case AST_PATTERN_EXPR: {
+                if (pattern->expr->kind != AST_EXPR_PATH) {
+                    DiagBuilder diagnostic = diag_begin(
+                        sema->diags,
+                        DIAG_ERROR,
+                        E_UNEXPECTED_TOKEN,
+                        pattern->span,
+                        STRING("this expression pattern is not supported yet")
+                    );
+                    diag_finish(&diagnostic);
+                    return error;
+                }
+
+                Symbol *symbol = sema_lookup_path(sema, pattern->expr->path);
+
+                if (symbol == NULL || symbol->kind != SYMBOL_TYPE ||
+                    symbol->type == NULL) {
+                    error_unknown_type(sema->diags, pattern->expr->path, pattern->span);
+                    return error;
+                }
+
+                member_index = match_member_index(sum, symbol->type);
+
+                if (member_index == SIZE_MAX) {
+                    DiagBuilder diagnostic = diag_begin(
+                        sema->diags,
+                        DIAG_ERROR,
+                        E_TYPE_MISMATCH,
+                        pattern->span,
+                        STRING("pattern type is not a member of the matched sum type")
+                    );
+                    diag_finish(&diagnostic);
+                    return error;
+                }
+
+                break;
+            }
+
             default: {
                 DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_UNEXPECTED_TOKEN, pattern->span, STRING("this match pattern form is not supported yet"));
                 diag_note(&diagnostic, STRING("sum-type matches currently support type variants, payload bindings, and wildcard patterns"));
