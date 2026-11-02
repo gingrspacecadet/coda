@@ -300,6 +300,7 @@ struct HirStmt {
         struct {
             HirExpr *cond;
             HirStmt *body;
+            HirStmt *post;
         } _while;
 
         struct {

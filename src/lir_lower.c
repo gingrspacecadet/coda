@@ -17,6 +17,7 @@ typedef struct {
 
 typedef struct {
     LirBlockId header;
+    LirBlockId continue_block;
     LirBlockId exit;
     Array(LirBinding) bindings;
     size_t stack_save_depth;
@@ -1279,7 +1280,7 @@ static void lir_lower_continue(LirLower *lower) {
     Array(LirOperand) args = array_create(lower->function->arena, sizeof(LirOperand));
 
     lir_collect_branch_args(lower, &loop->bindings, &args);
-    lir_jump(lower->function, lower->block, loop->header, args);
+    lir_jump(lower->function, lower->block, loop->continue_block, args);
 }
 
 static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
@@ -1292,9 +1293,14 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
 
     LirBlockId header = lir_block_create(function);
     LirBlockId body = lir_block_create(function);
+    LirBlockId continue_block = stmt->_while.post != NULL
+        ? lir_block_create(function)
+        : header;
     LirBlockId exit = lir_block_create(function);
 
     lir_add_snapshot_params(function, header, &snapshot);
+    if (continue_block != header)
+        lir_add_snapshot_params(function, continue_block, &snapshot);
     lir_add_snapshot_params(function, exit, &snapshot);
 
     Array(LirOperand) entry_args = array_create(function->arena, sizeof(LirOperand));
@@ -1316,6 +1322,7 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
 
     LirLoop loop = {
         .header = header,
+        .continue_block = continue_block,
         .exit = exit,
         .bindings = snapshot,
         .stack_save_depth = lower->stack_saves.len,
@@ -1335,7 +1342,22 @@ static void lir_lower_while(LirLower *lower, HirStmt *stmt) {
         Array(LirOperand) backedge_args = array_create(function->arena, sizeof(LirOperand));
 
         lir_collect_branch_args(lower, &snapshot, &backedge_args);
-        lir_jump(function, body_end, header, backedge_args);
+        lir_jump(function, body_end, continue_block, backedge_args);
+    }
+
+    if (stmt->_while.post != NULL) {
+        lower->block = continue_block;
+        lower->bindings.len = bindings_len;
+        lir_bind_snapshot_params(lower, continue_block, &snapshot);
+        lir_lower_stmt(lower, stmt->_while.post);
+
+        if (!lir_lower_block_terminated(lower)) {
+            LirBlockId post_end = lower->block;
+            Array(LirOperand) backedge_args = array_create(function->arena, sizeof(LirOperand));
+
+            lir_collect_branch_args(lower, &snapshot, &backedge_args);
+            lir_jump(function, post_end, header, backedge_args);
+        }
     }
 
     lower->loops.len--;
@@ -1489,7 +1511,8 @@ static bool lir_stmt_contains_vla_alloc(HirStmt *stmt) {
         case HIR_STMT_IF:
             return lir_stmt_contains_vla_alloc(stmt->_if.then) || lir_stmt_contains_vla_alloc(stmt->_if._else);
         case HIR_STMT_WHILE:
-            return lir_stmt_contains_vla_alloc(stmt->_while.body);
+            return lir_stmt_contains_vla_alloc(stmt->_while.body) ||
+                   lir_stmt_contains_vla_alloc(stmt->_while.post);
         case HIR_STMT_EXPR:
         case HIR_STMT_RETURN:
         case HIR_STMT_BREAK:
@@ -1798,6 +1821,7 @@ static void lir_collect_address_taken_stmt(Array(Symbol *) *symbols, HirStmt *st
         case HIR_STMT_WHILE:
             lir_collect_address_taken_expr(symbols, stmt->_while.cond);
             lir_collect_address_taken_stmt(symbols, stmt->_while.body);
+            lir_collect_address_taken_stmt(symbols, stmt->_while.post);
             return;
 
         case HIR_STMT_BREAK:

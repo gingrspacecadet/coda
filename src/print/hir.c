@@ -397,6 +397,7 @@ static void print_stmt(FILE *out, const HirStmt *stmt, unsigned depth) {
     case HIR_STMT_WHILE:
         print_expr(out, stmt->_while.cond, depth + 1);
         print_stmt(out, stmt->_while.body, depth + 1);
+        print_stmt(out, stmt->_while.post, depth + 1);
         break;
 
     case HIR_STMT_BREAK:

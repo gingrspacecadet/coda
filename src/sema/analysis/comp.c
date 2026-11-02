@@ -960,17 +960,23 @@ case HIR_STMT_ASSIGN: {
 
                 switch (result.kind) {
                     case COMP_EXEC_NORMAL:
-                        continue;
-
+                    case COMP_EXEC_CONTINUE:
+                        break;
+                    
                     case COMP_EXEC_BREAK:
                         return (CompExecResult){.kind = COMP_EXEC_NORMAL};
-
-                    case COMP_EXEC_CONTINUE:
-                        continue;
 
                     default:
                         return result;
                 }
+
+                if (stmt->_while.post != NULL) {
+                    CompExecResult post = exec_stmt(context, stmt->_while.post);
+                    if (post.kind != COMP_EXEC_NORMAL)
+                        return post;
+                }
+
+                continue;
             }
 
         case HIR_STMT_BREAK:

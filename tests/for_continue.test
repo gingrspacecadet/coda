@@ -1,0 +1,31 @@
+name: for continue executes the post expression
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn int64 count_iterations() {
+    mut int64 visits = 0;
+
+    for (mut int64 i = 0; i < 4; i += 1) {
+        visits += 1;
+
+        if (i == 0) {
+            i += 1;
+            continue;
+        }
+    }
+
+    return visits;
+}
+
+int64 comptime_visits = $(count_iterations());
+
+fn int64 main() {
+    if (comptime_visits != 3) return 1;
+    if (count_iterations() != 3) return 2;
+    return 0;
+}
+
+[exit]
+0

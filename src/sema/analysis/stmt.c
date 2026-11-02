@@ -867,10 +867,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 return loop;
             }
 
-            HirStmt *loop_body = hir_stmt(sema, HIR_STMT_BLOCK, ast->_for.body->span);
-            loop_body->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
-
-            array_push(&loop_body->block.stmts, &body);
+            loop->_while.body = body;
 
             if (ast->_for.post != NULL) {
                 HirStmt *post;
@@ -889,10 +886,11 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                     return loop;
                 }
 
-                array_push(&loop_body->block.stmts, &post);
+                HirStmt *post_block = hir_stmt(sema, HIR_STMT_BLOCK, ast->_for.post->span);
+                post_block->block.stmts = array_create(sema->arena, sizeof(HirStmt *));
+                array_push(&post_block->block.stmts, &post);
+                loop->_while.post = post_block;
             }
-
-            loop->_while.body = loop_body;
 
             array_push(&block->block.stmts, &loop);
 
