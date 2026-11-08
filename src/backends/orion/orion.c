@@ -109,6 +109,12 @@ static bool type_is_float(HirType *type) {
            (type->builtin == BUILTIN_FLOAT32 || type->builtin == BUILTIN_FLOAT64);
 }
 
+static bool type_is_bool(HirType *type) {
+    type = base_type(type);
+    return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
+           type->builtin == BUILTIN_BOOL;
+}
+
 static bool type_is_void_like(HirType *type) {
     type = base_type(type);
     return type != NULL && type->kind == HIR_TYPE_BUILTIN &&
@@ -1019,7 +1025,10 @@ static bool emit_unary(OrionFunction *function, const LirInstruction *instructio
     if (instruction->opcode == LIR_OP_NEG) {
         fputs("    xor r12, r12, r12\n    sub r0, r12, r0\n", function->out);
     } else if (instruction->opcode == LIR_OP_NOT) {
-        emit_bitwise_not(function->out, ORION_R0);
+        if (type_is_bool(instruction->result_type))
+            fputs("    xor r0, r0, #1\n", function->out);
+        else
+            emit_bitwise_not(function->out, ORION_R0);
     } else {
         return fail(function, "unsupported unary opcode");
     }

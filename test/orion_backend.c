@@ -166,3 +166,59 @@ bool test_orion_backend(void) {
 
     return ok && produced_output && stack_pointer_not_reused;
 }
+
+static void add_unary_not_function(Arena *arena, LirModule *module,
+                                   const char *name, HirType *type) {
+    LirFunction *function = lir_function_create(module, make_symbol(arena, name), type, false, false);
+    LirBlockId block = lir_block_create(function);
+    LirValueId parameter = lir_function_add_param(function, make_symbol(arena, "value"), type);
+    LirOperand operand = lir_operand_value(parameter, type);
+    LirValueId result = lir_emit(function, block, LIR_OP_NOT, type,
+                                 (Array){ .data = &operand, .len = 1 });
+    lir_set_terminator(function, block, (LirTerminator){
+        .kind = LIR_TERM_RETURN,
+        ._return = {
+            .has_value = true,
+            .value = lir_operand_value(result, type),
+        },
+    });
+}
+
+bool test_orion_unary_not(void) {
+    Arena *arena = arena_create();
+    LirModule *module = lir_module_create(arena);
+    const TargetInfo *target = target_builtin("orion");
+    const BackendApi *backend = orion_backend();
+
+    HirType *bool_type = builtin_type(arena, BUILTIN_BOOL, 1, 1);
+    HirType *int32_type = builtin_type(arena, BUILTIN_INT32, 4, 4);
+    add_unary_not_function(arena, module, "logical_not", bool_type);
+    add_unary_not_function(arena, module, "bitwise_not", int32_type);
+
+    char *generated = NULL;
+    size_t generated_len = 0;
+    FILE *out = open_memstream(&generated, &generated_len);
+    bool emitted = out != NULL &&
+                   backend->emit(&(Backend){.api = backend}, target, module, out);
+    if (out != NULL && fclose(out) != 0)
+        emitted = false;
+
+    char *logical_not = generated != NULL ? strstr(generated, "logical_not:") : NULL;
+    char *bitwise_not = logical_not != NULL ? strstr(logical_not, "bitwise_not:") : NULL;
+    char *logical_xor = logical_not != NULL ? strstr(logical_not, "xor r0, r0, #1\n") : NULL;
+    char *logical_lui = logical_not != NULL ? strstr(logical_not, "lui r12, #65535\n") : NULL;
+    char *integer_lui = bitwise_not != NULL ? strstr(bitwise_not, "lui r12, #65535\n") : NULL;
+    char *integer_xor = bitwise_not != NULL ? strstr(bitwise_not, "xor r0, r0, r12\n") : NULL;
+    bool logical_uses_boolean_inversion =
+        bitwise_not != NULL && logical_xor != NULL &&
+        logical_xor < bitwise_not &&
+        (logical_lui == NULL || logical_lui >= bitwise_not);
+    bool integer_uses_bitwise_inversion =
+        integer_lui != NULL && integer_xor != NULL &&
+        integer_lui < integer_xor;
+
+    free(generated);
+    arena_destroy(arena);
+    return emitted && generated_len > 0 &&
+           logical_uses_boolean_inversion && integer_uses_bitwise_inversion;
+}

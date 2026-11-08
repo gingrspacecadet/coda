@@ -1,0 +1,24 @@
+name: runtime logical not
+expect: pass
+stop: run
+errors: 0
+
+[source]
+fn bool logical_not(bool value) {
+    return !value;
+}
+
+fn int64 main() {
+    bool false_negated = logical_not(false);
+    bool true_negated = logical_not(true);
+
+    if (false_negated != true) return 1;
+    if (true_negated != false) return 2;
+    if (logical_not(false_negated) != false) return 3;
+    if (logical_not(true_negated) != true) return 4;
+
+    return 0;
+}
+
+[exit]
+0
