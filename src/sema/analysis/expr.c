@@ -633,6 +633,19 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
         if (type_equal(expr->type, type))
             return expr;
 
+        HirType *code_source = sema_unwrap_type(expr->type);
+        HirType *code_target = sema_unwrap_type(type);
+        if (code_source != NULL && code_target != NULL &&
+            code_source->kind == HIR_TYPE_CODE && code_target->kind == HIR_TYPE_CODE &&
+            code_source->code.category == code_target->code.category &&
+            (code_target->code.node == CODE_NODE_ANY ||
+             code_source->code.node == code_target->code.node)) {
+            HirExpr *coerced = arena_calloc(sema->arena, sizeof(*coerced));
+            *coerced = *expr;
+            coerced->type = type;
+            return coerced;
+        }
+
         if (type->kind == HIR_TYPE_ANY_CONSTRAINT)
             return sema_any_box(sema, expr, type);
 

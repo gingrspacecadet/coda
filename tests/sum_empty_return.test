@@ -6,7 +6,7 @@ errors: 0
 [source]
 type FreeError = enum: uint8 {
     BadPage = 1,
-}
+};
 
 type Result = (none | FreeError);
 

@@ -89,6 +89,7 @@ typedef enum {
     AST_TYPE_UNION,
     AST_TYPE_ENUM,
     AST_TYPE_SPLICE,
+    AST_TYPE_CODE,
 } AstTypeKind;
 
 struct AstType {
@@ -139,6 +140,13 @@ struct AstType {
         struct {
             AstExpr *expr;
         } splice;
+
+        struct {
+            String category;
+            String selector;
+            Span selector_span;
+            bool has_selector;
+        } code;
     };
 };
 

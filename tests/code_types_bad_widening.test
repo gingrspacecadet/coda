@@ -1,0 +1,10 @@
+name: reject incompatible code node widening
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn #code::expr<binary> invalid(#code::expr<literal> value) {
+    return value;
+}
+

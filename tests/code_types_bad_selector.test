@@ -1,0 +1,8 @@
+name: reject unknown code node selector
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+type Invalid = #code::expr<not_a_node>;
+

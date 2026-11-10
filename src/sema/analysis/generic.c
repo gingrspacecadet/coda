@@ -4,6 +4,36 @@
 #include "../../mangle.h"
 #include "common.h"
 
+static bool generic_is_untyped_numeric_expression(AstExpr *ast) {
+    if (ast == NULL)
+        return false;
+
+    switch (ast->kind) {
+        case AST_EXPR_LITERAL:
+            return ast->literal.kind == AST_LIT_INTEGER || ast->literal.kind == AST_LIT_FLOAT;
+
+        case AST_EXPR_UNARY:
+            return (ast->unary.op == AST_UNARY_POS || ast->unary.op == AST_UNARY_NEG) &&
+                   generic_is_untyped_numeric_expression(ast->unary.operand);
+
+        case AST_EXPR_BINARY:
+            switch (ast->binary.op) {
+                case AST_BINARY_ADD:
+                case AST_BINARY_SUB:
+                case AST_BINARY_MUL:
+                case AST_BINARY_DIV:
+                    return generic_is_untyped_numeric_expression(ast->binary.left) &&
+                           generic_is_untyped_numeric_expression(ast->binary.right);
+
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
 static HirExpr *generic_error_expr(Sema *sema, AstExpr *ast) {
     HirExpr *expr = arena_calloc(sema->arena, sizeof(*expr));
     *expr = (HirExpr){
@@ -94,6 +124,7 @@ static bool generic_type_contains(AstFnDecl *fn, AstType *type) {
 
         case AST_TYPE_ERROR:
         case AST_TYPE_SPLICE:
+        case AST_TYPE_CODE:
             return false;
     }
 
@@ -198,6 +229,7 @@ static bool generic_infer_type(Sema *sema, AstFnDecl *fn, AstType *pattern, HirT
         case AST_TYPE_NAMED:
         case AST_TYPE_ERROR:
         case AST_TYPE_SPLICE:
+        case AST_TYPE_CODE:
             return false;
     }
 
@@ -450,7 +482,7 @@ static HirExpr *sema_generic_call_impl(Sema *sema, AstExpr *ast, HirType *expect
             if (generic_index != SIZE_MAX)
                 expected = ((HirType **)arguments.data)[generic_index];
 
-            HirExpr *value = sema_expr(sema, ast_arg->value, expected);
+            HirExpr *value = sema_expr(sema, ast_arg->value, expected != NULL && generic_is_untyped_numeric_expression(ast_arg->value) ? expected : NULL);
             if (value == NULL || value->kind == HIR_EXPR_ERROR)
                 return generic_error_expr(sema, ast);
 

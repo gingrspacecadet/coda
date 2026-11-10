@@ -1,0 +1,29 @@
+name: compile-time code type categories and widening
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+$fn #code::expr widen_expr(#code::expr<literal> value) {
+    return value;
+}
+
+$fn #code::stmt<if> preserve_if(#code::stmt<if> value) {
+    return value;
+}
+
+$fn #code::decl<fn> preserve_fn(#code::decl<fn> value) {
+    return value;
+}
+
+$fn #code::type<struct> preserve_struct(#code::type<struct> value) {
+    return value;
+}
+
+$fn #code::name<ident> preserve_name(#code::name<ident> value) {
+    return value;
+}
+
+type AnyExpression = #code::expr;
+type LiteralExpression = #code::expr<literal>;
+

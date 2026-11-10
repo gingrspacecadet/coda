@@ -1,5 +1,17 @@
 #include "common.h"
 
+static String parse_code_component(Parser *p) {
+    TokenType type = p->current.type;
+    if (type != TK_IDENT && (type < TK_KW_MODULE || type > TK_KW_NULL)) {
+        error_expected_identifier(p->diags, p->current.span);
+        return (String){0};
+    }
+
+    String component = span_to_string(p->current.span);
+    advance(p);
+    return component;
+}
+
 AstConstraintItem parse_constraint_item(Parser *p) {
     AstConstraintItem item = {
         .span = p->current.span,
@@ -290,17 +302,36 @@ AstType *parse_type_single(Parser *p) {
     } else if (at(p, TK_KW_ENUM)) {
         base = parse_enum_type(p);
     } else if (at(p, TK_POUND)) {
-        base = arena_calloc(p->arena, sizeof(*base));
-        base->kind = AST_TYPE_SPLICE;
-        base->span = p->current.span;
-
+        Token start = p->current;
         advance(p);
 
-        expect(p, TK_LPAREN);
+        base = arena_calloc(p->arena, sizeof(*base));
+        base->span = start.span;
 
-        base->splice.expr = parse_expression(p);
+        if (match(p, TK_LPAREN)) {
+            base->kind = AST_TYPE_SPLICE;
+            base->splice.expr = parse_expression(p);
+            expect(p, TK_RPAREN);
+        } else if (token_is_identifier(p, "code")) {
+            base->kind = AST_TYPE_CODE;
+            advance(p);
+            expect(p, TK_COLON_COLON);
+            base->code.category = parse_code_component(p);
+            base->code.has_selector = false;
+            base->code.selector = (String){0};
+            base->code.selector_span = (Span){0};
 
-        expect(p, TK_RPAREN);
+            if (match(p, TK_LT)) {
+                base->code.has_selector = true;
+                base->code.selector_span = p->current.span;
+                base->code.selector = parse_code_component(p);
+                expect_type_gt(p);
+            }
+        } else {
+            error_expected_type_symbol(p->diags, p->current.span);
+            base->kind = AST_TYPE_ERROR;
+        }
+
     } else if (at(p, TK_IDENT)) {
         base = arena_calloc(p->arena, sizeof(*base));
         base->kind = AST_TYPE_NAMED;

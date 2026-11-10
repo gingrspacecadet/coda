@@ -191,6 +191,10 @@ bool type_equal(HirType *a, HirType *b) {
         case HIR_TYPE_ANY:
             return true;
 
+        case HIR_TYPE_CODE:
+            return a->code.category == b->code.category &&
+                   a->code.node == b->code.node;
+
         case HIR_TYPE_ANY_CONSTRAINT: {
             Symbol *ac = a->any_constraint.constraint;
             Symbol *bc = b->any_constraint.constraint;
@@ -310,6 +314,99 @@ static HirType *sema_any_type_error(Sema *sema, HirType *type, AstType *ast, Dia
     type->kind = HIR_TYPE_ERROR;
     type->align = 1;
     return type;
+}
+
+static HirType *sema_code_type_error(Sema *sema, HirType *type, Span span, String message) {
+    DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_INVALID_CODE_TYPE, span, message);
+    diag_finish(&diagnostic);
+    type->kind = HIR_TYPE_ERROR;
+    type->align = 1;
+    return type;
+}
+
+static bool sema_code_category(String name, CodeCategory *category) {
+    if (string_eq(name, STRING("expr")))
+        *category = CODE_CATEGORY_EXPR;
+    else if (string_eq(name, STRING("stmt")))
+        *category = CODE_CATEGORY_STMT;
+    else if (string_eq(name, STRING("decl")))
+        *category = CODE_CATEGORY_DECL;
+    else if (string_eq(name, STRING("type")))
+        *category = CODE_CATEGORY_TYPE;
+    else if (string_eq(name, STRING("name")))
+        *category = CODE_CATEGORY_NAME;
+    else
+        return false;
+
+    return true;
+}
+
+static bool sema_code_node(CodeCategory category, String name, CodeNodeKind *node) {
+#define CODE_NODE(text, value) \
+    if (string_eq(name, STRING(text))) { *node = value; return true; }
+
+    switch (category) {
+        case CODE_CATEGORY_EXPR:
+            CODE_NODE("literal", CODE_NODE_EXPR_LITERAL)
+            CODE_NODE("ident", CODE_NODE_EXPR_IDENT)
+            CODE_NODE("path", CODE_NODE_EXPR_PATH)
+            CODE_NODE("type_value", CODE_NODE_EXPR_TYPE_VALUE)
+            CODE_NODE("unary", CODE_NODE_EXPR_UNARY)
+            CODE_NODE("binary", CODE_NODE_EXPR_BINARY)
+            CODE_NODE("call", CODE_NODE_EXPR_CALL)
+            CODE_NODE("inferred_method_call", CODE_NODE_EXPR_INFERRED_METHOD_CALL)
+            CODE_NODE("index", CODE_NODE_EXPR_INDEX)
+            CODE_NODE("member", CODE_NODE_EXPR_MEMBER)
+            CODE_NODE("cast", CODE_NODE_EXPR_CAST)
+            CODE_NODE("intrinsic", CODE_NODE_EXPR_INTRINSIC)
+            CODE_NODE("bubble", CODE_NODE_EXPR_BUBBLE)
+            CODE_NODE("init", CODE_NODE_EXPR_INIT)
+            CODE_NODE("lambda", CODE_NODE_EXPR_LAMBDA)
+            CODE_NODE("splice", CODE_NODE_EXPR_SPLICE)
+            return false;
+
+        case CODE_CATEGORY_STMT:
+            CODE_NODE("var", CODE_NODE_STMT_VAR)
+            CODE_NODE("expr", CODE_NODE_STMT_EXPR)
+            CODE_NODE("block", CODE_NODE_STMT_BLOCK)
+            CODE_NODE("return", CODE_NODE_STMT_RETURN)
+            CODE_NODE("if", CODE_NODE_STMT_IF)
+            CODE_NODE("for", CODE_NODE_STMT_FOR)
+            CODE_NODE("while", CODE_NODE_STMT_WHILE)
+            CODE_NODE("match", CODE_NODE_STMT_MATCH)
+            CODE_NODE("break", CODE_NODE_STMT_BREAK)
+            CODE_NODE("continue", CODE_NODE_STMT_CONTINUE)
+            CODE_NODE("defer", CODE_NODE_STMT_DEFER)
+            return false;
+
+        case CODE_CATEGORY_DECL:
+            CODE_NODE("include", CODE_NODE_DECL_INCLUDE)
+            CODE_NODE("type", CODE_NODE_DECL_TYPE)
+            CODE_NODE("var", CODE_NODE_DECL_VAR)
+            CODE_NODE("fn", CODE_NODE_DECL_FN)
+            CODE_NODE("constraint", CODE_NODE_DECL_CONSTRAINT)
+            return false;
+
+        case CODE_CATEGORY_TYPE:
+            CODE_NODE("named", CODE_NODE_TYPE_NAMED)
+            CODE_NODE("pointer", CODE_NODE_TYPE_POINTER)
+            CODE_NODE("array", CODE_NODE_TYPE_ARRAY)
+            CODE_NODE("fn", CODE_NODE_TYPE_FN)
+            CODE_NODE("sum", CODE_NODE_TYPE_SUM)
+            CODE_NODE("struct", CODE_NODE_TYPE_STRUCT)
+            CODE_NODE("union", CODE_NODE_TYPE_UNION)
+            CODE_NODE("enum", CODE_NODE_TYPE_ENUM)
+            CODE_NODE("splice", CODE_NODE_TYPE_SPLICE)
+            return false;
+
+        case CODE_CATEGORY_NAME:
+            CODE_NODE("ident", CODE_NODE_NAME_IDENT)
+            CODE_NODE("splice", CODE_NODE_NAME_SPLICE)
+            return false;
+    }
+
+#undef CODE_NODE
+    return false;
 }
 
 HirType *sema_type(Sema *sema, AstType *ast) {
@@ -875,6 +972,28 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             hir->kind = HIR_TYPE_ERROR;
             //! TODO: mark/defer comptime type resolution
             break;
+
+        case AST_TYPE_CODE: {
+            CodeCategory category;
+            if (!sema_code_category(ast->code.category, &category))
+                return sema_code_type_error(sema, hir, ast->span,
+                    format(sema->diags->arena, "unknown code category '%.*s'", string_fmt(ast->code.category)));
+
+            CodeNodeKind node = CODE_NODE_ANY;
+            if (ast->code.has_selector &&
+                !sema_code_node(category, ast->code.selector, &node))
+                return sema_code_type_error(sema, hir, ast->code.selector_span,
+                    format(sema->diags->arena, "unknown node kind '%.*s' for this code category", string_fmt(ast->code.selector)));
+
+            *hir = (HirType){
+                .kind = HIR_TYPE_CODE,
+                .mutable = ast->mutable,
+                .size = 0,
+                .align = 1,
+                .code = {.category = category, .node = node},
+            };
+            return hir;
+        }
 
         default:
             hir->kind = HIR_TYPE_ERROR;

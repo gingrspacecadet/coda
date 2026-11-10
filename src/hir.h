@@ -22,6 +22,66 @@ typedef struct HirGlobal HirGlobal;
 typedef struct HirModule HirModule;
 
 typedef enum {
+    CODE_CATEGORY_EXPR,
+    CODE_CATEGORY_STMT,
+    CODE_CATEGORY_DECL,
+    CODE_CATEGORY_TYPE,
+    CODE_CATEGORY_NAME,
+} CodeCategory;
+
+typedef enum {
+    CODE_NODE_ANY,
+
+    CODE_NODE_EXPR_LITERAL,
+    CODE_NODE_EXPR_IDENT,
+    CODE_NODE_EXPR_PATH,
+    CODE_NODE_EXPR_TYPE_VALUE,
+    CODE_NODE_EXPR_UNARY,
+    CODE_NODE_EXPR_BINARY,
+    CODE_NODE_EXPR_CALL,
+    CODE_NODE_EXPR_INFERRED_METHOD_CALL,
+    CODE_NODE_EXPR_INDEX,
+    CODE_NODE_EXPR_MEMBER,
+    CODE_NODE_EXPR_CAST,
+    CODE_NODE_EXPR_INTRINSIC,
+    CODE_NODE_EXPR_BUBBLE,
+    CODE_NODE_EXPR_INIT,
+    CODE_NODE_EXPR_LAMBDA,
+    CODE_NODE_EXPR_SPLICE,
+
+    CODE_NODE_STMT_VAR,
+    CODE_NODE_STMT_EXPR,
+    CODE_NODE_STMT_BLOCK,
+    CODE_NODE_STMT_RETURN,
+    CODE_NODE_STMT_IF,
+    CODE_NODE_STMT_FOR,
+    CODE_NODE_STMT_WHILE,
+    CODE_NODE_STMT_MATCH,
+    CODE_NODE_STMT_BREAK,
+    CODE_NODE_STMT_CONTINUE,
+    CODE_NODE_STMT_DEFER,
+
+    CODE_NODE_DECL_INCLUDE,
+    CODE_NODE_DECL_TYPE,
+    CODE_NODE_DECL_VAR,
+    CODE_NODE_DECL_FN,
+    CODE_NODE_DECL_CONSTRAINT,
+
+    CODE_NODE_TYPE_NAMED,
+    CODE_NODE_TYPE_POINTER,
+    CODE_NODE_TYPE_ARRAY,
+    CODE_NODE_TYPE_FN,
+    CODE_NODE_TYPE_SUM,
+    CODE_NODE_TYPE_STRUCT,
+    CODE_NODE_TYPE_UNION,
+    CODE_NODE_TYPE_ENUM,
+    CODE_NODE_TYPE_SPLICE,
+
+    CODE_NODE_NAME_IDENT,
+    CODE_NODE_NAME_SPLICE,
+} CodeNodeKind;
+
+typedef enum {
     HIR_TYPE_ERROR,
     HIR_TYPE_BUILTIN,
     HIR_TYPE_POINTER,
@@ -34,6 +94,7 @@ typedef enum {
     HIR_TYPE_ENUM,
     HIR_TYPE_ANY,
     HIR_TYPE_ANY_CONSTRAINT,
+    HIR_TYPE_CODE,
 } HirTypeKind;
 
 typedef enum {
@@ -108,6 +169,11 @@ struct HirType {
         struct {
             Symbol *constraint;
         } any_constraint;
+
+        struct {
+            CodeCategory category;
+            CodeNodeKind node;
+        } code;
     };
 };
 

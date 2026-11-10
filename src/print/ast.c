@@ -48,6 +48,7 @@ static const char *type_kind_name(AstTypeKind kind) {
     case AST_TYPE_UNION:  return "union";
     case AST_TYPE_ENUM:   return "enum";
     case AST_TYPE_SPLICE: return "splice";
+    case AST_TYPE_CODE:   return "code";
     case AST_TYPE_ERROR:  return "error";
     }
 
@@ -620,6 +621,14 @@ static void print_type(FILE *out, const AstType *type, unsigned depth) {
 
     case AST_TYPE_SPLICE:
         print_expr(out, type->splice.expr, depth + 1);
+        break;
+
+    case AST_TYPE_CODE:
+        indent(out, depth + 1);
+        fprintf(out, "#code::%.*s", string_fmt(type->code.category));
+        if (type->code.has_selector)
+            fprintf(out, "<%.*s>", string_fmt(type->code.selector));
+        fputc('\n', out);
         break;
 
     case AST_TYPE_ERROR:

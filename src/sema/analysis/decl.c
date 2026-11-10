@@ -133,6 +133,7 @@ static AstType *sema_lift_constraint_type(Sema *sema, Array *generics, Array par
 
         case AST_TYPE_ERROR:
         case AST_TYPE_SPLICE:
+        case AST_TYPE_CODE:
             break;
     }
 

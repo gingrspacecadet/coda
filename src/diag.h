@@ -56,6 +56,7 @@ typedef enum {
     E_GENERIC_CONSTRAINT_INVALID,
     E_TOO_MANY_INIT_VALUES,
     E_DIVISION_BY_ZERO,
+    E_INVALID_CODE_TYPE,
 } DiagCode;
 
 typedef struct {

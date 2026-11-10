@@ -253,6 +253,9 @@ static bool buffer_append_type(MangleBuffer *buffer, Sema *sema, HirType *type, 
         case HIR_TYPE_ANY:
             return buffer_append(buffer, "Y");
 
+        case HIR_TYPE_CODE:
+            return buffer_appendf(buffer, "K%u_%u_", (unsigned)type->code.category, (unsigned)type->code.node);
+
         case HIR_TYPE_ANY_CONSTRAINT:
             return buffer_append(buffer, "V") &&
                    buffer_append_nominal_identity(buffer, symbol_canonical(type->any_constraint.constraint));
@@ -332,6 +335,7 @@ static bool ast_type_contains_generic(AstFnDecl *fn, AstType *type) {
 
         case AST_TYPE_ERROR:
         case AST_TYPE_SPLICE:
+        case AST_TYPE_CODE:
             return false;
     }
     return false;

@@ -670,16 +670,9 @@ static void emit_local_ref(OrionFunction *function, size_t id) {
 }
 
 static void emit_branch_to_label(OrionFunction *function, const char *condition, int lhs, int rhs, size_t target) {
-    size_t skip = next_label(function);
-    fprintf(function->out, "    %s r%d, r%d, #1\n", condition, lhs, rhs);
-    fprintf(function->out, "    jmp ");
-    emit_local_ref(function, skip);
-    fputc('\n', function->out);
-    fprintf(function->out, "    jmp ");
+    fprintf(function->out, "    %s r%d, r%d, ", condition, lhs, rhs);
     emit_local_ref(function, target);
     fputc('\n', function->out);
-    emit_local_label(function, skip);
-    fputs(":\n", function->out);
 }
 
 static bool emit_store_result_word(OrionFunction *function, LirValueId result, size_t byte_offset, int reg) {
@@ -1418,21 +1411,21 @@ static bool emit_terminator(OrionFunction *function, LirBlock *block) {
                 fputs("    or r0, r0, r1\n", function->out);
             }
             
-            size_t else_dispatch = next_label(function);
-            fputs("    jne r0, #0, #1\n    jmp ", function->out);
-            emit_local_ref(function, else_dispatch);
+            size_t then_label = next_label(function);
+            fputs("    jne r0, #0, ", function->out);
+            emit_local_ref(function, then_label);
             fputc('\n', function->out);
-            if (!emit_edge(function, block->terminator.branch.then_block, block->terminator.branch.then_args))
-                return false;
-            fputs("    jmp ", function->out);
-            emit_block_ref(function, block->terminator.branch.then_block);
-            fputc('\n', function->out);
-            emit_local_label(function, else_dispatch);
-            fputs(":\n", function->out);
             if (!emit_edge(function, block->terminator.branch.else_block, block->terminator.branch.else_args))
                 return false;
             fputs("    jmp ", function->out);
             emit_block_ref(function, block->terminator.branch.else_block);
+            fputc('\n', function->out);
+            emit_local_label(function, then_label);
+            fputs(":\n", function->out);
+            if (!emit_edge(function, block->terminator.branch.then_block, block->terminator.branch.then_args))
+                return false;
+            fputs("    jmp ", function->out);
+            emit_block_ref(function, block->terminator.branch.then_block);
             fputc('\n', function->out);
             return true;
         }

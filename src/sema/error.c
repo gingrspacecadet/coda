@@ -1,5 +1,66 @@
 #include "common.h"
 
+static const char *sema_code_category_name(CodeCategory category) {
+    switch (category) {
+        case CODE_CATEGORY_EXPR: return "expr";
+        case CODE_CATEGORY_STMT: return "stmt";
+        case CODE_CATEGORY_DECL: return "decl";
+        case CODE_CATEGORY_TYPE: return "type";
+        case CODE_CATEGORY_NAME: return "name";
+    }
+    return "?";
+}
+
+static const char *sema_code_node_name(CodeNodeKind node) {
+    switch (node) {
+        case CODE_NODE_ANY: return "";
+        case CODE_NODE_EXPR_LITERAL: return "literal";
+        case CODE_NODE_EXPR_IDENT: return "ident";
+        case CODE_NODE_EXPR_PATH: return "path";
+        case CODE_NODE_EXPR_TYPE_VALUE: return "type_value";
+        case CODE_NODE_EXPR_UNARY: return "unary";
+        case CODE_NODE_EXPR_BINARY: return "binary";
+        case CODE_NODE_EXPR_CALL: return "call";
+        case CODE_NODE_EXPR_INFERRED_METHOD_CALL: return "inferred_method_call";
+        case CODE_NODE_EXPR_INDEX: return "index";
+        case CODE_NODE_EXPR_MEMBER: return "member";
+        case CODE_NODE_EXPR_CAST: return "cast";
+        case CODE_NODE_EXPR_INTRINSIC: return "intrinsic";
+        case CODE_NODE_EXPR_BUBBLE: return "bubble";
+        case CODE_NODE_EXPR_INIT: return "init";
+        case CODE_NODE_EXPR_LAMBDA: return "lambda";
+        case CODE_NODE_EXPR_SPLICE: return "splice";
+        case CODE_NODE_STMT_VAR: return "var";
+        case CODE_NODE_STMT_EXPR: return "expr";
+        case CODE_NODE_STMT_BLOCK: return "block";
+        case CODE_NODE_STMT_RETURN: return "return";
+        case CODE_NODE_STMT_IF: return "if";
+        case CODE_NODE_STMT_FOR: return "for";
+        case CODE_NODE_STMT_WHILE: return "while";
+        case CODE_NODE_STMT_MATCH: return "match";
+        case CODE_NODE_STMT_BREAK: return "break";
+        case CODE_NODE_STMT_CONTINUE: return "continue";
+        case CODE_NODE_STMT_DEFER: return "defer";
+        case CODE_NODE_DECL_INCLUDE: return "include";
+        case CODE_NODE_DECL_TYPE: return "type";
+        case CODE_NODE_DECL_VAR: return "var";
+        case CODE_NODE_DECL_FN: return "fn";
+        case CODE_NODE_DECL_CONSTRAINT: return "constraint";
+        case CODE_NODE_TYPE_NAMED: return "named";
+        case CODE_NODE_TYPE_POINTER: return "pointer";
+        case CODE_NODE_TYPE_ARRAY: return "array";
+        case CODE_NODE_TYPE_FN: return "fn";
+        case CODE_NODE_TYPE_SUM: return "sum";
+        case CODE_NODE_TYPE_STRUCT: return "struct";
+        case CODE_NODE_TYPE_UNION: return "union";
+        case CODE_NODE_TYPE_ENUM: return "enum";
+        case CODE_NODE_TYPE_SPLICE: return "splice";
+        case CODE_NODE_NAME_IDENT: return "ident";
+        case CODE_NODE_NAME_SPLICE: return "splice";
+    }
+    return "?";
+}
+
 static String sema_type_string(Arena *arena, HirType *type) {
     if (type == NULL)
         return STRING("<NULL>");
@@ -72,6 +133,11 @@ static String sema_type_string(Arena *arena, HirType *type) {
                 return STRING("any<?>");
             return format(arena, "any<%.*s>", (int)constraint->name.ident.length, constraint->name.ident.data);
         }
+
+        case HIR_TYPE_CODE:
+            if (type->code.node == CODE_NODE_ANY)
+                return format(arena, "#code::%s", sema_code_category_name(type->code.category));
+            return format(arena, "#code::%s<%s>", sema_code_category_name(type->code.category), sema_code_node_name(type->code.node));
 
         case HIR_TYPE_ENUM:
             return STRING("enum");
