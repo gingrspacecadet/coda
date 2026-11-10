@@ -89,11 +89,19 @@ bool type_equal(HirType *a, HirType *b) {
     if (a == NULL || b == NULL)
         return false;
 
+    if (a->kind == HIR_TYPE_FUNCTION && b->kind == HIR_TYPE_FUNCTION) {
+        a = a->base != NULL ? a->base : a;
+        b = b->base != NULL ? b->base : b;
+    }
+
     if (a->kind != b->kind)
         return false;
-        
-    if (a->nominal != NULL || b->nominal != NULL)
+
+    if (a->nominal != NULL || b->nominal != NULL) {
+        if (a->kind == HIR_TYPE_FUNCTION || a->kind == HIR_TYPE_POINTER || a->kind == HIR_TYPE_ARRAY || a->kind == HIR_TYPE_SLICE)
+            return a->nominal == b->nominal || type_equal(a->base != NULL ? a->base : a, b->base != NULL ? b->base : b);
         return a->nominal == b->nominal;
+    }
 
     switch (a->kind) {
         case HIR_TYPE_ERROR:
@@ -126,7 +134,6 @@ bool type_equal(HirType *a, HirType *b) {
             for (size_t i = 0; i < a->function.params.len; i++) {
                 HirType *ap = ((HirType **)a->function.params.data)[i];
                 HirType *bp = ((HirType **)b->function.params.data)[i];
-
                 if (!type_equal(ap, bp))
                     return false;
             }
@@ -546,8 +553,8 @@ HirType *sema_type(Sema *sema, AstType *ast) {
 
         case AST_TYPE_FN:
             hir->kind = HIR_TYPE_FUNCTION;
-            hir->size = 0;
-            hir->align = 0;
+            hir->size = sema->target->pointer.size;
+            hir->align = sema->target->pointer.align;
             hir->function.ret = sema_type(sema, ast->fn.ret);
             hir->function.params = array_create(sema->arena, sizeof(HirType *));
 
@@ -899,6 +906,8 @@ HirType *sema_symbol_type(Sema *sema, Symbol *symbol) {
 
             type->kind = HIR_TYPE_FUNCTION;
             type->mutable = false;
+            type->size = sema->target->pointer.size;
+            type->align = sema->target->pointer.align;
             type->function.ret = sema_type(sema, fn->ret);
             type->function.params = array_create(sema->arena, sizeof(HirType *));
 

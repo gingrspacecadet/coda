@@ -161,7 +161,7 @@ static bool type_is_scalar(HirType *type) {
     type = base_type(type);
     if (type == NULL || type_is_float(type) || type_is_void_like(type))
         return false;
-    if (type->kind == HIR_TYPE_POINTER)
+    if (type->kind == HIR_TYPE_FUNCTION || type->kind == HIR_TYPE_POINTER)
         return type_size(type) == 4 && type_align(type) == 4;
     if (type->kind == HIR_TYPE_ENUM)
         return type_is_scalar(type->_enum.underlying);
@@ -1019,6 +1019,23 @@ static bool emit_unary(OrionFunction *function, const LirInstruction *instructio
     if (instruction->opcode == LIR_OP_NEG) {
         fputs("    xor r12, r12, r12\n    sub r0, r12, r0\n", function->out);
     } else if (instruction->opcode == LIR_OP_NOT) {
+        HirType *type = base_type(instruction->result_type);
+        if (type != NULL && type->kind == HIR_TYPE_BUILTIN && type->builtin == BUILTIN_BOOL) {
+            size_t true_label = next_label(function);
+            size_t end_label = next_label(function);
+            emit_mov_imm(function->out, ORION_R1, 0);
+            emit_branch_to_label(function, "jeq", ORION_R0, ORION_R1, true_label);
+            emit_mov_imm(function->out, ORION_R0, 0);
+            fprintf(function->out, "    jmp ");
+            emit_local_ref(function, end_label);
+            fputc('\n', function->out);
+            emit_local_label(function, true_label);
+            fputs(":\n", function->out);
+            emit_mov_imm(function->out, ORION_R0, 1);
+            emit_local_label(function, end_label);
+            fputs(":\n", function->out);
+            return emit_store_result_word(function, instruction->result, 0, ORION_R0);
+        }
         emit_bitwise_not(function->out, ORION_R0);
     } else {
         return fail(function, "unsupported unary opcode");

@@ -837,7 +837,8 @@ static LirOperand lir_lower_expr(LirLower *lower, HirExpr *expr) {
         }
 
         case HIR_EXPR_LAMBDA:
-            assert(!"HIR expression not yet lowered");
+            assert(expr->lambda.symbol != NULL);
+            return lir_operand_symbol(expr->lambda.symbol, expr->type);
 
         case HIR_EXPR_ERROR:
             assert(!"error expression reached LIR");

@@ -195,6 +195,8 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         *type = (HirType) {
             .kind = HIR_TYPE_FUNCTION,
             .mutable = false,
+            .size = sema->target->pointer.size,
+            .align = sema->target->pointer.align,
             .function = {
                 .ret = sema_type(sema, ast->ret),
                 .params = array_create(sema->arena, sizeof(HirType *)),

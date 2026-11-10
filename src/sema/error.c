@@ -2,7 +2,7 @@
 
 static String sema_type_string(Arena *arena, HirType *type) {
     if (type == NULL)
-        return STRING("<unknown>");
+        return STRING("<NULL>");
 
     switch (type->kind) {
         case HIR_TYPE_ERROR:

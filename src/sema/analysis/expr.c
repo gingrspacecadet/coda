@@ -653,13 +653,21 @@ HirExpr *sema_coerce(Sema *sema, HirExpr *expr, HirType *type) {
 
         HirType *target_function = target != NULL && target->kind == HIR_TYPE_POINTER
             ? sema_unwrap_type(target->pointer.pointee)
+            : target != NULL && target->kind == HIR_TYPE_FUNCTION
+            ? target
             : NULL;
+
+        bool function_value_like =
+            (expr->kind == HIR_EXPR_VALUE && expr->value.symbol != NULL && expr->value.symbol->kind == SYMBOL_FN) ||
+            expr->kind == HIR_EXPR_LAMBDA;
 
         if (source != NULL && source->kind == HIR_TYPE_FUNCTION &&
             target_function != NULL && target_function->kind == HIR_TYPE_FUNCTION &&
             type_equal(source, target_function) &&
-            expr->kind == HIR_EXPR_VALUE && expr->value.symbol != NULL &&
-            expr->value.symbol->kind == SYMBOL_FN) {
+            function_value_like) {
+            if (target->kind == HIR_TYPE_FUNCTION)
+                return expr;
+
             HirExpr *cast = arena_calloc(sema->arena, sizeof(*cast));
             *cast = (HirExpr){
                 .span = expr->span,
@@ -2131,9 +2139,12 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 }
 
                 HirType *callee_layout = sema_unwrap_type(callee->type);
-                HirType *callee_function = callee_layout != NULL && callee_layout->kind == HIR_TYPE_POINTER
-                    ? sema_unwrap_type(callee_layout->pointer.pointee)
-                    : NULL;
+                HirType *callee_function = NULL;
+                if (callee_layout != NULL && callee_layout->kind == HIR_TYPE_FUNCTION) {
+                    callee_function = callee_layout;
+                } else if (callee_layout != NULL && callee_layout->kind == HIR_TYPE_POINTER) {
+                    callee_function = sema_unwrap_type(callee_layout->pointer.pointee);
+                }
                 if (callee_function == NULL || callee_function->kind != HIR_TYPE_FUNCTION) {
                     error_expected_function(sema->diags, callee->type, ast->call.callee->span);
                     hir->kind = HIR_EXPR_ERROR;
@@ -2676,6 +2687,8 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             *type = (HirType) {
                 .kind = HIR_TYPE_FUNCTION,
                 .mutable = false,
+                .size = sema->target->pointer.size,
+                .align = sema->target->pointer.align,
                 .function = {
                     .ret = sema_type(sema, ast->lambda.ret),
                     .params = array_create(sema->arena, sizeof(HirType *)),
@@ -2701,19 +2714,55 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (expected != NULL) {
-                if (expected->kind != HIR_TYPE_FUNCTION || !type_equal(type, expected)) {
+                HirType *expected_function = expected != NULL && expected->kind == HIR_TYPE_POINTER
+                    ? sema_unwrap_type(expected->pointer.pointee)
+                    : NULL;
+                bool expected_matches =
+                    (expected->kind == HIR_TYPE_FUNCTION && type_equal(type, expected)) ||
+                    (expected_function != NULL && expected_function->kind == HIR_TYPE_FUNCTION &&
+                     type_equal(type, expected_function));
+
+                if (!expected_matches) {
                     error_type_mismatch(sema->diags, expected, type, ast->span);
                     hir->kind = HIR_EXPR_ERROR;
                     return hir;
                 }
+
+                if (expected_function != NULL && expected_function->kind == HIR_TYPE_FUNCTION) {
+                    hir->type = expected;
+                    return hir;
+                }
             }
 
-            HirFunction *fn = arena_calloc(sema->arena, sizeof(HirFunction));
+            char *lambda_name = arena_alloc(sema->arena, 64);
+            int lambda_name_length = snprintf(lambda_name, 64, "lambda_%zu", sema->next_generic_instance++);
+            assert(lambda_name_length > 0 && lambda_name_length < 64);
 
-            *fn = (HirFunction) {
-                .symbol = NULL,
-                .return_type = type->function.ret,
+            Symbol *lambda_symbol = arena_calloc(sema->arena, sizeof(*lambda_symbol));
+            *lambda_symbol = (Symbol) {
+                .kind = SYMBOL_FN,
+                .name = {
+                    .kind = AST_NAME_IDENT,
+                    .ident = {
+                        .data = lambda_name,
+                        .length = (size_t)lambda_name_length,
+                    },
+                },
+                .type = type,
+                .span = ast->span,
             };
+
+            HirFunction *fn = arena_calloc(sema->arena, sizeof(HirFunction));
+            *fn = (HirFunction) {
+                .symbol = lambda_symbol,
+                .return_type = type->function.ret,
+                .params = array_create(sema->arena, sizeof(HirParam)),
+                .locals = array_create(sema->arena, sizeof(HirLocal)),
+            };
+
+            hir->lambda.symbol = lambda_symbol;
+            hir->lambda.params = fn->params;
+            hir->lambda.ret = type->function.ret;
 
             HirFunction *previous_fn = sema->current_fn;
             sema->current_fn = fn;
@@ -2723,18 +2772,39 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             for (size_t i = 0; i < ast->lambda.params.len; i++) {
                 AstParam *param = (AstParam *)array_at(&ast->lambda.params, i);
                 HirType *param_type = *(HirType **)array_at(&type->function.params, i);
+                Symbol *parameter = insert_parameter(sema, param, param_type);
 
-                insert_parameter(sema, param, param_type);
+                HirParam hir_param = {
+                    .symbol = parameter,
+                    .type = param_type,
+                };
+                array_push(&fn->params, &hir_param);
             }
 
             fn->body = sema_stmt(sema, ast->lambda.body);
+            hir->lambda.body = fn->body;
+
+            HirType *return_type = fn->return_type;
+            bool returns_none = sema_type_allows_empty_return(return_type);
+
+            if (!returns_none && !hir_stmt_terminates(fn->body)) {
+                error_missing_return_value(sema->diags, return_type, ast->lambda.body->span);
+            }
+
+            if (fn->body != NULL && fn->body->kind == HIR_STMT_BLOCK && !hir_stmt_terminates(fn->body)) {
+                if (returns_none) {
+                    HirStmt *ret = arena_calloc(sema->arena, sizeof(*ret));
+                    ret->kind = HIR_STMT_RETURN;
+                    ret->_return.value = sema_make_empty_sum_return(sema, return_type, ast->lambda.body->span);
+                    array_push(&fn->body->block.stmts, &ret);
+                }
+            }
 
             sema_pop_scope(sema);
             sema->current_fn = previous_fn;
 
+            array_push(&sema->hir_module->functions, fn);
             hir->type = type;
-
-            //! TODO: store fn in lambda HIR
             return hir;
         }
 
