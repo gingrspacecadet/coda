@@ -520,6 +520,7 @@ bool comp_expr_is_evaluable(HirExpr *expr) {
 
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
+        case HIR_EXPR_CODE:
             return true;
 
         case HIR_EXPR_VALUE:
@@ -1031,6 +1032,7 @@ static CompExecResult eval_function(CompContext *context, HirFunction *function,
 HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
+        case HIR_EXPR_CODE:
             return expr;
 
         case HIR_EXPR_VALUE: {

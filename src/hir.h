@@ -79,6 +79,7 @@ typedef enum {
 
     CODE_NODE_NAME_IDENT,
     CODE_NODE_NAME_SPLICE,
+    CODE_NODE_EXPR_QUOTE,
 } CodeNodeKind;
 
 typedef enum {
@@ -224,6 +225,7 @@ typedef enum {
     HIR_EXPR_LAMBDA,
     HIR_EXPR_ANY_BOX,
     HIR_EXPR_ANY_CALL,
+    HIR_EXPR_CODE,
 } HirExprKind;
 
 struct HirExpr {
@@ -306,6 +308,10 @@ struct HirExpr {
             bool has_receiver;
             Array(HirExpr *) args;
         } any_call;
+
+        struct {
+            AstExpr *expression;
+        } code;
 
     };
 };

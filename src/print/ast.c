@@ -74,6 +74,7 @@ static const char *expr_kind_name(AstExprKind kind) {
     case AST_EXPR_INIT:       return "init";
     case AST_EXPR_LAMBDA:     return "lambda";
     case AST_EXPR_SPLICE:     return "splice";
+    case AST_EXPR_QUOTE:      return "quote";
     }
 
     return "?";
@@ -386,6 +387,10 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
 
     case AST_EXPR_SPLICE:
         print_expr(out, expr->splice.expression, depth + 1);
+        break;
+
+    case AST_EXPR_QUOTE:
+        print_expr(out, expr->quote.expression, depth + 1);
         break;
 
     case AST_EXPR_ERROR:

@@ -1,0 +1,9 @@
+name: reject expression quotation with incompatible selector
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn none bad_quote() {
+    #code::expr<ident> value = #{42};
+}

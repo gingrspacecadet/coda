@@ -84,6 +84,7 @@ static const char *code_node_name(CodeNodeKind node) {
         case CODE_NODE_TYPE_SPLICE: return "splice";
         case CODE_NODE_NAME_IDENT: return "ident";
         case CODE_NODE_NAME_SPLICE: return "splice";
+        case CODE_NODE_EXPR_QUOTE: return "quote";
     }
     return "?";
 }
@@ -104,6 +105,7 @@ static const char *expr_kind_name(HirExprKind kind) {
     case HIR_EXPR_LAMBDA:    return "lambda";
     case HIR_EXPR_ANY_BOX:   return "any_box";
     case HIR_EXPR_ANY_CALL:  return "any_call";
+    case HIR_EXPR_CODE:      return "code";
     }
 
     return "?";
@@ -421,6 +423,19 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
         print_expr(out, expr->any_call.object, depth + 1);
         for (size_t i = 0; i < expr->any_call.args.len; i++)
             print_expr(out, ((HirExpr **)expr->any_call.args.data)[i], depth + 1);
+        break;
+
+    case HIR_EXPR_CODE:
+        indent(out, depth + 1);
+        fputs("syntax ", out);
+        if (expr->code.expression != NULL) {
+            fprintf(out, "[%zu:%zu+%zu]\n",
+                source_line(expr->code.expression->span.source, expr->code.expression->span.offset),
+                source_column(expr->code.expression->span.source, expr->code.expression->span.offset),
+                expr->code.expression->span.length);
+        } else {
+            fputs("<null>\n", out);
+        }
         break;
 
     case HIR_EXPR_ERROR:

@@ -1805,6 +1805,42 @@ static HirEnumItem *sema_enum_item_for_symbol(Symbol *symbol) {
     return NULL;
 }
 
+static CodeNodeKind sema_code_expr_node(AstExprKind kind) {
+    switch (kind) {
+        case AST_EXPR_LITERAL: return CODE_NODE_EXPR_LITERAL;
+        case AST_EXPR_IDENT: return CODE_NODE_EXPR_IDENT;
+        case AST_EXPR_PATH: return CODE_NODE_EXPR_PATH;
+        case AST_EXPR_TYPE_VALUE: return CODE_NODE_EXPR_TYPE_VALUE;
+        case AST_EXPR_UNARY: return CODE_NODE_EXPR_UNARY;
+        case AST_EXPR_BINARY: return CODE_NODE_EXPR_BINARY;
+        case AST_EXPR_CALL: return CODE_NODE_EXPR_CALL;
+        case AST_EXPR_INFERRED_METHOD_CALL: return CODE_NODE_EXPR_INFERRED_METHOD_CALL;
+        case AST_EXPR_INDEX: return CODE_NODE_EXPR_INDEX;
+        case AST_EXPR_MEMBER: return CODE_NODE_EXPR_MEMBER;
+        case AST_EXPR_CAST: return CODE_NODE_EXPR_CAST;
+        case AST_EXPR_INTRINSIC: return CODE_NODE_EXPR_INTRINSIC;
+        case AST_EXPR_BUBBLE: return CODE_NODE_EXPR_BUBBLE;
+        case AST_EXPR_INIT: return CODE_NODE_EXPR_INIT;
+        case AST_EXPR_LAMBDA: return CODE_NODE_EXPR_LAMBDA;
+        case AST_EXPR_SPLICE: return CODE_NODE_EXPR_SPLICE;
+        case AST_EXPR_QUOTE: return CODE_NODE_EXPR_QUOTE;
+        case AST_EXPR_ERROR:
+        default:
+            return CODE_NODE_ANY;
+    }
+}
+
+static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message) {
+    DiagBuilder diagnostic = diag_begin(
+        sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, message);
+    diag_finish(&diagnostic);
+
+    HirExpr *error = arena_calloc(sema->arena, sizeof(*error));
+    error->span = ast->span;
+    error->kind = HIR_EXPR_ERROR;
+    return error;
+}
+
 HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     if (ast->comptime) {
         AstExpr copy = *ast;
@@ -1826,6 +1862,11 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         };
 
         HirExpr *result = comp_eval_expr(&context, hir);
+
+        if (result != NULL && result->kind == HIR_EXPR_CODE &&
+            (sema->current_fn == NULL || !sema->current_fn->is_comptime))
+            return sema_code_quote_error(sema, ast,
+                STRING("a #code value cannot escape into runtime code"));
 
         if (!comp_expr_is_evaluable(result)) {
             error_comptime_not_evaluable(sema->diags, ast->span);
@@ -1858,6 +1899,37 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
     hir->type = NULL;
 
     switch (ast->kind) {
+        case AST_EXPR_QUOTE: {
+            AstExpr *quoted = ast->quote.expression;
+            if (quoted == NULL || quoted->kind == AST_EXPR_ERROR) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
+            HirType *target = sema_unwrap_type(expected);
+            if (target == NULL || target->kind != HIR_TYPE_CODE)
+                return sema_expr(sema, quoted, expected);
+
+            if (target->code.category != CODE_CATEGORY_EXPR)
+                return sema_code_quote_error(sema, ast,
+                    STRING("an expression quotation requires a #code::expr destination"));
+
+            if (sema->current_fn == NULL || !sema->current_fn->is_comptime)
+                return sema_code_quote_error(sema, ast,
+                    STRING("#code values can only be created inside a comptime function"));
+
+            CodeNodeKind node = sema_code_expr_node(quoted->kind);
+            if (node == CODE_NODE_ANY ||
+                (target->code.node != CODE_NODE_ANY && target->code.node != node))
+                return sema_code_quote_error(sema, ast,
+                    STRING("quoted expression does not match the expected #code::expr selector"));
+
+            hir->kind = HIR_EXPR_CODE;
+            hir->type = expected;
+            hir->code.expression = quoted;
+            return hir;
+        }
+
         case AST_EXPR_LITERAL:
             hir->kind = HIR_EXPR_LITERAL;
             hir->literal = literal(sema, ast->literal);

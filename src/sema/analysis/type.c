@@ -363,6 +363,7 @@ static bool sema_code_node(CodeCategory category, String name, CodeNodeKind *nod
             CODE_NODE("init", CODE_NODE_EXPR_INIT)
             CODE_NODE("lambda", CODE_NODE_EXPR_LAMBDA)
             CODE_NODE("splice", CODE_NODE_EXPR_SPLICE)
+            CODE_NODE("quote", CODE_NODE_EXPR_QUOTE)
             return false;
 
         case CODE_CATEGORY_STMT:
@@ -1127,11 +1128,13 @@ static void insert_builtin_any(Sema *sema) {
 }
 
 void sema_insert_builtin_types(Sema *sema) {
+    insert_builtin_type(sema, STRING("int"), BUILTIN_INT32);
     insert_builtin_type(sema, STRING("int8"), BUILTIN_INT8);
     insert_builtin_type(sema, STRING("int16"), BUILTIN_INT16);
     insert_builtin_type(sema, STRING("int32"), BUILTIN_INT32);
     insert_builtin_type(sema, STRING("int64"), BUILTIN_INT64);
 
+    insert_builtin_type(sema, STRING("uint"), BUILTIN_UINT32);
     insert_builtin_type(sema, STRING("uint8"), BUILTIN_UINT8);
     insert_builtin_type(sema, STRING("uint16"), BUILTIN_UINT16);
     insert_builtin_type(sema, STRING("uint32"), BUILTIN_UINT32);
@@ -1141,8 +1144,8 @@ void sema_insert_builtin_types(Sema *sema) {
     insert_builtin_type(sema, STRING("float64"), BUILTIN_FLOAT64);
 
     insert_builtin_type(sema, STRING("bool"), BUILTIN_BOOL);
-    
+
     insert_builtin_type(sema, STRING("none"), BUILTIN_NONE);
-    
+
     insert_builtin_any(sema);
 }

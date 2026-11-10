@@ -354,7 +354,7 @@ AstStmt *parse_match_stmt(Parser *p) {
 }
 
 static bool can_start_var_stmt(Parser *p) {
-    return at(p, TK_IDENT) || at(p, TK_KW_MUT) || at(p, TK_KW_FN);
+    return at(p, TK_IDENT) || at(p, TK_POUND) || at(p, TK_KW_MUT) || at(p, TK_KW_FN);
 }
 
 AstStmt *parse_comptime_stmt(Parser *p) {

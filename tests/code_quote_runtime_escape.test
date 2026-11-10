@@ -1,0 +1,14 @@
+name: reject comptime code value escaping into runtime function
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn #code::expr<literal> make_code() {
+    return #{42};
+}
+
+fn none bad_escape() {
+    #code::expr<literal> value = $make_code();
+}
+

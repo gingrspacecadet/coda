@@ -273,6 +273,7 @@ typedef enum {
     AST_EXPR_LAMBDA,
 
     AST_EXPR_SPLICE,
+    AST_EXPR_QUOTE,
 } AstExprKind;
 
 struct AstExpr {
@@ -351,6 +352,10 @@ struct AstExpr {
         struct {
             AstExpr *expression;
         } splice;
+
+        struct {
+            AstExpr *expression;
+        } quote;
     };
 };
 

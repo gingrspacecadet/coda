@@ -1,0 +1,19 @@
+name: expression quotations capture and preserve syntax
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+$fn #code::expr<literal> identity(#code::expr<literal> value) {
+    #code::expr<literal> copy = value;
+    return copy;
+}
+
+$fn none quote_values() {
+    #code::expr<literal> value = $identity(#{3});
+    #code::expr<ident> unresolved = #{name_not_declared};
+}
+
+$fn int expand_quote() {
+    return #{3};
+}

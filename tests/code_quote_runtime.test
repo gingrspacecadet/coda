@@ -1,0 +1,10 @@
+name: reject expression quotation in runtime function
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn none bad_quote() {
+    #code::expr<literal> value = #{42};
+}
+
