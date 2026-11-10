@@ -60,6 +60,7 @@ bool test_parse(Arena *arena, String contents, TestCase *test);
 bool test_cli_arguments(void);
 bool test_mangling(void);
 bool test_orion_backend(void);
+bool test_orion_unary_not(void);
 bool test_extern_lowering(void);
 
 #endif
