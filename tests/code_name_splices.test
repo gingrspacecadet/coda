@@ -1,0 +1,20 @@
+name: expand name splices in expression quotations
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+$fn #code::name<ident> generated_name() {
+    return #{bar};
+}
+
+$fn #code::expr<path> generated_path() {
+    return #{foo::#(generated_name())};
+}
+
+$fn int exercise() {
+    #code::expr<path> result = generated_path();
+    return 0;
+}
+
+int trigger = $exercise();

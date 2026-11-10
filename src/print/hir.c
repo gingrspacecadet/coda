@@ -427,6 +427,14 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
 
     case HIR_EXPR_CODE:
         indent(out, depth + 1);
+        if (expr->code.is_name) {
+            fputs("name ", out);
+            if (expr->code.name.kind == AST_NAME_IDENT)
+                fprintf(out, "%.*s\n", string_fmt(expr->code.name.ident));
+            else
+                fputs("<invalid>\n", out);
+            break;
+        }
         fputs("syntax ", out);
         if (expr->code.expression != NULL) {
             fprintf(out, "[%zu:%zu+%zu] (%zu splices)\n",

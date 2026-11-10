@@ -1832,6 +1832,46 @@ static CodeNodeKind sema_code_expr_node(AstExprKind kind) {
 
 static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message);
 
+static bool sema_code_collect_name_splice(
+    Sema *sema, AstName *name, AstExpr *owner, Array *splices
+) {
+    if (name == NULL || name->kind != AST_NAME_SPLICE)
+        return true;
+
+    HirExpr *value = sema_expr(sema, name->splice, NULL);
+    if (value == NULL || value->kind == HIR_EXPR_ERROR)
+        return false;
+
+    HirType *type = sema_unwrap_type(value->type);
+    if (type == NULL || type->kind != HIR_TYPE_CODE ||
+        type->code.category != CODE_CATEGORY_NAME ||
+        (type->code.node != CODE_NODE_ANY &&
+         type->code.node != CODE_NODE_NAME_IDENT)) {
+        sema_code_quote_error(sema, owner,
+            STRING("a name splice requires a #code::name<ident> value"));
+        return false;
+    }
+
+    HirCodeSplice splice = {
+        .name_splice = name,
+        .owner = owner,
+        .value = value,
+    };
+    array_push(splices, &splice);
+    return true;
+}
+
+static bool sema_code_collect_path_name_splices(
+    Sema *sema, Path path, AstExpr *owner, Array *splices
+) {
+    for (size_t i = 0; i < path.parts.len; i++) {
+        AstName *name = array_at(&path.parts, i);
+        if (!sema_code_collect_name_splice(sema, name, owner, splices))
+            return false;
+    }
+    return true;
+}
+
 static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) {
     if (ast == NULL)
         return true;
@@ -1849,7 +1889,7 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
             return false;
         }
 
-        HirCodeSplice splice = {.splice = ast, .value = value};
+        HirCodeSplice splice = {.splice = ast, .owner = ast, .value = value};
         array_push(splices, &splice);
         return true;
     }
@@ -1867,15 +1907,20 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
                 return false;
             for (size_t i = 0; i < ast->call.args.len; i++) {
                 AstCallArg *arg = array_at(&ast->call.args, i);
-                if (!sema_code_collect_splices(sema, arg->value, splices))
+                if (!sema_code_collect_name_splice(sema, &arg->name, ast, splices) ||
+                    !sema_code_collect_splices(sema, arg->value, splices))
                     return false;
             }
             return true;
 
         case AST_EXPR_INFERRED_METHOD_CALL:
+            if (!sema_code_collect_name_splice(
+                    sema, &ast->inferred_method_call.name, ast, splices))
+                return false;
             for (size_t i = 0; i < ast->inferred_method_call.args.len; i++) {
                 AstCallArg *arg = array_at(&ast->inferred_method_call.args, i);
-                if (!sema_code_collect_splices(sema, arg->value, splices))
+                if (!sema_code_collect_name_splice(sema, &arg->name, ast, splices) ||
+                    !sema_code_collect_splices(sema, arg->value, splices))
                     return false;
             }
             return true;
@@ -1885,17 +1930,28 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
                    sema_code_collect_splices(sema, ast->index.index, splices);
 
         case AST_EXPR_MEMBER:
-            return sema_code_collect_splices(sema, ast->member.object, splices);
+            return sema_code_collect_splices(sema, ast->member.object, splices) &&
+                   sema_code_collect_name_splice(
+                       sema, &ast->member.member, ast, splices);
 
         case AST_EXPR_CAST:
             return sema_code_collect_splices(sema, ast->cast.operand, splices);
 
         case AST_EXPR_INTRINSIC:
+            if (!sema_code_collect_path_name_splices(sema, ast->intrinsic.name, ast, splices))
+                return false;
             for (size_t i = 0; i < ast->intrinsic.args.len; i++) {
                 AstIntrinsicArg *arg = array_at(&ast->intrinsic.args, i);
                 if (arg->kind == AST_INTRINSIC_ARG_EXPR &&
                     !sema_code_collect_splices(sema, arg->expr, splices))
                     return false;
+                if (arg->kind == AST_INTRINSIC_ARG_MEMBER_PATH) {
+                    for (size_t j = 0; j < arg->member_path.len; j++) {
+                        AstName *name = array_at(&arg->member_path, j);
+                        if (!sema_code_collect_name_splice(sema, name, ast, splices))
+                            return false;
+                    }
+                }
             }
             return true;
 
@@ -1905,17 +1961,22 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
         case AST_EXPR_INIT:
             for (size_t i = 0; i < ast->init.fields.len; i++) {
                 AstInitField *field = array_at(&ast->init.fields, i);
-                if (!sema_code_collect_splices(sema, field->value, splices))
+                if (!sema_code_collect_name_splice(sema, &field->name, ast, splices) ||
+                    !sema_code_collect_splices(sema, field->value, splices))
                     return false;
             }
             return true;
+
+        case AST_EXPR_IDENT:
+            return sema_code_collect_name_splice(sema, &ast->ident, ast, splices);
+
+        case AST_EXPR_PATH:
+            return sema_code_collect_path_name_splices(sema, ast->path, ast, splices);
 
         case AST_EXPR_QUOTE:
         case AST_EXPR_LAMBDA:
         case AST_EXPR_ERROR:
         case AST_EXPR_LITERAL:
-        case AST_EXPR_IDENT:
-        case AST_EXPR_PATH:
         case AST_EXPR_TYPE_VALUE:
             return true;
 
@@ -2006,6 +2067,25 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             if (target == NULL || target->kind != HIR_TYPE_CODE)
                 return sema_expr(sema, quoted, expected);
 
+            if (target->code.category == CODE_CATEGORY_NAME) {
+                if (sema->current_fn == NULL || !sema->current_fn->is_comptime)
+                    return sema_code_quote_error(sema, ast,
+                        STRING("#code values can only be created inside a comptime function"));
+
+                if (quoted->kind != AST_EXPR_IDENT || quoted->ident.kind != AST_NAME_IDENT ||
+                    (target->code.node != CODE_NODE_ANY &&
+                     target->code.node != CODE_NODE_NAME_IDENT))
+                    return sema_code_quote_error(sema, ast,
+                        STRING("a name quotation requires a plain identifier matching #code::name<ident>"));
+
+                hir->kind = HIR_EXPR_CODE;
+                hir->type = expected;
+                hir->code.name = quoted->ident;
+                hir->code.is_name = true;
+                hir->code.splices = array_create(sema->arena, sizeof(HirCodeSplice));
+                return hir;
+            }
+
             if (target->code.category != CODE_CATEGORY_EXPR)
                 return sema_code_quote_error(sema, ast,
                     STRING("an expression quotation requires a #code::expr destination"));
@@ -2030,6 +2110,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->type = expected;
             hir->code.expression = quoted;
             hir->code.splices = splices;
+            hir->code.is_name = false;
             return hir;
         }
 
