@@ -1029,11 +1029,173 @@ static CompExecResult eval_function(CompContext *context, HirFunction *function,
     return result;
 }
 
+static HirExpr *comp_code_splice_error(CompContext *context, AstExpr *splice, String message) {
+    DiagBuilder diagnostic = diag_begin(
+        context->sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, splice->span, message);
+    diag_finish(&diagnostic);
+
+    HirExpr *error = arena_calloc(context->sema->arena, sizeof(*error));
+    error->span = splice->span;
+    error->kind = HIR_EXPR_ERROR;
+    return error;
+}
+
+static HirCodeSplice *comp_find_code_splice(Array splices, AstExpr *ast) {
+    for (size_t i = 0; i < splices.len; i++) {
+        HirCodeSplice *splice = array_at(&splices, i);
+        if (splice->splice == ast)
+            return splice;
+    }
+    return NULL;
+}
+
+static AstExpr *comp_expand_quoted_expression(
+    CompContext *context, AstExpr *ast, Array splices, bool *ok
+) {
+    if (ast == NULL || !*ok)
+        return ast;
+
+    if (ast->kind == AST_EXPR_SPLICE) {
+        HirCodeSplice *splice = comp_find_code_splice(splices, ast);
+        if (splice == NULL) {
+            *ok = false;
+            return NULL;
+        }
+
+        HirExpr *value = comp_eval_expr(context, splice->value);
+        HirType *type = value != NULL ? base_type(value->type) : NULL;
+        if (value == NULL || value->kind != HIR_EXPR_CODE ||
+            type == NULL || type->kind != HIR_TYPE_CODE ||
+            type->code.category != CODE_CATEGORY_EXPR ||
+            value->code.expression == NULL) {
+            *ok = false;
+            return NULL;
+        }
+
+        return value->code.expression;
+    }
+
+    /* A nested quotation owns its own splice scope. */
+    if (ast->kind == AST_EXPR_QUOTE)
+        return ast;
+
+    AstExpr *copy = arena_calloc(context->sema->arena, sizeof(*copy));
+    *copy = *ast;
+
+#define EXPAND_EXPR(member) \
+    copy->member = comp_expand_quoted_expression(context, ast->member, splices, ok)
+
+    switch (ast->kind) {
+        case AST_EXPR_UNARY:
+            EXPAND_EXPR(unary.operand);
+            break;
+
+        case AST_EXPR_BINARY:
+            EXPAND_EXPR(binary.left);
+            EXPAND_EXPR(binary.right);
+            break;
+
+        case AST_EXPR_CALL: {
+            EXPAND_EXPR(call.callee);
+            copy->call.args = array_create(context->sema->arena, sizeof(AstCallArg));
+            for (size_t i = 0; i < ast->call.args.len; i++) {
+                AstCallArg arg = ((AstCallArg *)ast->call.args.data)[i];
+                arg.value = comp_expand_quoted_expression(context, arg.value, splices, ok);
+                array_push(&copy->call.args, &arg);
+            }
+            break;
+        }
+
+        case AST_EXPR_INFERRED_METHOD_CALL: {
+            copy->inferred_method_call.args = array_create(context->sema->arena, sizeof(AstCallArg));
+            for (size_t i = 0; i < ast->inferred_method_call.args.len; i++) {
+                AstCallArg arg = ((AstCallArg *)ast->inferred_method_call.args.data)[i];
+                arg.value = comp_expand_quoted_expression(context, arg.value, splices, ok);
+                array_push(&copy->inferred_method_call.args, &arg);
+            }
+            break;
+        }
+
+        case AST_EXPR_INDEX:
+            EXPAND_EXPR(index.object);
+            EXPAND_EXPR(index.index);
+            break;
+
+        case AST_EXPR_MEMBER:
+            EXPAND_EXPR(member.object);
+            break;
+
+        case AST_EXPR_CAST:
+            EXPAND_EXPR(cast.operand);
+            break;
+
+        case AST_EXPR_INTRINSIC: {
+            copy->intrinsic.args = array_create(context->sema->arena, sizeof(AstIntrinsicArg));
+            for (size_t i = 0; i < ast->intrinsic.args.len; i++) {
+                AstIntrinsicArg arg = ((AstIntrinsicArg *)ast->intrinsic.args.data)[i];
+                if (arg.kind == AST_INTRINSIC_ARG_EXPR)
+                    arg.expr = comp_expand_quoted_expression(context, arg.expr, splices, ok);
+                array_push(&copy->intrinsic.args, &arg);
+            }
+            break;
+        }
+
+        case AST_EXPR_BUBBLE:
+            EXPAND_EXPR(bubble.operand);
+            break;
+
+        case AST_EXPR_INIT: {
+            copy->init.fields = array_create(context->sema->arena, sizeof(AstInitField));
+            for (size_t i = 0; i < ast->init.fields.len; i++) {
+                AstInitField field = ((AstInitField *)ast->init.fields.data)[i];
+                field.value = comp_expand_quoted_expression(context, field.value, splices, ok);
+                array_push(&copy->init.fields, &field);
+            }
+            break;
+        }
+
+        case AST_EXPR_ERROR:
+        case AST_EXPR_LITERAL:
+        case AST_EXPR_IDENT:
+        case AST_EXPR_PATH:
+        case AST_EXPR_TYPE_VALUE:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_SPLICE:
+        case AST_EXPR_QUOTE:
+            break;
+    }
+
+#undef EXPAND_EXPR
+    return copy;
+}
+
+static HirExpr *comp_eval_code(CompContext *context, HirExpr *expr) {
+    if (expr->code.splices.len == 0)
+        return expr;
+
+    bool ok = true;
+    AstExpr *expanded = comp_expand_quoted_expression(
+        context, expr->code.expression, expr->code.splices, &ok);
+    if (!ok || expanded == NULL) {
+        AstExpr *splice = ((HirCodeSplice *)expr->code.splices.data)[0].splice;
+        return comp_code_splice_error(context, splice,
+            STRING("failed to expand expression splice; expected a #code::expr value"));
+    }
+
+    HirExpr *result = arena_calloc(context->sema->arena, sizeof(*result));
+    *result = *expr;
+    result->code.expression = expanded;
+    result->code.splices = array_create(context->sema->arena, sizeof(HirCodeSplice));
+    return result;
+}
+
 HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
     switch (expr->kind) {
         case HIR_EXPR_LITERAL:
-        case HIR_EXPR_CODE:
             return expr;
+
+        case HIR_EXPR_CODE:
+            return comp_eval_code(context, expr);
 
         case HIR_EXPR_VALUE: {
             Symbol *symbol = expr->value.symbol;

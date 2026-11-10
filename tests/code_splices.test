@@ -1,0 +1,20 @@
+name: expand expression splices in code quotations
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+$fn #code::expr<binary> increment(#code::expr<literal> value) {
+    return #{#(value) + 1};
+}
+
+$fn #code::expr<binary> double(#code::expr<binary> value) {
+    return #{#(value) * 2};
+}
+
+$fn int exercise() {
+    #code::expr<binary> result = double(increment(#{3}));
+    return 0;
+}
+
+int trigger = $exercise();

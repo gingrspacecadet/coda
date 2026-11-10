@@ -429,10 +429,11 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
         indent(out, depth + 1);
         fputs("syntax ", out);
         if (expr->code.expression != NULL) {
-            fprintf(out, "[%zu:%zu+%zu]\n",
+            fprintf(out, "[%zu:%zu+%zu] (%zu splices)\n",
                 source_line(expr->code.expression->span.source, expr->code.expression->span.offset),
                 source_column(expr->code.expression->span.source, expr->code.expression->span.offset),
-                expr->code.expression->span.length);
+                expr->code.expression->span.length,
+                expr->code.splices.len);
         } else {
             fputs("<null>\n", out);
         }

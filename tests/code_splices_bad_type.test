@@ -1,0 +1,9 @@
+name: reject non-code expression splices
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn #code::expr<binary> invalid(int value) {
+    return #{#(value) + 1};
+}

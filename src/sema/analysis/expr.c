@@ -1830,6 +1830,102 @@ static CodeNodeKind sema_code_expr_node(AstExprKind kind) {
     }
 }
 
+static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message);
+
+static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) {
+    if (ast == NULL)
+        return true;
+
+    if (ast->kind == AST_EXPR_SPLICE) {
+        HirExpr *value = sema_expr(sema, ast->splice.expression, NULL);
+        if (value == NULL || value->kind == HIR_EXPR_ERROR)
+            return false;
+
+        HirType *type = sema_unwrap_type(value->type);
+        if (type == NULL || type->kind != HIR_TYPE_CODE ||
+            type->code.category != CODE_CATEGORY_EXPR) {
+            sema_code_quote_error(sema, ast,
+                STRING("an expression splice requires a #code::expr value"));
+            return false;
+        }
+
+        HirCodeSplice splice = {.splice = ast, .value = value};
+        array_push(splices, &splice);
+        return true;
+    }
+
+    switch (ast->kind) {
+        case AST_EXPR_UNARY:
+            return sema_code_collect_splices(sema, ast->unary.operand, splices);
+
+        case AST_EXPR_BINARY:
+            return sema_code_collect_splices(sema, ast->binary.left, splices) &&
+                   sema_code_collect_splices(sema, ast->binary.right, splices);
+
+        case AST_EXPR_CALL:
+            if (!sema_code_collect_splices(sema, ast->call.callee, splices))
+                return false;
+            for (size_t i = 0; i < ast->call.args.len; i++) {
+                AstCallArg *arg = array_at(&ast->call.args, i);
+                if (!sema_code_collect_splices(sema, arg->value, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_EXPR_INFERRED_METHOD_CALL:
+            for (size_t i = 0; i < ast->inferred_method_call.args.len; i++) {
+                AstCallArg *arg = array_at(&ast->inferred_method_call.args, i);
+                if (!sema_code_collect_splices(sema, arg->value, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_EXPR_INDEX:
+            return sema_code_collect_splices(sema, ast->index.object, splices) &&
+                   sema_code_collect_splices(sema, ast->index.index, splices);
+
+        case AST_EXPR_MEMBER:
+            return sema_code_collect_splices(sema, ast->member.object, splices);
+
+        case AST_EXPR_CAST:
+            return sema_code_collect_splices(sema, ast->cast.operand, splices);
+
+        case AST_EXPR_INTRINSIC:
+            for (size_t i = 0; i < ast->intrinsic.args.len; i++) {
+                AstIntrinsicArg *arg = array_at(&ast->intrinsic.args, i);
+                if (arg->kind == AST_INTRINSIC_ARG_EXPR &&
+                    !sema_code_collect_splices(sema, arg->expr, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_EXPR_BUBBLE:
+            return sema_code_collect_splices(sema, ast->bubble.operand, splices);
+
+        case AST_EXPR_INIT:
+            for (size_t i = 0; i < ast->init.fields.len; i++) {
+                AstInitField *field = array_at(&ast->init.fields, i);
+                if (!sema_code_collect_splices(sema, field->value, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_EXPR_QUOTE:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_ERROR:
+        case AST_EXPR_LITERAL:
+        case AST_EXPR_IDENT:
+        case AST_EXPR_PATH:
+        case AST_EXPR_TYPE_VALUE:
+            return true;
+
+        case AST_EXPR_SPLICE:
+            break;
+    }
+
+    return false;
+}
+
 static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message) {
     DiagBuilder diagnostic = diag_begin(
         sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, message);
@@ -1924,9 +2020,16 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return sema_code_quote_error(sema, ast,
                     STRING("quoted expression does not match the expected #code::expr selector"));
 
+            Array splices = array_create(sema->arena, sizeof(HirCodeSplice));
+            if (!sema_code_collect_splices(sema, quoted, &splices)) {
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->kind = HIR_EXPR_CODE;
             hir->type = expected;
             hir->code.expression = quoted;
+            hir->code.splices = splices;
             return hir;
         }
 

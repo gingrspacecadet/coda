@@ -12,6 +12,10 @@ typedef struct HirEnumItem HirEnumItem;
 
 typedef struct HirExpr HirExpr;
 typedef struct HirInitField HirInitField;
+typedef struct {
+    AstExpr *splice;
+    HirExpr *value;
+} HirCodeSplice;
 typedef struct HirParam HirParam;
 
 typedef struct HirStmt HirStmt;
@@ -311,6 +315,7 @@ struct HirExpr {
 
         struct {
             AstExpr *expression;
+            Array(HirCodeSplice) splices;
         } code;
 
     };
