@@ -1,0 +1,13 @@
+name: reject invalid function declaration name splices
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+$fn #code::decl<fn> invalid(int value) {
+    return #{
+        fn int #(value)() {
+            return 42;
+        }
+    };
+}

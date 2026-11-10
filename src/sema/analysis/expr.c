@@ -1830,6 +1830,19 @@ static CodeNodeKind sema_code_expr_node(AstExprKind kind) {
     }
 }
 
+static CodeNodeKind sema_code_decl_node(int kind) {
+    switch (kind) {
+        case AST_DECL_INCLUDE: return CODE_NODE_DECL_INCLUDE;
+        case AST_DECL_TYPE: return CODE_NODE_DECL_TYPE;
+        case AST_DECL_VAR: return CODE_NODE_DECL_VAR;
+        case AST_DECL_FN: return CODE_NODE_DECL_FN;
+        case AST_DECL_CONSTRAINT: return CODE_NODE_DECL_CONSTRAINT;
+        case AST_DECL_ERROR:
+        default:
+            return CODE_NODE_ANY;
+    }
+}
+
 static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message);
 
 static bool sema_code_collect_name_splice(
@@ -1987,6 +2000,90 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
     return false;
 }
 
+static bool sema_code_collect_stmt_splices(
+    Sema *sema, AstStmt *stmt, AstExpr *owner, Array *splices
+) {
+    if (stmt == NULL)
+        return true;
+
+    switch (stmt->kind) {
+        case AST_STMT_BLOCK:
+            for (size_t i = 0; i < stmt->block.stmts.len; i++) {
+                AstStmt *child = ((AstStmt **)stmt->block.stmts.data)[i];
+                if (!sema_code_collect_stmt_splices(sema, child, owner, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_STMT_VAR:
+            return sema_code_collect_name_splice(sema, &stmt->var->name, owner, splices) &&
+                   sema_code_collect_splices(sema, stmt->var->init, splices);
+
+        case AST_STMT_EXPR:
+            return sema_code_collect_splices(sema, stmt->expr, splices);
+
+        case AST_STMT_RETURN:
+            return sema_code_collect_splices(sema, stmt->_return.value, splices);
+
+        case AST_STMT_IF:
+            return sema_code_collect_splices(sema, stmt->_if.cond, splices) &&
+                   sema_code_collect_stmt_splices(sema, stmt->_if.then, owner, splices) &&
+                   sema_code_collect_stmt_splices(sema, stmt->_if._else, owner, splices);
+
+        case AST_STMT_FOR:
+            return sema_code_collect_stmt_splices(sema, stmt->_for.init, owner, splices) &&
+                   sema_code_collect_splices(sema, stmt->_for.cond, splices) &&
+                   sema_code_collect_splices(sema, stmt->_for.post, splices) &&
+                   sema_code_collect_stmt_splices(sema, stmt->_for.body, owner, splices);
+
+        case AST_STMT_WHILE:
+            return sema_code_collect_splices(sema, stmt->_while.cond, splices) &&
+                   sema_code_collect_stmt_splices(sema, stmt->_while.body, owner, splices);
+
+        case AST_STMT_MATCH:
+            if (!sema_code_collect_splices(sema, stmt->match.expr, splices))
+                return false;
+            for (size_t i = 0; i < stmt->match.cases.len; i++) {
+                AstMatchCase *case_ = array_at(&stmt->match.cases, i);
+                if (!sema_code_collect_stmt_splices(sema, case_->body, owner, splices))
+                    return false;
+            }
+            return true;
+
+        case AST_STMT_DEFER:
+            return sema_code_collect_stmt_splices(sema, stmt->defer.deferred, owner, splices);
+
+        case AST_STMT_BREAK:
+            return sema_code_collect_splices(sema, stmt->_break.value, splices);
+
+        case AST_STMT_CONTINUE:
+            return sema_code_collect_splices(sema, stmt->_continue.value, splices);
+
+        case AST_STMT_ERROR:
+        default:
+            return true;
+    }
+}
+
+static bool sema_code_collect_decl_splices(
+    Sema *sema, AstDecl *decl, AstExpr *owner, Array *splices
+) {
+    if (decl == NULL || decl->kind != AST_DECL_FN)
+        return false;
+
+    if (!sema_code_collect_name_splice(sema, &decl->fn.name, owner, splices))
+        return false;
+
+    for (size_t i = 0; i < decl->fn.params.len; i++) {
+        AstParam *param = array_at(&decl->fn.params, i);
+        if (!sema_code_collect_name_splice(sema, &param->name, owner, splices) ||
+            !sema_code_collect_splices(sema, param->default_value, splices))
+            return false;
+    }
+
+    return sema_code_collect_stmt_splices(sema, decl->fn.body, owner, splices);
+}
+
 static HirExpr *sema_code_quote_error(Sema *sema, AstExpr *ast, String message) {
     DiagBuilder diagnostic = diag_begin(
         sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, message);
@@ -2057,6 +2154,42 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
     switch (ast->kind) {
         case AST_EXPR_QUOTE: {
+            if (ast->quote.is_declaration) {
+                AstDecl *declaration = ast->quote.declaration;
+                HirType *target = sema_unwrap_type(expected);
+
+                if (declaration == NULL || declaration->kind != AST_DECL_FN)
+                    return sema_code_quote_error(sema, ast,
+                        STRING("only function declarations are supported as declaration quotations"));
+
+                if (target == NULL || target->kind != HIR_TYPE_CODE ||
+                    target->code.category != CODE_CATEGORY_DECL)
+                    return sema_code_quote_error(sema, ast,
+                        STRING("a function declaration quotation requires a #code::decl destination"));
+
+                if (target->code.node != CODE_NODE_ANY &&
+                    target->code.node != sema_code_decl_node(declaration->kind))
+                    return sema_code_quote_error(sema, ast,
+                        STRING("quoted declaration does not match the expected #code::decl selector"));
+
+                if (sema->current_fn == NULL || !sema->current_fn->is_comptime)
+                    return sema_code_quote_error(sema, ast,
+                        STRING("#code values can only be created inside a comptime function"));
+
+                Array splices = array_create(sema->arena, sizeof(HirCodeSplice));
+                if (!sema_code_collect_decl_splices(sema, declaration, ast, &splices)) {
+                    hir->kind = HIR_EXPR_ERROR;
+                    return hir;
+                }
+
+                hir->kind = HIR_EXPR_CODE;
+                hir->type = expected;
+                hir->code.declaration = declaration;
+                hir->code.splices = splices;
+                hir->code.is_decl = true;
+                return hir;
+            }
+
             AstExpr *quoted = ast->quote.expression;
             if (quoted == NULL || quoted->kind == AST_EXPR_ERROR) {
                 hir->kind = HIR_EXPR_ERROR;
@@ -2082,6 +2215,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 hir->type = expected;
                 hir->code.name = quoted->ident;
                 hir->code.is_name = true;
+                hir->code.is_decl = false;
                 hir->code.splices = array_create(sema->arena, sizeof(HirCodeSplice));
                 return hir;
             }
@@ -2111,6 +2245,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->code.expression = quoted;
             hir->code.splices = splices;
             hir->code.is_name = false;
+            hir->code.is_decl = false;
             return hir;
         }
 

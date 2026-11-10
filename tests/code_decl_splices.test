@@ -1,0 +1,28 @@
+name: quote and expand function declarations
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+$fn #code::name<ident> generated_name() {
+    return #{generated};
+}
+
+$fn #code::decl<fn> make_function() {
+    return #{
+        fn int #(generated_name())() {
+            return 42;
+        }
+    };
+}
+
+$fn #code::decl<fn> forward(#code::decl<fn> value) {
+    return value;
+}
+
+$fn int exercise() {
+    forward(make_function());
+    return 0;
+}
+
+int trigger = $exercise();

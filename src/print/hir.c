@@ -427,6 +427,17 @@ static void print_expr(FILE *out, const HirExpr *expr, unsigned depth) {
 
     case HIR_EXPR_CODE:
         indent(out, depth + 1);
+        if (expr->code.is_decl) {
+            fputs("declaration ", out);
+            if (expr->code.declaration != NULL)
+                fprintf(out, "[%zu:%zu+%zu]\n",
+                    source_line(expr->code.declaration->span.source, expr->code.declaration->span.offset),
+                    source_column(expr->code.declaration->span.source, expr->code.declaration->span.offset),
+                    expr->code.declaration->span.length);
+            else
+                fputs("<null>\n", out);
+            break;
+        }
         if (expr->code.is_name) {
             fputs("name ", out);
             if (expr->code.name.kind == AST_NAME_IDENT)

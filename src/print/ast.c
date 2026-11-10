@@ -196,6 +196,7 @@ static const char *binary_op_name(AstBinaryOp op) {
 static void print_type(FILE *out, const AstType *type, unsigned depth);
 
 static void print_stmt(FILE *out, const AstStmt *stmt, unsigned depth);
+static void print_decl(FILE *out, const AstDecl *decl, unsigned depth);
 
 static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
     indent(out, depth);
@@ -390,7 +391,10 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
         break;
 
     case AST_EXPR_QUOTE:
-        print_expr(out, expr->quote.expression, depth + 1);
+        if (expr->quote.is_declaration)
+            print_decl(out, expr->quote.declaration, depth + 1);
+        else
+            print_expr(out, expr->quote.expression, depth + 1);
         break;
 
     case AST_EXPR_ERROR:

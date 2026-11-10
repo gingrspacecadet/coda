@@ -382,7 +382,23 @@ AstExpr *parse_hash_expression(Parser *p) {
     if (match(p, TK_LBRACE)) {
         AstExpr *expr = arena_calloc(p->arena, sizeof(*expr));
         expr->kind = AST_EXPR_QUOTE;
-        expr->quote.expression = parse_expression(p);
+
+        /* A declaration is unambiguous at these starting tokens. */
+        if (at(p, TK_KW_FN) || at(p, TK_DOLLAR) || at(p, TK_AT)) {
+            Checkpoint cp = checkpoint(p);
+            AstDecl *decl = parse_decl(p);
+
+            if (decl != NULL && decl->kind == AST_DECL_FN &&
+                at(p, TK_RBRACE) && p->diags->diags.len == cp.diagnostic_count) {
+                expr->quote.declaration = decl;
+                expr->quote.is_declaration = true;
+            } else {
+                restore(p, cp);
+            }
+        }
+
+        if (!expr->quote.is_declaration)
+            expr->quote.expression = parse_expression(p);
 
         expect(p, TK_RBRACE);
 

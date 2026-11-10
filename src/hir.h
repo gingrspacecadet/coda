@@ -319,9 +319,11 @@ struct HirExpr {
 
         struct {
             AstExpr *expression;
+            AstDecl *declaration;
             AstName name;
             Array(HirCodeSplice) splices;
             bool is_name;
+            bool is_decl;
         } code;
 
     };

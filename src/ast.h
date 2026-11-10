@@ -355,6 +355,8 @@ struct AstExpr {
 
         struct {
             AstExpr *expression;
+            AstDecl *declaration;
+            bool is_declaration;
         } quote;
     };
 };
