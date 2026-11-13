@@ -1,0 +1,15 @@
+name: recursive struct through mutable pointer
+expect: pass
+stop: hir
+errors: 0
+
+[source]
+type Node = struct {
+    uint32 value;
+    mut Node *? next;
+};
+
+fn none set_value(mut Node * node) {
+    node.value = 1;
+}
+

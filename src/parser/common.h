@@ -14,6 +14,18 @@ void error_expected_pattern(Diags *diags, Span span);
 void error_unexpected_token(Diags *diags, TokenType token, Span span);
 
 static inline bool number_is_float(String s) {
+    if (s.length >= 2 && s.data[0] == '0') {
+        switch (s.data[1]) {
+            case 'x':
+            case 'X':
+            case 'b':
+            case 'B':
+            case 'o':
+            case 'O':
+                return false;
+        }
+    }
+
     for (size_t i = 0; i < s.length; i++) {
         if (s.data[i] == '.' || s.data[i] == 'e' || s.data[i] == 'E')
             return true;

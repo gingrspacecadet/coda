@@ -1,0 +1,12 @@
+name: hexadecimal integer literals containing exponent letters
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+uint32 heap_limit = 0xE0000000;
+uint32 deadbeef = 0xDEADBEEF;
+uint32 face = 0xFACEB00C;
+
+fn int64 main() {
+    return 0;
