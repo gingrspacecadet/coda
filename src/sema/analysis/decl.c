@@ -274,7 +274,6 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     fn->body = sema_stmt(sema, ast->body);
 
     if (fn->body == NULL || fn->body->kind == HIR_STMT_ERROR) {
-        fprintf(stderr, "internal compiler error: dropping body of function %.*s\n", string_fmt(fn->symbol->name.ident));
         sema->current_fn = previous_fn;
         sema_pop_scope(sema);
         return;
@@ -323,13 +322,42 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed, bool alias) {
 
     symbol->span = ast->span;
 
+    HirType *recursive_type = NULL;
+    if (!alias && ast->type->kind == AST_TYPE_STRUCT) {
+        recursive_type = arena_calloc(sema->arena, sizeof(*recursive_type));
+        *recursive_type = (HirType){
+            .kind = HIR_TYPE_STRUCT,
+            .mutable = false,
+            .align = 1,
+            .nominal = symbol,
+            .structure.fields = array_create(sema->arena, sizeof(HirField)),
+        };
+        symbol->type = recursive_type;
+    } else if (!alias && ast->type->kind == AST_TYPE_UNION) {
+        recursive_type = arena_calloc(sema->arena, sizeof(*recursive_type));
+        *recursive_type = (HirType){
+            .kind = HIR_TYPE_UNION,
+            .mutable = false,
+            .align = 1,
+            .nominal = symbol,
+            .union_.fields = array_create(sema->arena, sizeof(HirField)),
+        };
+        symbol->type = recursive_type;
+    }
+
+    symbol->type_resolving = true;
     HirType *base = sema_type(sema, ast->type);
 
-    if (base == NULL || base->kind == HIR_TYPE_ERROR)
+    if (base == NULL || base->kind == HIR_TYPE_ERROR) {
+        symbol->type = NULL;
+        symbol->mutable_type = NULL;
+        symbol->type_resolving = false;
         return;
+    }
 
     if (alias) {
         symbol->type = base;
+        symbol->type_resolving = false;
         return;
     }
 
@@ -344,13 +372,28 @@ void sema_type_decl(Sema *sema, AstTypeDecl *ast, bool packed, bool alias) {
         base->align = 1;
     }
 
-    HirType *type = arena_calloc(sema->arena, sizeof(*type));
-    *type = *base;
-    type->mutable = false;
-    type->nominal = symbol;
-    type->base = base;
+    HirType *type;
+    if (recursive_type != NULL) {
+        type = recursive_type;
+        *type = *base;
+        type->mutable = false;
+        type->nominal = symbol;
+        type->base = base;
+    } else {
+        type = arena_calloc(sema->arena, sizeof(*type));
+        *type = *base;
+        type->mutable = false;
+        type->nominal = symbol;
+        type->base = base;
+    }
 
     symbol->type = type;
+    symbol->type_resolving = false;
+
+    if (symbol->mutable_type != NULL) {
+        *symbol->mutable_type = *type;
+        symbol->mutable_type->mutable = true;
+    }
 
     if (type->kind == HIR_TYPE_ENUM) {
         Array(HirEnumItem) inherited_items = type->_enum.items;

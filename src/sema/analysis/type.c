@@ -479,6 +479,38 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 return hir;
             }
 
+            if (symbol->type_resolving) {
+                if (symbol->type == NULL || sema->type_indirection_depth == 0) {
+                    DiagBuilder diagnostic = diag_begin(
+                        sema->diags,
+                        DIAG_ERROR,
+                        E_TYPE_MISMATCH,
+                        ast->span,
+                        symbol->type == NULL
+                            ? STRING("recursive type reference requires an incomplete struct or union")
+                            : STRING("recursive type has infinite size")
+                    );
+                    diag_note(&diagnostic, symbol->type == NULL
+                        ? STRING("recursive references must target a nominal struct or union")
+                        : STRING("use a pointer or slice to break the recursive definition"));
+                    diag_finish(&diagnostic);
+                    hir->kind = HIR_TYPE_ERROR;
+                    hir->align = 1;
+                    return hir;
+                }
+
+                if (ast->mutable) {
+                    if (symbol->mutable_type == NULL) {
+                        symbol->mutable_type = arena_calloc(sema->arena, sizeof(*symbol->mutable_type));
+                        *symbol->mutable_type = *symbol->type;
+                        symbol->mutable_type->mutable = true;
+                    }
+                    return symbol->mutable_type;
+                }
+
+                return symbol->type;
+            }
+
             if (symbol->type == NULL) {
                 hir->kind = HIR_TYPE_ERROR;
                 return hir;
@@ -653,6 +685,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
             hir->kind = HIR_TYPE_FUNCTION;
             hir->size = sema->target->pointer.size;
             hir->align = sema->target->pointer.align;
+            sema->type_indirection_depth++;
             hir->function.ret = sema_type(sema, ast->fn.ret);
             hir->function.params = array_create(sema->arena, sizeof(HirType *));
 
@@ -662,6 +695,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 HirType *type = sema_type(sema, param);
                 array_push(&hir->function.params, &type);
             }
+            sema->type_indirection_depth--;
             break;
 
         case AST_TYPE_SUM: {

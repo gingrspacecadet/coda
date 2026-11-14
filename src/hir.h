@@ -475,6 +475,8 @@ struct Symbol {
     Scope *owner_scope;
     Symbol *canonical;
     bool is_exported;
+    bool type_resolving;
+    HirType *mutable_type;
 };
 
 static inline String symbol_link_name(const Symbol *symbol) {

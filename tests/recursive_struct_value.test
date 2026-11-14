@@ -1,0 +1,10 @@
+name: reject infinitely sized recursive struct
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+type Node = struct {
+    Node next;
+};
+
