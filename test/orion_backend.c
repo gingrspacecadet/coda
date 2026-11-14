@@ -348,3 +348,85 @@ bool test_orion_packed_field_access(void) {
     return emitted && generated_len > 0 && lowered_unaligned_load &&
            lowered_unaligned_store && byte_load && byte_store;
 }
+
+bool test_orion_constant_unaligned_pointer(void) {
+    Arena *arena = arena_create();
+    const TargetInfo *target = target_builtin("orion");
+    HirType *uint32_type = builtin_type(arena, BUILTIN_UINT32, 4, 4);
+    HirType *pointer_type = arena_calloc(arena, sizeof(*pointer_type));
+    *pointer_type = (HirType){
+        .kind = HIR_TYPE_POINTER,
+        .size = 4,
+        .align = 4,
+        .pointer = {.pointee = uint32_type, .optional = false},
+    };
+
+    HirExpr *address = arena_calloc(arena, sizeof(*address));
+    *address = (HirExpr){
+        .kind = HIR_EXPR_LITERAL,
+        .type = pointer_type,
+        .literal = {.kind = HIR_LITERAL_INTEGER, .integer = UINT32_C(0x0003B276)},
+    };
+
+    HirExpr *dereference = arena_calloc(arena, sizeof(*dereference));
+    *dereference = (HirExpr){
+        .kind = HIR_EXPR_UNARY,
+        .type = uint32_type,
+        .unary = {.op = AST_UNARY_DEREF, .operand = address},
+    };
+
+    HirStmt *ret = arena_calloc(arena, sizeof(*ret));
+    *ret = (HirStmt){
+        .kind = HIR_STMT_RETURN,
+        ._return = {.value = dereference},
+    };
+
+    HirFunction hir_function = {
+        .symbol = make_symbol(arena, "constant_unaligned_pointer"),
+        .return_type = uint32_type,
+        .params = array_create(arena, sizeof(HirParam)),
+        .locals = array_create(arena, sizeof(HirLocal)),
+        .body = ret,
+    };
+    HirModule hir = {
+        .globals = array_create(arena, sizeof(HirGlobal)),
+        .functions = array_create(arena, sizeof(HirFunction)),
+    };
+    array_push(&hir.functions, &hir_function);
+
+    LirModule *module = lir_lower_module(arena, &hir, target);
+    LirFunction *function = ((LirFunction **)module->functions.data)[0];
+    bool records_two_byte_alignment = false;
+    for (size_t i = 0; i < function->blocks.len; i++) {
+        LirBlock *block = ((LirBlock **)function->blocks.data)[i];
+        for (size_t j = 0; j < block->instructions.len; j++) {
+            LirInstruction *instruction = &((LirInstruction *)block->instructions.data)[j];
+            if (instruction->opcode == LIR_OP_LOAD) {
+                LirOperand *operands = instruction->operands.data;
+                records_two_byte_alignment = operands[0].alignment == 2;
+            }
+        }
+    }
+
+    const BackendApi *backend = orion_backend();
+    char *generated = NULL;
+    size_t generated_len = 0;
+    FILE *out = open_memstream(&generated, &generated_len);
+    bool emitted = out != NULL &&
+                   backend->emit(&(Backend){.api = backend}, target, module, out);
+    if (out != NULL && fclose(out) != 0)
+        emitted = false;
+
+    char *function_output = generated != NULL
+        ? strstr(generated, "constant_unaligned_pointer:")
+        : NULL;
+    bool uses_byte_loads = function_output != NULL &&
+        strstr(function_output, "ldrb r12, [r14 + #3]\n") != NULL;
+    bool avoids_word_load = function_output != NULL &&
+        strstr(function_output, "ldr r0, [r14]\n") == NULL;
+
+    free(generated);
+    arena_destroy(arena);
+    return emitted && generated_len > 0 && records_two_byte_alignment &&
+           uses_byte_loads && avoids_word_load;
+}

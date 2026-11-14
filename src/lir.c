@@ -164,8 +164,33 @@ static void lir_assert_block_args(LirFunction *function, LirBlockId block_id, Ar
     }
 }
 
+static void lir_update_block_param_alignments(LirFunction *function,
+                                               LirBlockId block_id,
+                                               Array(LirOperand) args) {
+    LirBlock *block = lir_get_block(function, block_id);
+
+    for (size_t i = 0; i < args.len; i++) {
+        LirBlockParam *param = &((LirBlockParam *)block->params.data)[i];
+        HirType *type = param->type;
+        while (type != NULL && type->base != NULL)
+            type = type->base;
+
+        if (type == NULL || type->kind != HIR_TYPE_POINTER)
+            continue;
+
+        /* A missing guarantee means byte alignment, not pointee alignment. */
+        size_t incoming = ((LirOperand *)args.data)[i].alignment;
+        if (incoming == 0)
+            incoming = 1;
+
+        if (param->alignment == 0 || incoming < param->alignment)
+            param->alignment = incoming;
+    }
+}
+
 void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Array(LirOperand) args) {
     lir_assert_block_args(function, target, args);
+    lir_update_block_param_alignments(function, target, args);
 
     LirTerminator terminator = {
         .kind = LIR_TERM_JUMP,
@@ -182,6 +207,8 @@ void lir_jump(LirFunction *function, LirBlockId block_id, LirBlockId target, Arr
 void lir_branch(LirFunction *function, LirBlockId block_id, LirOperand condition, LirBlockId then_block, Array(LirOperand) then_args, LirBlockId else_block, Array(LirOperand) else_args) {
     lir_assert_block_args(function, then_block, then_args);
     lir_assert_block_args(function, else_block, else_args);
+    lir_update_block_param_alignments(function, then_block, then_args);
+    lir_update_block_param_alignments(function, else_block, else_args);
 
     LirTerminator terminator = {
         .kind = LIR_TERM_BRANCH,

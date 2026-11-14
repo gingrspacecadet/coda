@@ -338,12 +338,23 @@ static size_t emit_alignment_after_offset(size_t alignment, size_t offset) {
 }
 
 static size_t emit_address_alignment(const LirOperand *address) {
-    if (address->alignment != 0)
-        return address->alignment;
-    HirType *type = base_type(address->type);
-    if (type != NULL && type->kind == HIR_TYPE_POINTER && type->pointer.pointee != NULL)
-        return type_align(type->pointer.pointee);
-    return 1;
+    size_t alignment = address->alignment;
+
+    if (address->kind == LIR_OPERAND_INT ||
+        address->kind == LIR_OPERAND_UINT) {
+        uint32_t value = address->kind == LIR_OPERAND_INT
+            ? (uint32_t)address->int_value
+            : (uint32_t)address->uint_value;
+
+        if (value != 0) {
+            size_t actual = (size_t)(value & (~value + 1u));
+
+            if (alignment == 0 || actual < alignment)
+                alignment = actual;
+        }
+    }
+
+    return alignment != 0 ? alignment : 1;
 }
 
 static bool emit_load_slot_chunk(OrionFunction *function, LirValueId value, size_t byte_offset, int dest) {
@@ -1080,6 +1091,7 @@ static bool emit_load(OrionFunction *function, const LirInstruction *instruction
     HirType *type = instruction->result_type;
     size_t size = type_size(type);
     size_t alignment = emit_address_alignment(&operands[0]);
+
     if (!type_is_supported_value(type))
         return fail(function, "unsupported load type");
     if (!emit_operand_scalar(function, &operands[0], ORION_R14))

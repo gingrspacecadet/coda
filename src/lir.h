@@ -94,6 +94,7 @@ typedef enum {
 typedef struct {
     LirValueId value;
     HirType *type;
+    size_t alignment;
 } LirBlockParam;
 
 typedef struct {

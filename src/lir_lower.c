@@ -389,6 +389,23 @@ static size_t lir_alignment_after_offset(size_t alignment, size_t offset) {
 }
 
 static size_t lir_pointer_alignment(LirOperand pointer) {
+    /* A compile-time integer-to-pointer cast may be folded into an integer
+     * literal before LIR lowering. In that case there is no HIR_EXPR_CAST
+     * from which to inherit alignment: derive it from the actual address.
+     * Clamp any existing alignment metadata too: it may describe the
+     * pointer type's natural alignment, not this literal address. */
+    if (pointer.kind == LIR_OPERAND_INT || pointer.kind == LIR_OPERAND_UINT) {
+        uint32_t address = pointer.kind == LIR_OPERAND_INT
+            ? (uint32_t)pointer.int_value
+            : (uint32_t)pointer.uint_value;
+        if (address != 0) {
+            size_t actual = (size_t)(address & (~address + 1u));
+            if (pointer.alignment == 0 || pointer.alignment > actual)
+                return actual;
+            return pointer.alignment;
+        }
+    }
+
     if (pointer.alignment != 0)
         return pointer.alignment;
 
@@ -1316,7 +1333,9 @@ static void lir_lower_if(LirLower *lower, HirStmt *stmt) {
         LirBinding *binding = &((LirBinding *)snapshot.data)[i];
         LirBlockParam *param = &((LirBlockParam *)lir_lower_block(lower)->params.data)[i];
 
-        lir_bind(lower, binding->symbol, lir_operand_value(param->value, param->type));
+        LirOperand value = lir_operand_value(param->value, param->type);
+        value.alignment = param->alignment;
+        lir_bind(lower, binding->symbol, value);
     }
 }
 
@@ -1335,7 +1354,9 @@ static void lir_bind_snapshot_params(LirLower *lower, LirBlockId block, Array(Li
         LirBinding *binding = &((LirBinding *)snapshot->data)[i];
         LirBlockParam *param = &((LirBlockParam *)target->params.data)[i];
 
-        lir_bind(lower, binding->symbol, lir_operand_value(param->value, param->type));
+        LirOperand value = lir_operand_value(param->value, param->type);
+        value.alignment = param->alignment;
+        lir_bind(lower, binding->symbol, value);
     }
 }
 
