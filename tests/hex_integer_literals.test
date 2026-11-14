@@ -10,3 +10,4 @@ uint32 face = 0xFACEB00C;
 
 fn int64 main() {
     return 0;
+}
