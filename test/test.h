@@ -62,5 +62,6 @@ bool test_mangling(void);
 bool test_orion_backend(void);
 bool test_orion_unary_not(void);
 bool test_extern_lowering(void);
+bool test_orion_packed_field_access(void);
 
 #endif

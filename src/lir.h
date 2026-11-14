@@ -31,6 +31,8 @@ typedef struct {
     LirOperandKind kind;
     HirType *type;
 
+    size_t alignment;
+
     union {
         LirValueId value;
         int64_t int_value;

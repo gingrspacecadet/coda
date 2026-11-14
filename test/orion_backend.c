@@ -222,3 +222,129 @@ bool test_orion_unary_not(void) {
     return emitted && generated_len > 0 &&
            logical_uses_boolean_inversion && integer_uses_bitwise_inversion;
 }
+
+bool test_orion_packed_field_access(void) {
+    Arena *arena = arena_create();
+    const TargetInfo *target = target_builtin("orion");
+    HirType *uint16_type = builtin_type(arena, BUILTIN_UINT16, 2, 2);
+    HirType *uint32_type = builtin_type(arena, BUILTIN_UINT32, 4, 4);
+    HirType *packed_type = arena_calloc(arena, sizeof(*packed_type));
+    *packed_type = (HirType){
+        .kind = HIR_TYPE_STRUCT,
+        .size = 6,
+        .align = 1,
+        .structure = {.fields = array_create(arena, sizeof(HirField))},
+    };
+    HirField prefix = {.symbol = make_symbol(arena, "prefix"), .type = uint16_type, .offset = 0};
+    HirField word = {.symbol = make_symbol(arena, "word"), .type = uint32_type, .offset = 2};
+    array_push(&packed_type->structure.fields, &prefix);
+    array_push(&packed_type->structure.fields, &word);
+
+    HirType *pointer_type = arena_calloc(arena, sizeof(*pointer_type));
+    *pointer_type = (HirType){
+        .kind = HIR_TYPE_POINTER,
+        .size = 4,
+        .align = 4,
+        .pointer = {.pointee = packed_type, .optional = false},
+    };
+
+    Symbol *function_symbol = make_symbol(arena, "packed_field_roundtrip");
+    Symbol *parameter_symbol = make_symbol(arena, "packed");
+    parameter_symbol->kind = SYMBOL_PARAMETER;
+
+    HirExpr *parameter = arena_calloc(arena, sizeof(*parameter));
+    *parameter = (HirExpr){
+        .kind = HIR_EXPR_VALUE,
+        .type = pointer_type,
+        .value = {.symbol = parameter_symbol},
+    };
+
+    HirExpr *dereference = arena_calloc(arena, sizeof(*dereference));
+    *dereference = (HirExpr){
+        .kind = HIR_EXPR_UNARY,
+        .type = packed_type,
+        .unary = {.op = AST_UNARY_DEREF, .operand = parameter},
+    };
+
+    HirExpr *field = arena_calloc(arena, sizeof(*field));
+    *field = (HirExpr){
+        .kind = HIR_EXPR_FIELD,
+        .type = uint32_type,
+        .field = {.object = dereference, .field = &((HirField *)packed_type->structure.fields.data)[1]},
+    };
+
+    HirExpr *value = arena_calloc(arena, sizeof(*value));
+    *value = (HirExpr){
+        .kind = HIR_EXPR_LITERAL,
+        .type = uint32_type,
+        .literal = {.kind = HIR_LITERAL_INTEGER, .integer = UINT32_C(0x12345678)},
+    };
+
+    HirStmt *assign = arena_calloc(arena, sizeof(*assign));
+    *assign = (HirStmt){
+        .kind = HIR_STMT_ASSIGN,
+        .assign = {.op = AST_BINARY_ASSIGN, .target = field, .value = value},
+    };
+
+    HirExpr *return_field = arena_calloc(arena, sizeof(*return_field));
+    *return_field = *field;
+    HirStmt *ret = arena_calloc(arena, sizeof(*ret));
+    *ret = (HirStmt){.kind = HIR_STMT_RETURN, ._return = {.value = return_field}};
+
+    HirStmt *body = arena_calloc(arena, sizeof(*body));
+    *body = (HirStmt){
+        .kind = HIR_STMT_BLOCK,
+        .block = {.stmts = array_create(arena, sizeof(HirStmt *))},
+    };
+    array_push(&body->block.stmts, &assign);
+    array_push(&body->block.stmts, &ret);
+
+    HirFunction hir_function = {
+        .symbol = function_symbol,
+        .return_type = uint32_type,
+        .params = array_create(arena, sizeof(HirParam)),
+        .locals = array_create(arena, sizeof(HirLocal)),
+        .body = body,
+    };
+    HirParam parameter_decl = {.symbol = parameter_symbol, .type = pointer_type};
+    array_push(&hir_function.params, &parameter_decl);
+
+    HirModule hir = {
+        .globals = array_create(arena, sizeof(HirGlobal)),
+        .functions = array_create(arena, sizeof(HirFunction)),
+    };
+    array_push(&hir.functions, &hir_function);
+
+    LirModule *module = lir_lower_module(arena, &hir, target);
+    bool lowered_unaligned_load = false;
+    bool lowered_unaligned_store = false;
+    LirFunction *lowered_function = ((LirFunction **)module->functions.data)[0];
+    for (size_t i = 0; i < lowered_function->blocks.len; i++) {
+        LirBlock *block = ((LirBlock **)lowered_function->blocks.data)[i];
+        for (size_t j = 0; j < block->instructions.len; j++) {
+            LirInstruction *instruction = &((LirInstruction *)block->instructions.data)[j];
+            if (instruction->opcode == LIR_OP_LOAD)
+                lowered_unaligned_load = ((LirOperand *)instruction->operands.data)[0].alignment == 1;
+            if (instruction->opcode == LIR_OP_STORE)
+                lowered_unaligned_store = ((LirOperand *)instruction->operands.data)[0].alignment == 1;
+        }
+    }
+
+    const BackendApi *backend = orion_backend();
+    char *generated = NULL;
+    size_t generated_len = 0;
+    FILE *out = open_memstream(&generated, &generated_len);
+    bool emitted = out != NULL && backend->emit(&(Backend){.api = backend}, target, module, out);
+    if (out != NULL && fclose(out) != 0)
+        emitted = false;
+
+    bool byte_load = generated != NULL &&
+        strstr(generated, "ldrb r12, [r14 + #3]\n") != NULL;
+    bool byte_store = generated != NULL &&
+        strstr(generated, "strb r12, [r14 + #3]\n") != NULL;
+
+    free(generated);
+    arena_destroy(arena);
+    return emitted && generated_len > 0 && lowered_unaligned_load &&
+           lowered_unaligned_store && byte_load && byte_store;
+}

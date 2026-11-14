@@ -9,7 +9,7 @@
 #include "target.h"
 
 #define CODA_BACKEND_ABI_VERSION 1
-#define CODA_LIR_ABI_VERSION 1
+#define CODA_LIR_ABI_VERSION 2
 
 typedef struct Backend Backend;
 

@@ -305,6 +305,47 @@ static bool emit_store_byte_at(OrionFunction *function, int base, int64_t offset
     return true;
 }
 
+static bool emit_load_unaligned_word_at(OrionFunction *function, int base, int64_t offset, int dest) {
+    emit_mov_imm(function->out, dest, 0);
+    for (size_t i = 0; i < 4; i++) {
+        emit_load_byte_at(function, base, offset + (int64_t)i, ORION_R12);
+        if (i != 0)
+            fprintf(function->out, "    shl r12, r12, #%zu\n", i * 8);
+        fprintf(function->out, "    or r%d, r%d, r12\n", dest, dest);
+    }
+    return true;
+}
+
+static bool emit_store_unaligned_word_at(OrionFunction *function, int base, int64_t offset, int src) {
+    for (size_t i = 0; i < 4; i++) {
+        if (i == 0) {
+            emit_store_byte_at(function, base, offset, src);
+        } else {
+            fprintf(function->out, "    shr r12, r%d, #%zu\n", src, i * 8);
+            emit_store_byte_at(function, base, offset + (int64_t)i, ORION_R12);
+        }
+    }
+    return true;
+}
+
+static size_t emit_alignment_after_offset(size_t alignment, size_t offset) {
+    if (alignment == 0)
+        alignment = 1;
+    if (offset == 0)
+        return alignment;
+    size_t offset_alignment = offset & (~offset + 1);
+    return alignment < offset_alignment ? alignment : offset_alignment;
+}
+
+static size_t emit_address_alignment(const LirOperand *address) {
+    if (address->alignment != 0)
+        return address->alignment;
+    HirType *type = base_type(address->type);
+    if (type != NULL && type->kind == HIR_TYPE_POINTER && type->pointer.pointee != NULL)
+        return type_align(type->pointer.pointee);
+    return 1;
+}
+
 static bool emit_load_slot_chunk(OrionFunction *function, LirValueId value, size_t byte_offset, int dest) {
     OrionSlot *slot;
     HirType *type;
@@ -348,7 +389,7 @@ static void emit_sign_extend(FILE *out, int reg, size_t size) {
 }
 
 static bool emit_load_scalar_memory(OrionFunction *function, int base, int64_t offset,
-                                    HirType *type, int dest) {
+                                    HirType *type, int dest, size_t alignment) {
     size_t size = type_size(type);
     if (size == 1) {
         emit_load_byte_at(function, base, offset, dest);
@@ -359,7 +400,10 @@ static bool emit_load_scalar_memory(OrionFunction *function, int base, int64_t o
         fprintf(function->out, "    shl r%d, r%d, #8\n", temp, temp);
         fprintf(function->out, "    or r%d, r%d, r%d\n", dest, dest, temp);
     } else if (size == 4) {
-        emit_load_word_at(function, base, offset, dest);
+        if (alignment >= 4)
+            emit_load_word_at(function, base, offset, dest);
+        else
+            emit_load_unaligned_word_at(function, base, offset, dest);
     } else {
         return fail(function, "scalar memory load requires a 1-, 2-, or 4-byte type");
     }
@@ -369,7 +413,7 @@ static bool emit_load_scalar_memory(OrionFunction *function, int base, int64_t o
 }
 
 static bool emit_store_scalar_memory(OrionFunction *function, int base, int64_t offset,
-                                     HirType *type, int src) {
+                                     HirType *type, int src, size_t alignment) {
     size_t size = type_size(type);
     if (size == 1) {
         emit_store_byte_at(function, base, offset, src);
@@ -379,7 +423,10 @@ static bool emit_store_scalar_memory(OrionFunction *function, int base, int64_t 
         fprintf(function->out, "    shr r%d, r%d, #8\n", temp, src);
         emit_store_byte_at(function, base, offset + 1, temp);
     } else if (size == 4) {
-        emit_store_word_at(function, base, offset, src);
+        if (alignment >= 4)
+            emit_store_word_at(function, base, offset, src);
+        else
+            emit_store_unaligned_word_at(function, base, offset, src);
     } else {
         return fail(function, "scalar memory store requires a 1-, 2-, or 4-byte type");
     }
@@ -393,7 +440,7 @@ static bool emit_load_scalar_slot(OrionFunction *function, LirValueId value, int
         return false;
     if (type_size(type) == 8)
         return fail(function, "internal error: scalar-slot load requested for a 64-bit value");
-    return emit_load_scalar_memory(function, ORION_FP, slot_relative(slot, 0), type, dest);
+    return emit_load_scalar_memory(function, ORION_FP, slot_relative(slot, 0), type, dest, 4);
 }
 
 static bool emit_operand_chunk(OrionFunction *function, const LirOperand *operand,
@@ -627,7 +674,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
 
 static void emit_string(FILE *out, const LirString *string) {
     String name = symbol_link_name(string->symbol);
-    fprintf(out, "\n.section .rodata\n%.*s:\n", string_fmt(name));
+    fprintf(out, "\n.section .rodata\n.align #4\n%.*s:\n", string_fmt(name));
     if (string->bytes.length == 0) {
         fprintf(out, "    .byte #0\n");
         return;
@@ -1032,6 +1079,7 @@ static bool emit_load(OrionFunction *function, const LirInstruction *instruction
     LirOperand *operands = instruction->operands.data;
     HirType *type = instruction->result_type;
     size_t size = type_size(type);
+    size_t alignment = emit_address_alignment(&operands[0]);
     if (!type_is_supported_value(type))
         return fail(function, "unsupported load type");
     if (!emit_operand_scalar(function, &operands[0], ORION_R14))
@@ -1040,12 +1088,17 @@ static bool emit_load(OrionFunction *function, const LirInstruction *instruction
     if (type_is_aggregate(type))
         return emit_copy_address_to_slot(function, ORION_R14, instruction->result, size);
     if (size == 8) {
-        emit_load_word_at(function, ORION_R14, 0, ORION_R0);
-        emit_load_word_at(function, ORION_R14, 4, ORION_R1);
+        if (alignment >= 4) {
+            emit_load_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_load_word_at(function, ORION_R14, 4, ORION_R1);
+        } else {
+            emit_load_unaligned_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_load_unaligned_word_at(function, ORION_R14, 4, ORION_R1);
+        }
         return emit_store_result_word(function, instruction->result, 0, ORION_R0) &&
                emit_store_result_word(function, instruction->result, 4, ORION_R1);
     }
-    if (!emit_load_scalar_memory(function, ORION_R14, 0, type, ORION_R0))
+    if (!emit_load_scalar_memory(function, ORION_R14, 0, type, ORION_R0, alignment))
         return false;
     return emit_store_result_word(function, instruction->result, 0, ORION_R0);
 }
@@ -1054,6 +1107,7 @@ static bool emit_store(OrionFunction *function, const LirInstruction *instructio
     LirOperand *operands = instruction->operands.data;
     HirType *type = operands[1].type;
     size_t size = type_size(type);
+    size_t alignment = emit_address_alignment(&operands[0]);
     if (!type_is_supported_value(type))
         return fail(function, "unsupported store type");
     if (!emit_operand_scalar(function, &operands[0], ORION_R14))
@@ -1067,13 +1121,18 @@ static bool emit_store(OrionFunction *function, const LirInstruction *instructio
         if (!emit_operand_chunk(function, &operands[1], 0, ORION_R0) ||
             !emit_operand_chunk(function, &operands[1], 4, ORION_R1))
             return false;
-        emit_store_word_at(function, ORION_R14, 0, ORION_R0);
-        emit_store_word_at(function, ORION_R14, 4, ORION_R1);
+        if (alignment >= 4) {
+            emit_store_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_store_word_at(function, ORION_R14, 4, ORION_R1);
+        } else {
+            emit_store_unaligned_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_store_unaligned_word_at(function, ORION_R14, 4, ORION_R1);
+        }
         return true;
     }
     if (!emit_operand_chunk(function, &operands[1], 0, ORION_R0))
         return false;
-    return emit_store_scalar_memory(function, ORION_R14, 0, type, ORION_R0);
+    return emit_store_scalar_memory(function, ORION_R14, 0, type, ORION_R0, alignment);
 }
 
 static bool emit_call(OrionFunction *function, const LirInstruction *instruction) {
@@ -1177,15 +1236,25 @@ static bool emit_extract(OrionFunction *function, const LirInstruction *instruct
 
     HirType *result_type = instruction->result_type;
     size_t size = type_size(result_type);
+    size_t base_alignment = type_align(operands[0].type);
+    if (base_alignment < 4) base_alignment = 4;
+    size_t alignment = dynamic
+        ? (base_alignment < type_align(result_type) ? base_alignment : type_align(result_type))
+        : emit_alignment_after_offset(base_alignment, operands[1].offset);
     if (type_is_aggregate(result_type))
         return emit_copy_address_to_slot(function, ORION_R14, instruction->result, size);
     if (size == 8) {
-        emit_load_word_at(function, ORION_R14, 0, ORION_R0);
-        emit_load_word_at(function, ORION_R14, 4, ORION_R1);
+        if (alignment >= 4) {
+            emit_load_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_load_word_at(function, ORION_R14, 4, ORION_R1);
+        } else {
+            emit_load_unaligned_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_load_unaligned_word_at(function, ORION_R14, 4, ORION_R1);
+        }
         return emit_store_result_word(function, instruction->result, 0, ORION_R0) &&
                emit_store_result_word(function, instruction->result, 4, ORION_R1);
     }
-    if (!emit_load_scalar_memory(function, ORION_R14, 0, result_type, ORION_R0))
+    if (!emit_load_scalar_memory(function, ORION_R14, 0, result_type, ORION_R0, alignment))
         return false;
     return emit_store_result_word(function, instruction->result, 0, ORION_R0);
 }
@@ -1214,6 +1283,11 @@ static bool emit_insert(OrionFunction *function, const LirInstruction *instructi
 
     HirType *value_type = operands[2].type;
     size_t value_size = type_size(value_type);
+    size_t base_alignment = type_align(aggregate_type);
+    if (base_alignment < 4) base_alignment = 4;
+    size_t alignment = dynamic
+        ? (base_alignment < type_align(value_type) ? base_alignment : type_align(value_type))
+        : emit_alignment_after_offset(base_alignment, operands[1].offset);
     if (type_is_aggregate(value_type)) {
         if (!emit_operand_address(function, &operands[2], ORION_R13))
             return false;
@@ -1223,13 +1297,18 @@ static bool emit_insert(OrionFunction *function, const LirInstruction *instructi
         if (!emit_operand_chunk(function, &operands[2], 0, ORION_R0) ||
             !emit_operand_chunk(function, &operands[2], 4, ORION_R1))
             return false;
-        emit_store_word_at(function, ORION_R14, 0, ORION_R0);
-        emit_store_word_at(function, ORION_R14, 4, ORION_R1);
+        if (alignment >= 4) {
+            emit_store_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_store_word_at(function, ORION_R14, 4, ORION_R1);
+        } else {
+            emit_store_unaligned_word_at(function, ORION_R14, 0, ORION_R0);
+            emit_store_unaligned_word_at(function, ORION_R14, 4, ORION_R1);
+        }
         return true;
     }
     if (!emit_operand_chunk(function, &operands[2], 0, ORION_R0))
         return false;
-    return emit_store_scalar_memory(function, ORION_R14, 0, value_type, ORION_R0);
+    return emit_store_scalar_memory(function, ORION_R14, 0, value_type, ORION_R0, alignment);
 }
 
 static bool emit_cast(OrionFunction *function, const LirInstruction *instruction) {
@@ -1619,10 +1698,6 @@ static bool emit_function(OrionFunction *function) {
     if (entry == NULL)
         return fail(function, "function entry block does not exist");
 
-    /* Function parameters are represented twice in LIR: the function
-     * signature records their ABI order, while the entry block exposes the
-     * same values as block parameters. The prologue initializes those value
-     * slots directly from the incoming argument registers/stack. */
     if (entry->params.len != function->function->params.len)
         return fail(function, "entry block parameters do not match function parameters");
     for (size_t i = 0; i < entry->params.len; i++) {

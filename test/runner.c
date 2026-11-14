@@ -1160,6 +1160,11 @@ int main(int argc, char **argv) {
     else
         stats.failed++;
 
+    if (test_orion_packed_field_access())
+        stats.passed++;
+    else
+        stats.failed++;
+
     if (test_extern_lowering())
         stats.passed++;
     else
