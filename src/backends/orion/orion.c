@@ -661,7 +661,7 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
                 }
                 String target_name = symbol_link_name(data->symbol);
                 if (target_name.data == NULL || target_name.length == 0) {
-                    fprintf(stderr, "Orion backend: address initializer has no symbol name\n");
+                    fprintf(stderr, "Orion backend: address initialiser has no symbol name\n");
                     return false;
                 }
                 fprintf(out, "    .word $%.*s\n", (int)target_name.length, target_name.data);
@@ -675,8 +675,8 @@ static bool emit_global(FILE *out, const LirGlobal *global) {
     }
 
     if (offset > type_size(global->type)) {
-        fprintf(stderr, "Orion backend: global initializer exceeds object size for %.*s\n",
-                string_fmt(name));
+        fprintf(stderr, "Orion backend: global initialiser exceeds object size for %.*s (%zu > %zu)\n",
+                string_fmt(name), offset, type_size(global->type));
         return false;
     }
     emit_data_zeros(out, type_size(global->type) - offset);

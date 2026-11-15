@@ -436,7 +436,7 @@ static bool expr_is_static(HirExpr *expr) {
             return true;
 
         case HIR_EXPR_CAST:
-            return false;
+            return expr_is_static(expr->cast.operand);
 
         default:
             return false;
@@ -520,6 +520,11 @@ bool sema_var_decl(Sema *sema, AstVarDecl *ast) {
         if (!expr_is_static(init)) {
             error_global_initialiser_not_static(sema->diags, init->span);
             return false;
+        }
+
+        if (init->kind == HIR_EXPR_CAST) {
+            init->cast.operand->type = init->cast.type;
+            init = init->cast.operand;
         }
     }
 
