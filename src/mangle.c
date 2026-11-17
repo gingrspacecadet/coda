@@ -392,7 +392,7 @@ static bool buffer_append_type_pattern(MangleBuffer *buffer, Sema *sema, AstFnDe
     }
 }
 
-String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool specialization) {
+String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool specialisation) {
     if (sema == NULL || symbol == NULL || symbol->name.kind != AST_NAME_IDENT)
         return (String){0};
 
@@ -401,14 +401,14 @@ String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool spec
 
     bool has_receiver = symbol->kind == SYMBOL_FN && symbol->decl != NULL &&
                         symbol->decl->kind == AST_DECL_FN && symbol->decl->fn.receiver != NULL;
-    bool is_entry_point = !specialization && symbol->kind == SYMBOL_FN && !has_receiver &&
+    bool is_entry_point = !specialisation && symbol->kind == SYMBOL_FN && !has_receiver &&
                           arguments.len == 0 && string_eq(symbol->name.ident, STRING("main")) &&
                           symbol->owner_module == sema->root_module;
     if (is_entry_point)
         return symbol->name.ident;
 
     bool has_module = symbol->owner_module != NULL && symbol->owner_module->path.parts.len != 0;
-    if (!specialization && !has_module && !has_receiver && arguments.len == 0)
+    if (!specialisation && !has_module && !has_receiver && arguments.len == 0)
         return symbol->name.ident;
 
     HirType *receiver_type = NULL;

@@ -20,7 +20,7 @@
 16. Reflection
 17. Code Generation and AST Manipulation
 18. Attributes
-19. Evaluation and Initialization
+19. Evaluation and Initialisation
 20. Concurrency
 21. ABI and FFI
 22. Safety and Invalid Operations
@@ -1457,9 +1457,9 @@ Conversions which are not permitted implicitly may be requested explicitly where
 
 Conversions involving pointers, integers, signedness changes, and representation changes are subject to the memory and type-conversion rules.
 
-### 7.17 Initializer Expressions
+### 7.17 Initialiser Expressions
 
-An initializer expression constructs a value from a sequence of field or element initializers.
+An initialiser expression constructs a value from a sequence of field or element initialisers.
 
 ```coda
 Vec2 v = {
@@ -1468,9 +1468,9 @@ Vec2 v = {
 };
 ```
 
-The fields or elements supplied by an initializer must correspond to the constructed type.
+The fields or elements supplied by an initialiser must correspond to the constructed type.
 
-The compiler rejects duplicate, nonexistent, or otherwise invalid initializers.
+The compiler rejects duplicate, nonexistent, or otherwise invalid initialisers.
 
 ### 7.18 Conditional Expressions
 
@@ -1771,7 +1771,7 @@ ${
 
 A compile-time block introduces a compile-time execution context.
 
-Values created solely within a compile-time block cease to exist when the compile-time execution completes unless their results are explicitly materialized into the program.
+Values created solely within a compile-time block cease to exist when the compile-time execution completes unless their results are explicitly materialised into the program.
 
 ---
 
@@ -1789,7 +1789,7 @@ fn none foo(int x, string y) {
 
 Parameters are immutable unless their declared type permits mutation.
 
-A parameter is initialized when control enters the function.
+A parameter is initialised when control enters the function.
 
 ## 9.2 Function Return Types
 
@@ -1931,7 +1931,7 @@ Compiler intrinsics may expose additional low-level operations without constitut
 
 
 
-## 19. Evaluation and Initialization
+## 19. Evaluation and Initialisation
 
 
 

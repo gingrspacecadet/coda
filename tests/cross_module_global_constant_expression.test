@@ -1,0 +1,11 @@
+name: cross-module global constant expression
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+include crossmod::constants;
+
+uint32 PAGE_COUNT = 4;
+uint32 STACK_SIZE = PAGE_COUNT * crossmod::constants::PAGE_SIZE;
+

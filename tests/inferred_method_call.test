@@ -12,7 +12,7 @@ fn BigInt BigInt.create(uint64 value) {
     return {.value = value};
 }
 
-fn BigInt from_typed_initializer() {
+fn BigInt from_typed_initialiser() {
     BigInt value = .create(420);
     return value;
 }

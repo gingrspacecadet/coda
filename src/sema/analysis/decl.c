@@ -439,8 +439,11 @@ static bool expr_is_static(HirExpr *expr) {
 
             return true;
 
-        case HIR_EXPR_CAST:
-            return expr_is_static(expr->cast.operand);
+        case HIR_EXPR_BINARY:
+            return false;
+
+        case HIR_EXPR_VALUE:
+            return false;
 
         default:
             return false;

@@ -42,6 +42,22 @@ static inline String path_to_string(Path path) {
         array_resize(&string_builder, part.ident.length);
         memcpy(&((char*)string_builder.data)[string_builder.len], ((AstName *)path.parts.data)[i].ident.data, part.ident.length);
         string_builder.len += part.ident.length;
+
+        size_t separator = i == 0 ? 0 : 2;
+        size_t offset = string_builder.len;
+        size_t needed = offset + separator + part.ident.length;
+
+        array_resize(&string_builder, needed);
+
+        char *data = string_builder.data;
+
+        if (separator != 0) {
+            data[offset++] = ':';
+            data[offset++] = ':';
+        }
+
+        memcpy(data + offset, part.ident.data, part.ident.length);
+        string_builder.len = needed;
     }
 
     return (String){

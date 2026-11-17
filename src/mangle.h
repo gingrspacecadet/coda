@@ -12,7 +12,7 @@ typedef struct {
     Array(String) generic_arguments;
 } CodaDemangledSymbol;
 
-String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool specialization);
+String coda_mangle_symbol(Sema *sema, Symbol *symbol, Array arguments, bool specialisation);
 
 bool coda_demangle_symbol(Arena *arena, String mangled, CodaDemangledSymbol *symbol);
 String coda_demangled_symbol_name(Arena *arena, const CodaDemangledSymbol *symbol);

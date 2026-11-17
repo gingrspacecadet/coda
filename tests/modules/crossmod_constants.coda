@@ -1,0 +1,4 @@
+module crossmod::constants;
+
+@export
+uint32 PAGE_SIZE = 4096;

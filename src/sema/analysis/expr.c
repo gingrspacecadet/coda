@@ -1292,6 +1292,8 @@ static HirExpr *sema_method_error(Sema *sema, Span span) {
     return expr;
 }
 
+static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *expected, bool coerce_result);
+
 static HirExpr *sema_any_default_argument(Sema *sema, Symbol *constraint, HirType *receiver_type, AstParam *param, HirType *param_type, Span span) {
     SemaConstraintContext previous = sema_constraint_context_begin(sema, constraint, receiver_type, span);
     HirFunction *previous_fn = sema->current_fn;
@@ -1476,7 +1478,23 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     if (sema->module == NULL)
         return NULL;
 
-    HirExpr *receiver = sema_expr(sema, callee->member.object, NULL);
+    HirExpr *receiver = NULL;
+    if (callee->member.object != NULL &&
+        callee->member.object->kind == AST_EXPR_INFERRED_METHOD_CALL &&
+        expected != NULL) {
+        /*
+         * A leading-dot call used as a method receiver has no receiver type
+         * of its own. Use the enclosing expression's expected type to select
+         * that call's receiver method, but do not coerce its result to the
+         * enclosing expression's type. The outer method determines the final
+         * result type and performs that coercion.
+         */
+        receiver = sema_inferred_method_call(
+            sema, callee->member.object, expected, false);
+    } else {
+        receiver = sema_expr(sema, callee->member.object, NULL);
+    }
+
     if (receiver == NULL || receiver->kind == HIR_EXPR_ERROR) {
         *handled = true;
         return sema_method_error(sema, ast->span);
@@ -1647,7 +1665,8 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
     return call;
 }
 
-static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *expected) {
+static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *expected,
+                                         bool coerce_result) {
     AstName name = ast->inferred_method_call.name;
     if (expected == NULL) {
         DiagBuilder diagnostic = diag_begin(
@@ -1657,7 +1676,7 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
             ast->span,
             STRING("cannot infer the target type for this method call")
         );
-        diag_note(&diagnostic, STRING("use this call where an expected type is available, such as a typed initializer, return expression, or typed argument"));
+        diag_note(&diagnostic, STRING("use this call where an expected type is available, such as a typed initialiser, return expression, or typed argument"));
         diag_finish(&diagnostic);
         return sema_method_error(sema, ast->span);
     }
@@ -1714,7 +1733,8 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
     };
 
     if (generic_receiver || method->decl->fn.generics.len != 0)
-        return sema_generic_method_call(sema, &call_ast, expected, method, receiver_arguments, NULL, false);
+        return sema_generic_method_call(sema, &call_ast,
+            coerce_result ? expected : NULL, method, receiver_arguments, NULL, false);
 
     HirType *function_type = sema_symbol_type(sema, method);
     if (function_type == NULL || function_type->kind != HIR_TYPE_FUNCTION)
@@ -1761,7 +1781,7 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
         array_push(&call->call.args, &value);
     }
 
-    if (expected != NULL) {
+    if (coerce_result && expected != NULL) {
         HirExpr *coerced = sema_coerce(sema, call, expected);
         return coerced != NULL ? coerced : sema_method_error(sema, ast->span);
     }
@@ -2465,7 +2485,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         }
 
         case AST_EXPR_INFERRED_METHOD_CALL:
-            return sema_inferred_method_call(sema, ast, expected);
+            return sema_inferred_method_call(sema, ast, expected, true);
 
         case AST_EXPR_CALL: {
             bool method_handled = false;
@@ -2914,7 +2934,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             hir->init.fields = array_create(sema->arena, sizeof(HirInitField));
 
             if (expected == NULL) {
-                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("cannot infer aggregate initializer type"));
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("cannot infer aggregate initialiser type"));
                 diag_note(&diagnostic, STRING("provide an expected struct, union, array, or slice type"));
                 diag_finish(&diagnostic);
                 hir->kind = HIR_EXPR_ERROR;
@@ -2922,7 +2942,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             if (expected->kind != HIR_TYPE_STRUCT && expected->kind != HIR_TYPE_UNION && expected->kind != HIR_TYPE_ARRAY && expected->kind != HIR_TYPE_SLICE) {
-                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("aggregate initializer requires a struct, union, array, or slice type"));
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("aggregate initialiser requires a struct, union, array, or slice type"));
                 diag_finish(&diagnostic);
                 hir->kind = HIR_EXPR_ERROR;
                 return hir;
@@ -2974,7 +2994,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     break;
             }
 
-            bool *initialized = arena_calloc(sema->arena, sizeof(bool) * field_count);
+            bool *initialised = arena_calloc(sema->arena, sizeof(bool) * field_count);
             size_t positional = 0;
 
             for (size_t i = 0; i < ast->init.fields.len; i++) {
@@ -3021,7 +3041,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                         else
                             field_index = (size_t)(hir_field - (HirField *)expected->slice.fields.data);
                     } else {
-                        while (positional < field_count && initialized[positional])
+                        while (positional < field_count && initialised[positional])
                             positional++;
 
                         if (positional >= field_count) {
@@ -3040,13 +3060,13 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                             hir_field = &((HirField *)expected->slice.fields.data)[field_index];
                     }
 
-                    if (initialized[field_index]) {
+                    if (initialised[field_index]) {
                         //! TODO: duplicate initialiser diagnostic
                         hir->kind = HIR_EXPR_ERROR;
                         return hir;
                     }
 
-                    initialized[field_index] = true;
+                    initialised[field_index] = true;
                     value_type = hir_field->type;
                     offset = hir_field->offset;
                 }

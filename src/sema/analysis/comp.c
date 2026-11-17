@@ -468,12 +468,33 @@ static HirExpr *eval_unary(CompContext *context, HirExpr *expr) {
 
 static HirGlobal *find_global(CompContext *context, Symbol *symbol) {
     Sema *sema = context->sema;
+    Symbol *canonical = symbol_canonical(symbol);
 
-    for (size_t i = 0; i < sema->hir_module->globals.len; i++) {
-        HirGlobal *global = &((HirGlobal *)sema->hir_module->globals.data)[i];
+    HirModule *module = sema->hir_module;
+    if (module != NULL) {
+        for (size_t i = 0; i < module->globals.len; i++) {
+            HirGlobal *global = array_at(&module->globals, i);
+            if (global->symbol == symbol ||
+                symbol_canonical(global->symbol) == canonical)
+                return global;
+        }
+    }
 
-        if (global->symbol == symbol)
-            return global;
+    for (size_t i = 0; i < sema->modules.entries.len; i++) {
+        ModuleEntry *entry = array_at(&sema->modules.entries, i);
+        HirModule *imported = entry->hir;
+
+        if (imported == NULL || imported == module)
+            continue;
+        if (symbol->owner_module != NULL && entry->ast != symbol->owner_module)
+            continue;
+
+        for (size_t j = 0; j < imported->globals.len; j++) {
+            HirGlobal *global = array_at(&imported->globals, j);
+            if (global->symbol == symbol ||
+                symbol_canonical(global->symbol) == canonical)
+                return global;
+        }
     }
 
     return NULL;

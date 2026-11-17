@@ -1,0 +1,33 @@
+name: chained type-inferred method calls
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type BigInt = struct {
+    uint64 value;
+};
+
+type CreateError = enum {
+    Failed,
+};
+
+@noreturn
+fn none fail() {}
+
+fn (BigInt | CreateError) BigInt.create(uint64 value) {
+    BigInt result = {.value = value};
+    return result;
+}
+
+fn T (T | E).unwrap<T, E>((T | E) *this) {
+    match (*this) {
+        T value: return value;
+        E error: fail();
+    }
+}
+
+fn BigInt from_chained_initializer() {
+    BigInt value = .create(420).unwrap();
+    return value;
+}

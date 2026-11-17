@@ -52,7 +52,7 @@ static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
     HirExpr *init = NULL;
 
     if (type->is_vla && ast->init != NULL) {
-        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("variable-length arrays cannot have an initializer"));
+        DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_TYPE_MISMATCH, ast->span, STRING("variable-length arrays cannot have an initialiser"));
         diag_finish(&diagnostic);
         return false;
     }
