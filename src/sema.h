@@ -28,6 +28,12 @@ typedef enum {
     FUNCTION_DEFAULTS_FAILED,
 } FunctionDefaultsState;
 
+typedef enum {
+    SEMA_METHOD_NOT_FOUND,
+    SEMA_METHOD_FOUND,
+    SEMA_METHOD_NOT_EXPORTED
+} SemaMethodStatus;
+
 typedef struct {
     AstFnDecl *decl;
     Array(HirExpr *) values;
@@ -99,10 +105,10 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .diags = diags,
         .arena = arena,
         .target = target_native(),
-        .forced_includes = array_create(arena, sizeof(ModuleEntry)),
+        .forced_includes = array_create(arena, sizeof(AstIncludeDecl)),
     };
 }
 
 HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes);
 
-#endif /* SEMA_H */
+#endif

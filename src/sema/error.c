@@ -368,6 +368,24 @@ void error_unknown_field(Diags *diags, String name, Span span) {
     diag_finish(&b);
 }
 
+void error_method_not_exported(Diags *diags, String name, Span span, Span declaration) {
+    DiagBuilder b = diag_begin(
+        diags,
+        DIAG_ERROR,
+        E_METHOD_NOT_EXPORTED,
+        span,
+        format(
+            diags->arena,
+            "Method '%.*s' is not exported.",
+            string_fmt(name)
+        )
+    );
+
+    diag_label(&b, declaration, STRING("method declared here"));
+    diag_help(&b, STRING("Add '@export' to the method declaration to make it accessible from other modules."));
+    diag_finish(&b);
+}
+
 void error_invalid_unary_operation(Diags *diags, String operation, HirType *operand, Span span) {
     String operand_name = sema_type_string(diags->arena, operand);
 

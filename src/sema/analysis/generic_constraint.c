@@ -53,8 +53,9 @@ static HirType *generic_constraint_resolve_in_symbol_scope(Sema *sema, Symbol *s
 }
 
 static bool generic_constraint_method_matches(Sema *sema, AstFnDecl *required, HirType *concrete) {
-    Symbol *symbol = sema_find_method(sema, concrete, required->name);
-    if (symbol == NULL || symbol->decl == NULL || symbol->decl->kind != AST_DECL_FN)
+    Symbol *symbol = NULL;
+    if (sema_find_method(sema, concrete, required->name, &symbol) != SEMA_METHOD_FOUND ||
+        symbol == NULL || symbol->decl == NULL || symbol->decl->kind != AST_DECL_FN)
         return false;
 
     AstFnDecl *candidate = &symbol->decl->fn;
@@ -253,8 +254,11 @@ bool sema_check_constraint_type(Sema *sema, Symbol *constraint_symbol, HirType *
             if (item->method->generics.len != 0)
                 continue;
 
-            if (item->method->body != NULL && sema_find_method(sema, concrete, item->method->name) == NULL)
-                continue;
+            if (item->method->body != NULL) {
+                Symbol *method = NULL;
+                if (sema_find_method(sema, concrete, item->method->name, &method) != SEMA_METHOD_FOUND)
+                    continue;
+            }
         }
         array_push(&filtered.items, item);
     }

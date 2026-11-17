@@ -547,7 +547,13 @@ static HirExpr *sema_any_box(Sema *sema, HirExpr *value, HirType *target) {
         if (item->kind != AST_CONSTRAINT_METHOD || !sema_any_constraint_method_dispatchable(item->method))
             continue;
 
-        Symbol *method = sema_find_method(sema, value->type, item->method->name);
+        Symbol *method = NULL;
+        SemaMethodStatus method_status = sema_find_method(
+            sema, value->type, item->method->name, &method
+        );
+        if (method_status != SEMA_METHOD_FOUND)
+            method = NULL;
+
         if (method == NULL && item->method->body != NULL)
             method = sema_any_default_method(sema, constraint, item->method, value->type, value->span);
 
@@ -1506,8 +1512,15 @@ static HirExpr *sema_method_call(Sema *sema, AstExpr *ast, HirType *expected, bo
         return call;
     }
 
-    Symbol *method = sema_find_method(sema, dispatch_type, callee->member.member);
-    if (method == NULL)
+    Symbol *method = NULL;
+    SemaMethodStatus method_status = sema_find_method(sema, dispatch_type, callee->member.member, &method );
+    if (method_status == SEMA_METHOD_NOT_EXPORTED && method != NULL) {
+        *handled = true;
+        error_method_not_exported(sema->diags, callee->member.member.ident, callee->span, method->span);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (method_status != SEMA_METHOD_FOUND)
         return NULL;
 
     Array receiver_arguments;
@@ -1664,8 +1677,15 @@ static HirExpr *sema_inferred_method_call(Sema *sema, AstExpr *ast, HirType *exp
         return sema_method_error(sema, ast->span);
     }
 
-    Symbol *method = sema_find_method(sema, expected, name);
-    if (method == NULL || method->decl == NULL || method->decl->kind != AST_DECL_FN) {
+    Symbol *method = NULL;
+    SemaMethodStatus method_status = sema_find_method(sema, expected, name, &method);
+    if (method_status == SEMA_METHOD_NOT_EXPORTED && method != NULL) {
+        error_method_not_exported(sema->diags, name.ident, ast->span, method->span);
+        return sema_method_error(sema, ast->span);
+    }
+
+    if (method_status != SEMA_METHOD_FOUND || method == NULL ||
+        method->decl == NULL || method->decl->kind != AST_DECL_FN) {
         DiagBuilder diagnostic = diag_begin(
             sema->diags,
             DIAG_ERROR,

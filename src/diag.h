@@ -57,6 +57,8 @@ typedef enum {
     E_TOO_MANY_INIT_VALUES,
     E_DIVISION_BY_ZERO,
     E_INVALID_CODE_TYPE,
+
+    E_METHOD_NOT_EXPORTED,
 } DiagCode;
 
 typedef struct {

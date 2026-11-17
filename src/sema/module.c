@@ -469,6 +469,8 @@ bool sema_apply_forced_includes(Sema *sema) {
         if (!module_entry_parse(entry, sema->arena, sema->diags))
             return false;
 
+        entry->included = true;
+
         if (!sema_analyse_module_entry(sema, entry))
             return false;
 
@@ -583,9 +585,35 @@ static bool sema_type_symbol_matches_origin(Symbol *instance, Symbol *generic) {
            instance->owner_scope == generic->owner_scope;
 }
 
-Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);;
+Symbol *scope_lookup_fn_decl(Scope *scope, AstFnDecl *decl);
 
-static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *scope, HirType *receiver, AstName name, bool require_export) {
+static bool sema_method_receiver_matches(Sema *sema, AstFnDecl *candidate, HirType *receiver) {
+    Symbol *generic_receiver = sema_generic_receiver_type(sema, candidate->receiver);
+    if (generic_receiver != NULL) {
+        Symbol *nominal = receiver != NULL ? receiver->nominal : NULL;
+        return sema_type_symbol_matches_origin(nominal, generic_receiver);
+    }
+
+    bool generic_pattern = false;
+    if (sema_generic_method_receiver_matches(sema, candidate, receiver, &generic_pattern))
+        return true;
+
+    if (generic_pattern)
+        return false;
+
+    HirType *candidate_receiver = sema_type(sema, candidate->receiver);
+    if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
+        return false;
+
+    if (candidate_receiver->kind == HIR_TYPE_POINTER)
+        candidate_receiver = candidate_receiver->pointer.pointee;
+
+    return candidate_receiver != NULL && type_equal(candidate_receiver, receiver);
+}
+
+static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *scope,
+                                          HirType *receiver, AstName name,
+                                          bool require_export, Symbol **unexported) {
     AstModule *previous_module = sema->module;
     Scope previous_global_scope = sema->global_scope;
     Scope *previous_module_scope = sema->module_scope;
@@ -607,37 +635,20 @@ static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *
             continue;
 
         Symbol *symbol = scope_lookup_fn_decl(scope, candidate);
-        if (symbol == NULL || symbol->kind != SYMBOL_FN || (require_export && !symbol->is_exported))
+        if (symbol == NULL || symbol->kind != SYMBOL_FN)
             continue;
 
-        Symbol *generic_receiver = sema_generic_receiver_type(sema, candidate->receiver);
-        if (generic_receiver != NULL) {
-            Symbol *nominal = receiver != NULL ? receiver->nominal : NULL;
-            if (sema_type_symbol_matches_origin(nominal, generic_receiver)) {
-                result = symbol;
-                break;
-            }
+        if (!sema_method_receiver_matches(sema, candidate, receiver))
+            continue;
+
+        if (require_export && !symbol->is_exported) {
+            if (unexported != NULL && *unexported == NULL)
+                *unexported = symbol;
             continue;
         }
 
-        bool generic_pattern = false;
-        if (sema_generic_method_receiver_matches(sema, candidate, receiver, &generic_pattern)) {
-            result = symbol;
-            break;
-        }
-
-        if (generic_pattern)
-            continue;
-        
-        HirType *candidate_receiver = sema_type(sema, candidate->receiver);
-        if (candidate_receiver == NULL || candidate_receiver->kind == HIR_TYPE_ERROR)
-            continue;
-        if (candidate_receiver->kind == HIR_TYPE_POINTER)
-            candidate_receiver = candidate_receiver->pointer.pointee;
-        if (candidate_receiver != NULL && type_equal(candidate_receiver, receiver)) {
-            result = symbol;
-            break;
-        }
+        result = symbol;
+        break;
     }
 
     sema->module = previous_module;
@@ -647,10 +658,13 @@ static Symbol *sema_find_method_in_module(Sema *sema, AstModule *module, Scope *
     return result;
 }
 
-Symbol *sema_find_method(Sema *sema, HirType *receiver, AstName name) {
+static Symbol *sema_find_accessible_method(Sema *sema, HirType *receiver,
+                                           AstName name, Symbol **unexported) {
     if (sema->module != NULL) {
         Scope *scope = sema->module_scope != NULL ? sema->module_scope : &sema->global_scope;
-        Symbol *symbol = sema_find_method_in_module(sema, sema->module, scope, receiver, name, false);
+        Symbol *symbol = sema_find_method_in_module(
+            sema, sema->module, scope, receiver, name, false, unexported
+        );
         if (symbol != NULL)
             return symbol;
     }
@@ -660,18 +674,43 @@ Symbol *sema_find_method(Sema *sema, HirType *receiver, AstName name) {
         if (!entry->included || !entry->analysed || entry->analysis_failed || entry->ast == NULL || entry->ast == sema->module)
             continue;
 
-        Symbol *symbol = sema_find_method_in_module(sema, entry->ast, &entry->scope, receiver, name, true);
+        Symbol *symbol = sema_find_method_in_module(
+            sema, entry->ast, &entry->scope, receiver, name, true, unexported
+        );
         if (symbol != NULL)
             return symbol;
     }
 
     if (receiver->super != NULL) {
-        Symbol *inherited = sema_find_method(sema, receiver->super, name);
+        Symbol *inherited = sema_find_accessible_method(sema, receiver->super, name, unexported);
         if (inherited != NULL)
             return inherited;
     }
 
     return NULL;
+}
+
+SemaMethodStatus sema_find_method(Sema *sema, HirType *receiver, AstName name, Symbol **method) {
+    if (method == NULL)
+        return SEMA_METHOD_NOT_FOUND;
+
+    *method = NULL;
+    if (receiver == NULL)
+        return SEMA_METHOD_NOT_FOUND;
+
+    Symbol *unexported = NULL;
+    Symbol *found = sema_find_accessible_method(sema, receiver, name, &unexported);
+    if (found != NULL) {
+        *method = found;
+        return SEMA_METHOD_FOUND;
+    }
+
+    if (unexported != NULL) {
+        *method = unexported;
+        return SEMA_METHOD_NOT_EXPORTED;
+    }
+
+    return SEMA_METHOD_NOT_FOUND;
 }
 
 bool sema_resolve_includes(Sema *sema, AstModule *module) {
