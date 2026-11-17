@@ -164,8 +164,9 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         return;
     }
 
-    if (sema_fn_has_unbound_receiver_generics(sema, ast))
+    if (sema_fn_has_unbound_receiver_generics(sema, ast)) {
         return;
+    }
 
     bool is_extern = false;
     for (size_t i = 0; i < ast->attrs.len; i++) {
@@ -224,11 +225,13 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
         symbol->link_name = coda_mangle_symbol(sema, symbol, arguments, false);
     }
 
-    if (!sema_prepare_function_defaults(sema, symbol, true))
+    if (!sema_prepare_function_defaults(sema, symbol, true)) {
         return;
-
-    if (ast->body == NULL)
+    }
+    
+    if (ast->body == NULL) {
         return;
+    }
 
     HirFunction *fn = arena_calloc(sema->arena, sizeof(HirFunction));
 
@@ -276,6 +279,7 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     if (fn->body == NULL || fn->body->kind == HIR_STMT_ERROR) {
         sema->current_fn = previous_fn;
         sema_pop_scope(sema);
+        // printf("Dropping fn %.*s\n", string_fmt(sema_lookup_fn_decl(sema, ast)->name.ident));
         return;
     }
 

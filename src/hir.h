@@ -495,6 +495,7 @@ typedef struct {
     Path path;
     Array(String) filenames;
     AstModule *ast;
+    HirModule *hir;
     Scope scope;
     Scope export_scope;
     bool parsed;

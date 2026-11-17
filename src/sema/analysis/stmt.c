@@ -391,6 +391,7 @@ static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
 
             case AST_PATTERN_VARIANT: {
                 if (pattern->variant.path->kind != AST_EXPR_PATH) {
+                    printf("AJSBDLIKJABSDLKJBSALDKBJASLDKJABSL\n");
                     return error;
                 }
 
@@ -408,8 +409,11 @@ static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
                 }
 
                 binding_name = pattern->variant.binding;
-                binding_type = ((HirType **)sum->sum.members.data)[member_index];
-                bind_payload = true;
+
+                if (binding_name.kind == AST_NAME_IDENT) {
+                    binding_type = ((HirType **)sum->sum.members.data)[member_index];
+                    bind_payload = true;
+                }
                 break;
             }
 
@@ -521,6 +525,7 @@ static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
 
             if (!match_insert_binding(sema, binding_name, binding_type, pattern->span, value, &binding_init)) {
                 sema_pop_scope(sema);
+                printf("error in match stmt in fn %.*s\n", string_fmt(sema->current_fn->symbol->name.ident));
                 return error;
             }
         }

@@ -376,6 +376,7 @@ static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) 
             .path = path,
             .filenames = array_create(arena, sizeof(String)),
             .ast = NULL,
+            .hir = NULL,
             .scope = module_make_scope(arena),
             .export_scope = module_make_scope(arena),
             .parsed = false,
@@ -488,15 +489,26 @@ static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
     if (entry->analysing)
         return false;
 
+    if (entry->hir == NULL) {
+        entry->hir = arena_calloc(sema->arena, sizeof(*entry->hir));
+        *entry->hir = (HirModule) {
+            .owner_module = entry->ast,
+            .functions = array_create(sema->arena, sizeof(HirFunction)),
+            .globals = array_create(sema->arena, sizeof(HirGlobal)),
+        };
+    }
+
     size_t diagnostic_count = sema->diags->diags.len;
     AstModule *previous_module = sema->module;
     Scope previous_global_scope = sema->global_scope;
     Scope *previous_module_scope = sema->module_scope;
     Array previous_scopes = sema->scopes;
+    HirModule *previous_hir_module = sema->hir_module;
     HirFunction *previous_fn = sema->current_fn;
 
     entry->analysing = true;
     sema->module = entry->ast;
+    sema->hir_module = entry->hir;
     sema->global_scope = entry->scope;
     sema->module_scope = &entry->scope;
     sema->scopes = array_create(sema->arena, sizeof(Scope));
@@ -525,6 +537,7 @@ static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
     sema->global_scope = previous_global_scope;
     sema->module_scope = previous_module_scope;
     sema->scopes = previous_scopes;
+    sema->hir_module = previous_hir_module;
     sema->current_fn = previous_fn;
 
     return !entry->analysis_failed;
