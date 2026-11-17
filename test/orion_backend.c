@@ -430,3 +430,73 @@ bool test_orion_constant_unaligned_pointer(void) {
     return emitted && generated_len > 0 && records_two_byte_alignment &&
            uses_byte_loads && avoids_word_load;
 }
+
+bool test_orion_large_aggregate_return(void) {
+    Arena *arena = arena_create();
+    LirModule *module = lir_module_create(arena);
+    const TargetInfo *target = target_builtin("orion");
+    const BackendApi *backend = orion_backend();
+
+    HirType *none_type = builtin_type(arena, BUILTIN_NONE, 0, 1);
+    HirType *large_type = arena_calloc(arena, sizeof(*large_type));
+    *large_type = (HirType){
+        .kind = HIR_TYPE_STRUCT,
+        .size = 22,
+        .align = 1,
+        .structure = {.fields = array_create(arena, sizeof(HirField))},
+    };
+
+    Symbol *callee_symbol = make_symbol(arena, "copy_large");
+    LirFunction *callee = lir_function_create(module, callee_symbol, large_type, false, false);
+    LirBlockId callee_block = lir_block_create(callee);
+    LirValueId parameter = lir_function_add_param(callee, make_symbol(arena, "value"), large_type);
+    LirOperand returned = lir_operand_value(parameter, large_type);
+    lir_return(callee, callee_block, &returned);
+
+    LirFunction *caller = lir_function_create(module, make_symbol(arena, "call_large"),
+                                              none_type, false, false);
+    LirBlockId caller_block = lir_block_create(caller);
+    LirValueId argument = lir_emit(caller, caller_block, LIR_OP_ZERO, large_type, (Array){0});
+    LirOperand call_operands[] = {
+        lir_operand_symbol(callee_symbol, NULL),
+        lir_operand_value(argument, large_type),
+    };
+    (void)lir_emit(caller, caller_block, LIR_OP_CALL, large_type,
+                   (Array){.data = call_operands, .len = 2});
+    lir_return(caller, caller_block, NULL);
+
+    char *generated = NULL;
+    size_t generated_len = 0;
+    FILE *out = open_memstream(&generated, &generated_len);
+    bool emitted = out != NULL &&
+                   backend->emit(&(Backend){.api = backend}, target, module, out);
+    if (out != NULL && fclose(out) != 0)
+        emitted = false;
+
+    char *callee_output = generated != NULL ? strstr(generated, "copy_large:") : NULL;
+    char *caller_output = generated != NULL ? strstr(generated, "call_large:") : NULL;
+    bool callee_saves_hidden_pointer = callee_output != NULL &&
+        strstr(callee_output, "str r0, [r11 - #") != NULL;
+    bool callee_loads_stack_argument = callee_output != NULL &&
+        strstr(callee_output, "ldr r14, [r11 + #8]\n") != NULL;
+    bool callee_writes_through_hidden_pointer = callee_output != NULL &&
+        strstr(callee_output, "str r0, [r14]\n") != NULL;
+    bool callee_copies_final_bytes = callee_output != NULL &&
+        strstr(callee_output, "strb r12, [r14 + #21]\n") != NULL;
+    bool caller_shifts_explicit_arguments = caller_output != NULL &&
+        strstr(caller_output, "ldr r1, [r11 - #") != NULL;
+    bool caller_passes_stack_arguments = caller_output != NULL &&
+        strstr(caller_output, "str r14, [r15]\n") != NULL &&
+        strstr(caller_output, "str r14, [r15 + #8]\n") != NULL;
+    bool caller_passes_hidden_pointer = caller_output != NULL &&
+        strstr(caller_output, "mov r0, #-") != NULL &&
+        strstr(caller_output, "call $copy_large\n") != NULL;
+
+    free(generated);
+    arena_destroy(arena);
+    return emitted && generated_len > 0 && callee_saves_hidden_pointer &&
+           callee_loads_stack_argument && callee_writes_through_hidden_pointer &&
+           callee_copies_final_bytes && caller_shifts_explicit_arguments &&
+           caller_passes_stack_arguments &&
+           caller_passes_hidden_pointer;
+}

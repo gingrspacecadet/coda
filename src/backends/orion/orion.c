@@ -35,6 +35,9 @@ typedef struct {
     size_t slot_count;
     size_t frame_size;
 
+    bool returns_indirectly;
+    size_t sret_pointer_offset;
+
     size_t edge_scratch_offset;
     size_t edge_scratch_size;
     size_t next_label_id;
@@ -184,6 +187,10 @@ static bool type_is_supported_value(HirType *type) {
     if (type_is_aggregate(type))
         return true;
     return false;
+}
+
+static bool type_returns_indirectly(HirType *type) {
+    return type_is_aggregate(type) && type_size(type) > 16;
 }
 
 static bool supports(const TargetInfo *target) {
@@ -809,7 +816,13 @@ static bool emit_return_epilogue(OrionFunction *function) {
 }
 
 static bool emit_function_parameters(OrionFunction *function) {
-    size_t word_index = 0;
+    size_t word_index = function->returns_indirectly ? 1 : 0;
+    if (function->returns_indirectly) {
+        if (function->sret_pointer_offset == 0)
+            return fail(function, "indirect aggregate return has no saved result pointer slot");
+        emit_store_word_at(function, ORION_FP, -(int64_t)function->sret_pointer_offset, ORION_R0);
+    }
+
     for (size_t i = 0; i < function->function->params.len; i++) {
         LirFunctionParam *param = &((LirFunctionParam *)function->function->params.data)[i];
         size_t size = type_size(param->type);
@@ -1152,7 +1165,8 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
     if (instruction->operands.len == 0)
         return fail(function, "call instruction has no callee operand");
 
-    size_t total_words = 0;
+    bool returns_indirectly = type_returns_indirectly(instruction->result_type);
+    size_t total_words = returns_indirectly ? 1 : 0;
     for (size_t i = 1; i < instruction->operands.len; i++) {
         HirType *type = operands[i].type;
         if (!type_is_supported_value(type) || type_is_void_like(type))
@@ -1162,15 +1176,16 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
             return fail(function, "call argument list is too large");
         total_words += words;
     }
-    if (instruction->result != LIR_INVALID_VALUE && type_is_aggregate(instruction->result_type) &&
-        type_size(instruction->result_type) > 16)
-        return fail(function, "aggregate call results larger than 16 bytes are not supported");
 
     size_t stack_words = total_words > 4 ? total_words - 4 : 0;
+    if (stack_words > SIZE_MAX / 4)
+        return fail(function, "call stack argument area is too large");
     size_t stack_bytes = align_up(stack_words * 4, 8);
+    if (stack_bytes == SIZE_MAX)
+        return fail(function, "call stack argument area is too large");
     emit_adjust_sp(function, true, stack_bytes);
 
-    size_t word_index = 0;
+    size_t word_index = returns_indirectly ? 1 : 0;
     for (size_t i = 1; i < instruction->operands.len; i++) {
         LirOperand *arg = &operands[i];
         size_t words = (type_size(arg->type) + 3) / 4;
@@ -1183,7 +1198,7 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
         }
     }
 
-    word_index = 0;
+    word_index = returns_indirectly ? 1 : 0;
     for (size_t i = 1; i < instruction->operands.len; i++) {
         LirOperand *arg = &operands[i];
         size_t words = (type_size(arg->type) + 3) / 4;
@@ -1192,6 +1207,15 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
                 continue;
             if (!emit_operand_chunk(function, arg, word * 4, (int)word_index))
                 return false;
+        }
+    }
+
+    if (returns_indirectly) {
+        if (instruction->result != LIR_INVALID_VALUE) {
+            if (!emit_slot_address(function, ORION_R0, instruction->result))
+                return false;
+        } else {
+            return fail(function, "indirect aggregate call has no result storage");
         }
     }
 
@@ -1209,6 +1233,8 @@ static bool emit_call(OrionFunction *function, const LirInstruction *instruction
     emit_adjust_sp(function, false, stack_bytes);
 
     if (instruction->result == LIR_INVALID_VALUE || type_is_void_like(instruction->result_type))
+        return true;
+    if (returns_indirectly)
         return true;
 
     HirType *result_type = instruction->result_type;
@@ -1526,11 +1552,36 @@ static bool emit_terminator(OrionFunction *function, LirBlock *block) {
                 LirOperand *value = &block->terminator._return.value;
                 size_t size = type_size(value->type);
                 if (type_is_aggregate(value->type)) {
-                    if (size > 16)
-                        return fail(function, "aggregate returns larger than 16 bytes are not supported");
-                    for (size_t chunk = 0; chunk < size; chunk += 4) {
-                        if (!emit_operand_chunk(function, value, chunk, (int)(chunk / 4)))
-                            return false;
+                    if (size > 16) {
+                        if (!function->returns_indirectly || function->sret_pointer_offset == 0)
+                            return fail(function, "large aggregate return has no hidden result pointer");
+                        for (size_t chunk = 0; chunk < size; chunk += 4) {
+                            size_t bytes = size - chunk;
+                            if (bytes > 4)
+                                bytes = 4;
+                            if (!emit_operand_chunk(function, value, chunk, ORION_R0) ||
+                                !emit_load_word_at(function, ORION_FP,
+                                                   -(int64_t)function->sret_pointer_offset, ORION_R14))
+                                return false;
+                            if (bytes == 4) {
+                                emit_store_word_at(function, ORION_R14, (int64_t)chunk, ORION_R0);
+                            } else {
+                                for (size_t byte = 0; byte < bytes; byte++) {
+                                    int source = ORION_R0;
+                                    if (byte != 0) {
+                                        fprintf(function->out, "    shr r12, r0, #%zu\n", byte * 8);
+                                        source = ORION_R12;
+                                    }
+                                    emit_store_byte_at(function, ORION_R14,
+                                                       (int64_t)(chunk + byte), source);
+                                }
+                            }
+                        }
+                    } else {
+                        for (size_t chunk = 0; chunk < size; chunk += 4) {
+                            if (!emit_operand_chunk(function, value, chunk, (int)(chunk / 4)))
+                                return false;
+                        }
                     }
                 } else if (size == 8) {
                     if (!emit_operand_chunk(function, value, 0, ORION_R0) ||
@@ -1559,6 +1610,7 @@ static bool gather_types_and_size_frame(OrionFunction *function) {
     size_t count = function->slot_count == 0 ? 1 : function->slot_count;
     function->slots = calloc(count, sizeof(*function->slots));
     function->value_types = calloc(count, sizeof(*function->value_types));
+    function->returns_indirectly = type_returns_indirectly(function->function->return_type);
     if (function->slots == NULL || function->value_types == NULL)
         return fail(function, "out of memory while allocating LIR stack slots");
 
@@ -1693,6 +1745,17 @@ static bool gather_types_and_size_frame(OrionFunction *function) {
             return fail(function, "edge scratch frame overflow");
         cursor = function->edge_scratch_offset;
     }
+
+    if (function->returns_indirectly) {
+        if (cursor > SIZE_MAX - 4)
+            return fail(function, "indirect return pointer frame size overflow");
+        size_t offset = align_up(cursor + 4, 4);
+        if (offset == SIZE_MAX)
+            return fail(function, "indirect return pointer frame size overflow");
+        function->sret_pointer_offset = offset;
+        cursor = offset;
+    }
+
     function->frame_size = align_up(cursor, 8);
     if (function->frame_size == SIZE_MAX)
         return fail(function, "stack frame size overflow");
