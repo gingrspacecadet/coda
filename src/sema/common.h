@@ -159,6 +159,7 @@ void sema_decl(Sema *sema, AstDecl *ast);
 void sema_insert_builtin_types(Sema *sema);
 bool sema_resolve_includes(Sema *sema, AstModule *module);
 void module_index_scan(ModuleIndex *index, Arena *arena, Array(String) paths);
+bool sema_apply_forced_includes(Sema *sema);
 
 void error_unknown_name(Diags *diags, String name, Span span);
 void error_unknown_path(Diags *diags, Path path, Span span);

@@ -283,25 +283,23 @@ AstPattern *parse_pattern(Parser *p) {
 
     if (at(p, TK_IDENT)) {
         Checkpoint cp = checkpoint(p);
-        AstName name = parse_name(p);
 
-        if (at(p, TK_COLON_COLON)) {
-            restore(p, cp);
-            pattern->kind = AST_PATTERN_EXPR;
-            pattern->expr = parse_expression(p);
-            return pattern;
-        }
+        AstExpr *expr = parse_expression(p);
 
-        if (at(p, TK_IDENT)) {
+        if (expr->kind == AST_EXPR_PATH) {
+            if (at(p, TK_IDENT)) {
+                pattern->kind = AST_PATTERN_VARIANT;
+                pattern->variant.path = expr;
+                pattern->variant.binding = parse_name(p);
+                return pattern;
+            }
+
             pattern->kind = AST_PATTERN_VARIANT;
-            pattern->variant.name = name;
-            pattern->variant.binding = parse_name(p);
+            pattern->variant.path = expr;
             return pattern;
         }
 
-        pattern->kind = AST_PATTERN_BINDING;
-        pattern->binding = name;
-        return pattern;
+        restore(p, cp);
     }
 
     pattern->kind = AST_PATTERN_EXPR;

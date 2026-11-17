@@ -26,6 +26,12 @@ HirModule *sema_analyse(Sema *sema, AstModule *module, Array(String) includes) {
     collect_decls(sema, module->decls);
     *sema->root_scope = sema->global_scope;
 
+    if (!sema_apply_forced_includes(sema)) {
+        fprintf(stderr, "include failure: sema_apply_forced_includes\n");
+        return false;
+    }
+
+
     if (!sema_resolve_includes(sema, module)) {
         if (!diags_has_errors(sema->diags))
             fprintf(stderr, "Internal compiler error: include resolution failed without diagnostics\n");

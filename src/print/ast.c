@@ -59,7 +59,6 @@ static const char *expr_kind_name(AstExprKind kind) {
     switch (kind) {
     case AST_EXPR_ERROR:      return "error";
     case AST_EXPR_LITERAL:    return "literal";
-    case AST_EXPR_IDENT:      return "ident";
     case AST_EXPR_PATH:       return "path";
     case AST_EXPR_TYPE_VALUE: return "type-value";
     case AST_EXPR_UNARY:      return "unary";
@@ -214,12 +213,6 @@ static void print_expr(FILE *out, const AstExpr *expr, unsigned depth) {
     case AST_EXPR_LITERAL:
         indent(out, depth + 1);
         print_literal(out, &expr->literal);
-        fputc('\n', out);
-        break;
-
-    case AST_EXPR_IDENT:
-        indent(out, depth + 1);
-        print_name(out, &expr->ident);
         fputc('\n', out);
         break;
 
@@ -426,7 +419,7 @@ static void print_pattern(FILE *out, const AstPattern *pattern, unsigned depth) 
 
     case AST_PATTERN_VARIANT:
         fputs("pattern variant ", out);
-        print_name(out, &pattern->variant.name);
+        print_path(out, &pattern->variant.path->path);
         fputc(' ', out);
         print_name(out, &pattern->variant.binding);
         break;

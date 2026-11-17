@@ -67,11 +67,18 @@ Symbol *sema_lookup_non_method(Sema *sema, AstName name) {
     for (size_t i = sema->scopes.len; i > 0; --i) {
         Scope *scope = (Scope *)array_at(&sema->scopes, i - 1);
         Symbol *symbol = scope_lookup_non_method(scope, name);
+
         if (symbol != NULL)
             return symbol;
     }
 
     Symbol *symbol = scope_lookup_non_method(&sema->global_scope, name);
+
+    if (symbol != NULL)
+        return symbol;
+
+    symbol = scope_lookup_non_method(&sema->prelude_scope, name);
+
     if (symbol != NULL)
         return symbol;
 

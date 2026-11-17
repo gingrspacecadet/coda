@@ -59,6 +59,9 @@ typedef struct {
 
     const TargetInfo *target;
 
+    Array(AstIncludeDecl) forced_includes;
+    Scope prelude_scope;
+
     bool comptime;
 
     Diags *diags;
@@ -96,6 +99,7 @@ static inline Sema sema_create(Arena *arena, Diags *diags) {
         .diags = diags,
         .arena = arena,
         .target = target_native(),
+        .forced_includes = array_create(arena, sizeof(ModuleEntry)),
     };
 }
 

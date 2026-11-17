@@ -45,31 +45,32 @@ bool coda_compile(CodaCompiler *compiler, Source *source, CodaStage stage) {
     if (compiler->diags->diags.len != 0)
         return false;
 
-    if (compiler->forced_includes.len != 0) {
-        Array(AstDecl *) decls = array_create(compiler->arena, sizeof(AstDecl *));
-        for (size_t i = 0; i < compiler->forced_includes.len; i++) {
-            AstDecl *decl = arena_calloc(compiler->arena, sizeof(*decl));
-            AstIncludeDecl include = *(AstIncludeDecl *)array_at(&compiler->forced_includes, i);
-            include.span = m->span;
-            *decl = (AstDecl){
-                .span = m->span,
-                .kind = AST_DECL_INCLUDE,
-                .attrs = array_create(compiler->arena, sizeof(AstAttribute)),
-                .include = include,
-            };
-            array_push(&decls, &decl);
-        }
-        for (size_t i = 0; i < m->decls.len; i++) {
-            AstDecl *decl = *(AstDecl **)array_at(&m->decls, i);
-            array_push(&decls, &decl);
-        }
-        m->decls = decls;
-    }
+    // if (compiler->forced_includes.len != 0) {
+    //     Array(AstDecl *) decls = array_create(compiler->arena, sizeof(AstDecl *));
+    //     for (size_t i = 0; i < compiler->forced_includes.len; i++) {
+    //         AstDecl *decl = arena_calloc(compiler->arena, sizeof(*decl));
+    //         AstIncludeDecl include = *(AstIncludeDecl *)array_at(&compiler->forced_includes, i);
+    //         include.span = m->span;
+    //         *decl = (AstDecl){
+    //             .span = m->span,
+    //             .kind = AST_DECL_INCLUDE,
+    //             .attrs = array_create(compiler->arena, sizeof(AstAttribute)),
+    //             .include = include,
+    //         };
+    //         array_push(&decls, &decl);
+    //     }
+    //     for (size_t i = 0; i < m->decls.len; i++) {
+    //         AstDecl *decl = *(AstDecl **)array_at(&m->decls, i);
+    //         array_push(&decls, &decl);
+    //     }
+    //     m->decls = decls;
+    // }
 
     compiler->compilation.ast = m;
 
     Sema sema = sema_create(compiler->arena, compiler->diags);
     sema.target = compiler->target;
+    sema.forced_includes = compiler->forced_includes;
 
     Array(String) includes = array_create(compiler->arena, sizeof(String));
     array_push(&includes, &STRING("."));

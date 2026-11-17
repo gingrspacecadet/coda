@@ -204,13 +204,8 @@ AstExpr *parse_identifier_or_path(Parser *p) {
 
     Path path = parse_path(p);
 
-    if (path.parts.len == 1) {
-        expr->kind = AST_EXPR_IDENT;
-        expr->ident = *(AstName *)array_at(&path.parts, 0);
-    } else {
-        expr->kind = AST_EXPR_PATH;
-        expr->path = path;
-    }
+    expr->kind = AST_EXPR_PATH;
+    expr->path = path;
 
     return expr;
 }
@@ -563,10 +558,7 @@ bool try_parse_generic_arguments(Parser *p, Array *args) {
 static AstExpr *make_generic_type_value(Parser *p, AstExpr *left, Array args) {
     Path path = {0};
 
-    if (left->kind == AST_EXPR_IDENT) {
-        path.parts = array_create(p->arena, sizeof(AstName));
-        array_push(&path.parts, &left->ident);
-    } else if (left->kind == AST_EXPR_PATH) {
+    if (left->kind == AST_EXPR_PATH) {
         path = left->path;
     } else {
         return NULL;
@@ -707,8 +699,7 @@ AstExpr *parse_expression_postfix(Parser *p, AstExpr *left) {
             continue;
         }
 
-        if (at(p, TK_LT) &&
-            (left->kind == AST_EXPR_IDENT || left->kind == AST_EXPR_PATH)) {
+        if (at(p, TK_LT) && left->kind == AST_EXPR_PATH) {
             Checkpoint cp = checkpoint(p);
             Array generic_args;
 

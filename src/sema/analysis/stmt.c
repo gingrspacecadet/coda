@@ -390,10 +390,13 @@ static HirStmt *sema_match_stmt(Sema *sema, AstStmt *ast) {
                 break;
 
             case AST_PATTERN_VARIANT: {
-                Symbol *variant = sema_lookup(sema, pattern->variant.name);
+                if (pattern->variant.path->kind != AST_EXPR_PATH) {
+                    return error;
+                }
+
+                Symbol *variant = sema_lookup_path(sema, pattern->variant.path->path);
                 if (variant == NULL || variant->kind != SYMBOL_TYPE || variant->type == NULL) {
-                    String name = pattern->variant.name.kind == AST_NAME_IDENT ? pattern->variant.name.ident : STRING("<pattern>");
-                    error_unknown_name(sema->diags, name, pattern->span);
+                    error_unknown_name(sema->diags, path_to_string(pattern->variant.path->path), pattern->span);
                     return error;
                 }
 

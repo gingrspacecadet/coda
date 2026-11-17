@@ -35,6 +35,21 @@ typedef struct {
     Array(AstName) parts;
 } Path;
 
+static inline String path_to_string(Path path) {
+    Array(char) string_builder; array_init(&string_builder, path.parts.arena, sizeof(char));
+    for (size_t i = 0; i < path.parts.len; i++) {
+        AstName part = ((AstName *)path.parts.data)[i];
+        array_resize(&string_builder, part.ident.length);
+        memcpy(&((char*)string_builder.data)[string_builder.len], ((AstName *)path.parts.data)[i].ident.data, part.ident.length);
+        string_builder.len += part.ident.length;
+    }
+
+    return (String){
+        .data = string_builder.data,
+        .length = string_builder.len,
+    };
+}
+
 typedef struct {
     Span span;
     String name;
@@ -254,7 +269,6 @@ typedef enum {
     AST_EXPR_ERROR,
 
     AST_EXPR_LITERAL,
-    AST_EXPR_IDENT,
     AST_EXPR_PATH,
     AST_EXPR_TYPE_VALUE,
 
@@ -285,7 +299,6 @@ struct AstExpr {
 
     union {
         AstLiteral literal;
-        AstName ident;
         Path path;
         struct {
             AstType *type;
@@ -380,7 +393,7 @@ struct AstPattern {
         AstName binding;
         
         struct {
-            AstName name;
+            AstExpr *path;
             AstName binding;
         } variant;
         

@@ -1805,11 +1805,10 @@ static HirEnumItem *sema_enum_item_for_symbol(Symbol *symbol) {
     return NULL;
 }
 
-static CodeNodeKind sema_code_expr_node(AstExprKind kind) {
-    switch (kind) {
+static CodeNodeKind sema_code_expr_node(AstExpr *expr) {
+    switch (expr->kind) {
         case AST_EXPR_LITERAL: return CODE_NODE_EXPR_LITERAL;
-        case AST_EXPR_IDENT: return CODE_NODE_EXPR_IDENT;
-        case AST_EXPR_PATH: return CODE_NODE_EXPR_PATH;
+        case AST_EXPR_PATH: return expr->path.parts.len == 1 ? CODE_NODE_EXPR_IDENT : CODE_NODE_EXPR_PATH;
         case AST_EXPR_TYPE_VALUE: return CODE_NODE_EXPR_TYPE_VALUE;
         case AST_EXPR_UNARY: return CODE_NODE_EXPR_UNARY;
         case AST_EXPR_BINARY: return CODE_NODE_EXPR_BINARY;
@@ -1979,9 +1978,6 @@ static bool sema_code_collect_splices(Sema *sema, AstExpr *ast, Array *splices) 
                     return false;
             }
             return true;
-
-        case AST_EXPR_IDENT:
-            return sema_code_collect_name_splice(sema, &ast->ident, ast, splices);
 
         case AST_EXPR_PATH:
             return sema_code_collect_path_name_splices(sema, ast->path, ast, splices);
@@ -2205,7 +2201,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                     return sema_code_quote_error(sema, ast,
                         STRING("#code values can only be created inside a comptime function"));
 
-                if (quoted->kind != AST_EXPR_IDENT || quoted->ident.kind != AST_NAME_IDENT ||
+                if (quoted->kind != AST_EXPR_PATH || quoted->path.parts.len != 1 ||
                     (target->code.node != CODE_NODE_ANY &&
                      target->code.node != CODE_NODE_NAME_IDENT))
                     return sema_code_quote_error(sema, ast,
@@ -2213,7 +2209,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
                 hir->kind = HIR_EXPR_CODE;
                 hir->type = expected;
-                hir->code.name = quoted->ident;
+                hir->code.name = *(AstName *)array_at(&quoted->path.parts, 0);
                 hir->code.is_name = true;
                 hir->code.is_decl = false;
                 hir->code.splices = array_create(sema->arena, sizeof(HirCodeSplice));
@@ -2228,9 +2224,8 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
                 return sema_code_quote_error(sema, ast,
                     STRING("#code values can only be created inside a comptime function"));
 
-            CodeNodeKind node = sema_code_expr_node(quoted->kind);
-            if (node == CODE_NODE_ANY ||
-                (target->code.node != CODE_NODE_ANY && target->code.node != node))
+            CodeNodeKind node = sema_code_expr_node(quoted);
+            if (node == CODE_NODE_ANY || (target->code.node != CODE_NODE_ANY && target->code.node != node))
                 return sema_code_quote_error(sema, ast,
                     STRING("quoted expression does not match the expected #code::expr selector"));
 
@@ -2274,31 +2269,6 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
             }
 
             break;
-
-        case AST_EXPR_IDENT: {
-            Symbol *symbol = sema_lookup(sema, ast->ident);
-
-            if (symbol == NULL) {
-                error_unknown_name(sema->diags, ast->ident.ident, ast->span);
-                hir->kind = HIR_EXPR_ERROR;
-                return hir;
-            }
-
-            if (symbol->kind == SYMBOL_NAMESPACE) {
-                error_namespace_value(sema->diags, ast->span);
-                hir->kind = HIR_EXPR_ERROR;
-                return hir;
-            }
-
-            hir->kind = HIR_EXPR_VALUE;
-            hir->value.symbol = symbol;
-            hir->type = sema_symbol_type(sema, symbol);
-
-            if (expected != NULL)
-                return expr_coerce(sema, hir, expected);
-
-            return hir;
-        }
 
         case AST_EXPR_PATH: {
             Symbol *symbol = sema_lookup_path(sema, ast->path);
@@ -2485,9 +2455,7 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
 
             Symbol *generic = NULL;
 
-            if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_IDENT)
-                generic = sema_lookup(sema, ast->call.callee->ident);
-            else if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_PATH)
+            if (ast->call.callee != NULL && ast->call.callee->kind == AST_EXPR_PATH)
                 generic = sema_lookup_path(sema, ast->call.callee->path);
 
             if (generic != NULL && generic->kind == SYMBOL_FN && generic->decl != NULL &&

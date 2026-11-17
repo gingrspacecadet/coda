@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <limits.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include "common.h"
@@ -180,8 +181,7 @@ static bool sema_install_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
 
     Symbol *existing = scope_lookup(scope, *leaf);
     if (existing != NULL) {
-        if (existing->kind == SYMBOL_NAMESPACE &&
-            existing->namespace_scope == &entry->export_scope)
+        if (existing->kind == SYMBOL_NAMESPACE && existing->namespace_scope == &entry->export_scope)
             return true;
 
         return false;
@@ -319,6 +319,23 @@ static Scope module_make_scope(Arena *arena) {
     };
 }
 
+static String module_canonicalise_filename(Arena *arena, String filename) {
+    char resolved[PATH_MAX];
+
+    if (realpath(filename.data, resolved) == NULL)
+        return filename;
+
+    size_t len = strlen(resolved);
+
+    char *copy = arena_calloc(arena, len + 1);
+    memcpy(copy, resolved, len + 1);
+
+    return (String) {
+        .data = copy,
+        .length = len,
+    };
+}
+
 static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) {
     DIR *directory = opendir(dir.data);
     if (directory == NULL)
@@ -331,6 +348,7 @@ static void module_index_scan_dir(ModuleIndex *index, Arena *arena, String dir) 
 
         String name = STRING(entry->d_name);
         String filename = module_join_path(arena, dir, name);
+        filename = module_canonicalise_filename(arena, filename);
 
         struct stat st;
         if (stat(filename.data, &st) != 0)
@@ -432,6 +450,35 @@ static bool module_entry_parse(ModuleEntry *entry, Arena *arena, Diags *diags) {
     return true;
 }
 
+static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *include);
+static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry);
+
+bool sema_apply_forced_includes(Sema *sema) {
+    sema->prelude_scope = module_make_scope(sema->arena);
+    for (size_t i = 0; i < sema->forced_includes.len; i++) {
+        AstIncludeDecl *include = array_at(&sema->forced_includes, i);
+
+        if (sema->module != NULL && path_equal(&include->path, &sema->module->path))
+            continue;
+
+        ModuleEntry *entry = module_index_lookup(&sema->modules, include->path);
+
+        if (entry == NULL)
+            return false;
+
+        if (!module_entry_parse(entry, sema->arena, sema->diags))
+            return false;
+
+        if (!sema_analyse_module_entry(sema, entry))
+            return false;
+
+        if (!sema_install_include(sema, &sema->prelude_scope, include, entry))
+            return false;
+    }
+
+    return true;
+}
+
 static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
     if (entry->analysed)
         return !entry->analysis_failed;
@@ -457,9 +504,9 @@ static bool sema_analyse_module_entry(Sema *sema, ModuleEntry *entry) {
     entry->scope = sema->global_scope;
 
     bool success = sema_resolve_includes(sema, entry->ast);
+    
     entry->scope = sema->global_scope;
-    if (success)
-        sema_decls(sema, entry->ast->decls);
+    if (success) sema_decls(sema, entry->ast->decls);
 
     entry->scope = sema->global_scope;
     entry->export_scope = module_make_scope(sema->arena);
@@ -489,8 +536,10 @@ static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
         return false;
     }
 
-    if (!module_entry_parse(entry, sema->arena, sema->diags))
+    if (!module_entry_parse(entry, sema->arena, sema->diags)) {
+        fprintf(stderr, "include failure: module_entry_parse\n");
         return false;
+    }
 
     if (entry->analysing) {
         DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR, E_MODULE_CYCLE, include->span, STRING("cyclic module imports are not supported"));
@@ -500,10 +549,18 @@ static bool sema_resolve_include(Sema *sema, Scope *owner, AstIncludeDecl *inclu
     }
 
     entry->included = true;
-    if (!sema_analyse_module_entry(sema, entry))
-        return false;
 
-    return sema_install_include(sema, owner, include, entry);
+    if (!sema_analyse_module_entry(sema, entry)) {
+        fprintf(stderr, "include failure: sema_analyse_module_entry\n");
+        return false;
+    }
+
+    if (!sema_install_include(sema, owner, include, entry)) {
+        fprintf(stderr, "include failure: sema_install_include\n");
+        return false;
+    }
+
+    return true;
 }
 
 static bool sema_type_symbol_matches_origin(Symbol *instance, Symbol *generic) {

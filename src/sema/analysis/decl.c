@@ -179,14 +179,14 @@ void sema_fn_decl(Sema *sema, AstFnDecl *ast) {
     Symbol *symbol = sema_lookup_fn_decl(sema, ast);
 
     if (symbol == NULL) {
-        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
+        fprintf(stderr, "Internal compiler error at %s:%u\n", __FILE__, __LINE__);
         return;
     }
 
     symbol->span = ast->span;
 
     if (symbol->kind != SYMBOL_FN) {
-        fprintf(stderr, "Internal compiler error at %s:%u", __FILE__, __LINE__);
+        fprintf(stderr, "Internal compiler error at %s:%u\n", __FILE__, __LINE__);
         return;
     }
 

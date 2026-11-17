@@ -1137,11 +1137,6 @@ static AstExpr *comp_expand_quoted_expression(
             EXPAND_EXPR(unary.operand);
             break;
 
-        case AST_EXPR_IDENT:
-            copy->ident = comp_expand_quoted_name(
-                context, &ast->ident, splices, ok);
-            break;
-
         case AST_EXPR_PATH:
             copy->path = comp_expand_quoted_path(
                 context, ast->path, splices, ok);
