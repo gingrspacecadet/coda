@@ -476,6 +476,7 @@ struct Symbol {
     Symbol *canonical;
     bool is_exported;
     bool type_resolving;
+    bool is_generic_instance;
     HirType *mutable_type;
 };
 

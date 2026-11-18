@@ -369,6 +369,7 @@ static Symbol *generic_create_instance(Sema *sema, Symbol *generic, Array receiv
         .span = instance_decl->fn.span,
         .owner_module = generic->owner_module,
         .owner_scope = generic->owner_scope,
+        .is_generic_instance = true,
     };
     scope_insert(scope, &instance_symbol);
 

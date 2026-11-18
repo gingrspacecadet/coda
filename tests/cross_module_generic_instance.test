@@ -1,0 +1,21 @@
+name: imported generic function instance is emitted
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+include crossmod::math;
+
+fn int64 imported_generic_function() {
+    return crossmod::math::identity<int64>(42);
+}
+
+[lir]
+.L_coda_generic_0:
+    block0(%0):
+        return %0
+
+imported_generic_function:
+    block0:
+        %0 = call @.L_coda_generic_0, 42
+        return %0

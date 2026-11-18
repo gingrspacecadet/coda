@@ -1135,50 +1135,24 @@ static size_t test_run_path(const char *path, TestStats *stats) {
 int main(int argc, char **argv) {
     TestStats stats = {0};
 
-    if (test_cli_arguments())
-        stats.passed++;
-    else
-        stats.failed++;
+    #define RUN_SELF_TEST(fn) do { \
+        bool passed = fn(); \
+        if (!passed) fprintf(stderr, "%s: %s\n", #fn, passed ? "PASS" : "FAIL"); \
+        stats.passed += passed; \
+        stats.failed += !passed; \
+    } while (0)
 
-    if (test_mangling())
-        stats.passed++;
-    else
-        stats.failed++;
+    RUN_SELF_TEST(test_cli_arguments);
+    RUN_SELF_TEST(test_mangling);
+    RUN_SELF_TEST(test_mangling);
+    RUN_SELF_TEST(test_orion_backend);
+    RUN_SELF_TEST(test_orion_large_aggregate_return);
+    RUN_SELF_TEST(test_orion_unary_not);
+    RUN_SELF_TEST(test_orion_packed_field_access);
+    RUN_SELF_TEST(test_extern_lowering);
+    RUN_SELF_TEST(test_orion_constant_unaligned_pointer);
 
-    if (test_mangling())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_orion_backend())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_orion_large_aggregate_return())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_orion_unary_not())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_orion_packed_field_access())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_extern_lowering())
-        stats.passed++;
-    else
-        stats.failed++;
-
-    if (test_orion_constant_unaligned_pointer())
-        stats.passed++;
-    else
-        stats.failed++;
+    #undef RUN_SELF_TEST
 
     if (argc == 1) {
         test_run_path("tests", &stats);

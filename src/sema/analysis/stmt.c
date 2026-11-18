@@ -679,7 +679,7 @@ HirStmt *sema_stmt(Sema *sema, AstStmt *ast) {
                 return hir;
             }
 
-            if (returns_none) {
+            if (returns_none && (value->type->kind != HIR_TYPE_BUILTIN || value->type->builtin != BUILTIN_NONE)) {
                 error_invalid_return(sema->diags, return_type, value->type, ast->span);
                 hir->kind = HIR_STMT_ERROR;
                 return hir;

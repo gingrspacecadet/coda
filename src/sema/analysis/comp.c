@@ -1469,6 +1469,20 @@ HirExpr *comp_eval_expr(CompContext *context, HirExpr *expr) {
             if (source == NULL)
                 return expr;
 
+            /* An explicit integer-to-pointer cast is a constant address when
+             * its operand is constant.  Keep the pointer type on the literal
+             * so static-data lowering emits it using the target pointer size.
+             */
+            HirType *target_base = comp_unwrap_type(target);
+            if (operand->literal.kind == HIR_LITERAL_INTEGER &&
+                is_integer(source) &&
+                target_base != NULL && target_base->kind == HIR_TYPE_POINTER) {
+                return literal(context->sema, expr, (HirLiteral){
+                    .kind = HIR_LITERAL_INTEGER,
+                    .integer = integer_wrap(target, operand->literal.integer),
+                }, target);
+            }
+
             if (operand->literal.kind == HIR_LITERAL_INTEGER && is_integer(source) && is_integer(target)) {
                 return literal(context->sema, expr, (HirLiteral){
                     .kind = HIR_LITERAL_INTEGER,

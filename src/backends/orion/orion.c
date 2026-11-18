@@ -1107,6 +1107,8 @@ static bool emit_load(OrionFunction *function, const LirInstruction *instruction
 
     if (!type_is_supported_value(type))
         return fail(function, "unsupported load type");
+    if (type_is_void_like(type))
+        return true;
     if (!emit_operand_scalar(function, &operands[0], ORION_R14))
         return false;
 
@@ -1135,6 +1137,8 @@ static bool emit_store(OrionFunction *function, const LirInstruction *instructio
     size_t alignment = emit_address_alignment(&operands[0]);
     if (!type_is_supported_value(type))
         return fail(function, "unsupported store type");
+    if (type_is_void_like(type))
+        return true;
     if (!emit_operand_scalar(function, &operands[0], ORION_R14))
         return false;
     if (type_is_aggregate(type)) {
@@ -1259,6 +1263,8 @@ static bool emit_extract(OrionFunction *function, const LirInstruction *instruct
     LirOperand *operands = instruction->operands.data;
     if (operands[0].kind != LIR_OPERAND_VALUE || !type_is_aggregate(operands[0].type))
         return fail(function, "extract source must be an aggregate SSA value");
+    if (type_is_void_like(instruction->result_type))
+        return true;
     if (!emit_slot_address(function, ORION_R14, operands[0].value))
         return false;
     if (dynamic) {
@@ -1306,6 +1312,8 @@ static bool emit_insert(OrionFunction *function, const LirInstruction *instructi
     size_t aggregate_size = type_size(aggregate_type);
     if (!emit_copy_slot_to_slot(function, operands[0].value, instruction->result, aggregate_size))
         return false;
+    if (type_is_void_like(operands[2].type))
+        return true;
     if (!emit_slot_address(function, ORION_R14, instruction->result))
         return false;
 

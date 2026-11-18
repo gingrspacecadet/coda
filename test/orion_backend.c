@@ -153,6 +153,30 @@ bool test_orion_backend(void) {
         },
     });
 
+    HirType *none_type = builtin_type(arena, BUILTIN_NONE, 0, 1);
+    HirType *uint32_type = builtin_type(arena, BUILTIN_UINT32, 4, 4);
+    HirType *sum_type = arena_calloc(arena, sizeof(*sum_type));
+    *sum_type = (HirType){
+        .kind = HIR_TYPE_SUM,
+        .size = 12,
+        .align = 4,
+        .sum = {.members = array_create(arena, sizeof(HirType *))},
+    };
+    array_push(&sum_type->sum.members, &none_type);
+    array_push(&sum_type->sum.members, &uint32_type);
+
+    LirFunction *extract_none = lir_function_create(module, make_symbol(arena, "extract_none_payload"), none_type, false, false);
+    LirBlockId extract_block = lir_block_create(extract_none);
+    LirValueId sum_value = lir_emit(extract_none, extract_block, LIR_OP_ZERO, sum_type, (Array){0});
+    LirOperand extract_operands[2] = {
+        lir_operand_value(sum_value, sum_type),
+        lir_operand_offset(8),
+    };
+    LirValueId none_value = lir_emit(extract_none, extract_block, LIR_OP_EXTRACT, none_type,
+                                     (Array){.data = extract_operands, .len = 2});
+    LirOperand none_result = lir_operand_value(none_value, none_type);
+    lir_return(extract_none, extract_block, &none_result);
+
     char *generated = NULL;
     size_t generated_len = 0;
     FILE *out = open_memstream(&generated, &generated_len);

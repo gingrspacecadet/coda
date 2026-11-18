@@ -2153,7 +2153,9 @@ LirModule *lir_lower_module(Arena *arena, HirModule *hir, const TargetInfo *targ
 
     for (size_t i = 0; i < hir->functions.len; i++) {
         HirFunction *function = &((HirFunction *)hir->functions.data)[i];
-        if (!hir_symbol_belongs_to_module(hir, function->symbol))
+        bool is_local = hir_symbol_belongs_to_module(hir, function->symbol);
+        bool is_instance = function->symbol != NULL && function->symbol->is_generic_instance;
+        if (!is_local && !is_instance)
             continue;
         lir_lower_function(module, function, target);
     }

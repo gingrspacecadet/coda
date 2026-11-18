@@ -1,0 +1,13 @@
+name: static integer-to-pointer casts
+expect: pass
+stop: lir
+errors: 0
+
+[source]
+type Registers = struct {
+    uint32 *base;
+};
+
+uint32 *ICU_ADDR = (uint32 *)0x10400;
+uint32 *PIT_ADDR = (uint32 *)(0x10000 + 0x500);
+Registers ICU = {.base = (uint32 *)0x10400};
