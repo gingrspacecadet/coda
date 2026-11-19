@@ -143,10 +143,31 @@ static bool sema_retype_integer_expression(AstExpr *ast, HirExpr *expr, HirType 
     return true;
 }
 
+bool sema_is_assignment_operator(AstBinaryOp op) {
+    switch (op) {
+        case AST_BINARY_ASSIGN:
+        case AST_BINARY_ADD_ASSIGN:
+        case AST_BINARY_SUB_ASSIGN:
+        case AST_BINARY_MUL_ASSIGN:
+        case AST_BINARY_DIV_ASSIGN:
+        case AST_BINARY_MOD_ASSIGN:
+        case AST_BINARY_BIT_AND_ASSIGN:
+        case AST_BINARY_BIT_OR_ASSIGN:
+        case AST_BINARY_BIT_XOR_ASSIGN:
+        case AST_BINARY_SHL_ASSIGN:
+        case AST_BINARY_SHR_ASSIGN:
+        case AST_BINARY_NAND_ASSIGN:
+        case AST_BINARY_NOR_ASSIGN:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 static bool sema_is_integer_binary_op(AstBinaryOp op) {
     switch (op) {
-        case AST_BINARY_ADD:
-        case AST_BINARY_SUB:
+        case AST_BINARY_ADD:        case AST_BINARY_SUB:
         case AST_BINARY_MUL:
         case AST_BINARY_DIV:
         case AST_BINARY_MOD:
@@ -2405,9 +2426,20 @@ HirExpr *sema_expr(Sema *sema, AstExpr *ast, HirType *expected) {
         }
 
         case AST_EXPR_BINARY: {
+            /* Assignment has a dedicated HIR statement representation. Never
+             * let an assignment opcode enter HIR_EXPR_BINARY: LIR binary
+             * lowering only accepts value-producing operators. */
+            if (sema_is_assignment_operator(ast->binary.op)) {
+                DiagBuilder diagnostic = diag_begin(sema->diags, DIAG_ERROR,
+                    E_UNEXPECTED_TOKEN, ast->span,
+                    STRING("assignment is not an expression"));
+                diag_finish(&diagnostic);
+                hir->kind = HIR_EXPR_ERROR;
+                return hir;
+            }
+
             hir->kind = HIR_EXPR_BINARY;
             hir->binary.op = ast->binary.op;
-
             HirExpr *left = sema_expr(sema, ast->binary.left, NULL);
 
             HirExpr *right = sema_expr(sema, ast->binary.right, NULL);

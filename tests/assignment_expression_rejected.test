@@ -1,0 +1,11 @@
+name: assignment is rejected in expression position
+expect: fail
+stop: hir
+errors: 1
+
+[source]
+fn int64 main() {
+    mut int64 value = 0;
+    mut int64 result = (value = 1);
+    return result;
+}

@@ -1,32 +1,11 @@
 #include "common.h"
 
 static bool stmt_is_assignment_expr(AstExpr *expr) {
-    if (expr == NULL || expr->kind != AST_EXPR_BINARY)
-        return false;
-
-    switch (expr->binary.op) {
-        case AST_BINARY_ASSIGN:
-        case AST_BINARY_ADD_ASSIGN:
-        case AST_BINARY_SUB_ASSIGN:
-        case AST_BINARY_MUL_ASSIGN:
-        case AST_BINARY_DIV_ASSIGN:
-        case AST_BINARY_MOD_ASSIGN:
-        case AST_BINARY_BIT_AND_ASSIGN:
-        case AST_BINARY_BIT_OR_ASSIGN:
-        case AST_BINARY_BIT_XOR_ASSIGN:
-        case AST_BINARY_SHL_ASSIGN:
-        case AST_BINARY_SHR_ASSIGN:
-        case AST_BINARY_NAND_ASSIGN:
-        case AST_BINARY_NOR_ASSIGN:
-            return true;
-
-        default:
-            return false;
-    }
+    return expr != NULL && expr->kind == AST_EXPR_BINARY &&
+           sema_is_assignment_operator(expr->binary.op);
 }
 
-static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {
-    Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
+static bool local_decl(Sema *sema, AstVarDecl *ast, HirStmt **init_stmt) {    Scope *scope = (Scope *)array_at(&sema->scopes, sema->scopes.len - 1);
 
     Symbol *s = scope_lookup(scope, ast->name);
     if (s != NULL) {

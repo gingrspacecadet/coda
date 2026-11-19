@@ -195,13 +195,14 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    bool fail = false;
+
     Arena *arena = arena_create();
     Diags diags = {.arena = arena, .diags = array_create(arena, sizeof(Diag))};
     Source source;
     if (!load_source(options.input_path, &source, arena)) {
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
     const TargetInfo *target = options.target_name != NULL
@@ -212,25 +213,22 @@ int main(int argc, char **argv) {
             fprintf(stderr, "unknown target '%s'\n", options.target_name);
         else
             fprintf(stderr, "native target is unsupported\n");
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
     if (options.run && target != target_native()) {
         fprintf(stderr, "codac: --run requires the native target (selected '%s')\n", target->name);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 2;
+        fail = true;
+        goto end;
     }
 
     CodaCompiler compiler;
     coda_compiler_init(&compiler, arena, &diags, target);
     if (compiler.backend == NULL) {
         fprintf(stderr, "no code generator is available for target '%s'\n", target->name);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
     for (size_t i = 0; i < options.include_path_count; i++) {
@@ -247,9 +245,8 @@ int main(int argc, char **argv) {
         if (!cli_build_path(arena, requested->module_path, &include.path) ||
             (requested->alias_path != NULL && !cli_build_path(arena, requested->alias_path, &include.alias))) {
             fprintf(stderr, "codac: invalid forced include specification\n");
-            cli_options_destroy(&options);
-            arena_destroy(arena);
-            return 2;
+            fail = true;
+            goto end;
         }
         array_push(&compiler.forced_includes, &include);
     }
@@ -262,9 +259,8 @@ int main(int argc, char **argv) {
     if (options.run) {
         if (mkdtemp(run_directory) == NULL) {
             perror("mkdtemp");
-            cli_options_destroy(&options);
-            arena_destroy(arena);
-            return 1;
+            fail = true;
+            goto end;
         }
         run_directory_created = true;
         int asm_length = snprintf(run_assembly_path, sizeof(run_assembly_path), "%s/program.s", run_directory);
@@ -273,9 +269,8 @@ int main(int argc, char **argv) {
             exe_length < 0 || (size_t)exe_length >= sizeof(run_executable_path)) {
             fprintf(stderr, "codac: failed to construct temporary paths\n");
             cleanup_run_files(run_directory, NULL, NULL);
-            cli_options_destroy(&options);
-            arena_destroy(arena);
-            return 1;
+            fail = true;
+            goto end;
         }
         output_path = run_assembly_path;
     }
@@ -285,9 +280,8 @@ int main(int argc, char **argv) {
         perror(output_path);
         if (run_directory_created)
             cleanup_run_files(run_directory, NULL, NULL);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
     compiler.output = output;
@@ -296,9 +290,8 @@ int main(int argc, char **argv) {
         unlink(output_path);
         if (run_directory_created)
             cleanup_run_files(run_directory, run_assembly_path, run_executable_path);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
     if (!coda_compile(&compiler, &source, CODA_STAGE_CODEGEN)) {
@@ -307,19 +300,18 @@ int main(int argc, char **argv) {
         print_diags(&diags);
         if (run_directory_created)
             cleanup_run_files(run_directory, run_assembly_path, run_executable_path);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
     if (fclose(output) != 0) {
         perror(output_path);
         if (run_directory_created)
             cleanup_run_files(run_directory, run_assembly_path, run_executable_path);
-        cli_options_destroy(&options);
-        arena_destroy(arena);
-        return 1;
+        fail = true;
+        goto end;
     }
 
+end:
     if (options.dump_ast)
         print_ast_module(stdout, compiler.compilation.ast);
     if (options.dump_hir)
@@ -330,5 +322,5 @@ int main(int argc, char **argv) {
     cli_options_destroy(&options);
     arena_destroy(arena);
 
-    return 0;
+    return fail ? 1 : 0;
 }
