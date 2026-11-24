@@ -543,7 +543,7 @@ HirType *sema_type(Sema *sema, AstType *ast) {
                 return hir;
             }
 
-            HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
+            HirType *length_type = builtin_type(sema, sema->target->pointer.size == sizeof(uint64_t) ? BUILTIN_UINT64 : BUILTIN_UINT32);
             assert(length_type != NULL);
 
             if (!ast->array.sized) {

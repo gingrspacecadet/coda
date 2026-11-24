@@ -297,8 +297,7 @@ static bool literal_fits(Sema *sema, HirLiteral *literal, HirType *type) {
     type = sema_unwrap_type(type);
 
     if (literal->kind == HIR_LITERAL_NULL)
-        return type->kind == HIR_TYPE_POINTER &&
-               type->pointer.optional;
+        return type->kind == HIR_TYPE_POINTER && type->pointer.optional;
 
     if (literal->kind == HIR_LITERAL_STRING)
         return sema_is_byte_slice(type);
@@ -1257,7 +1256,7 @@ static size_t align_up(size_t value, size_t align) {
 
 static HirType *sema_string_literal_type(Sema *sema, Span span) {
     HirType *element = builtin_type(sema, BUILTIN_UINT8);
-    HirType *length_type = builtin_type(sema, BUILTIN_UINT64);
+    HirType *length_type = builtin_type(sema, sema->target->pointer.size == sizeof(uint64_t) ? BUILTIN_UINT64 : BUILTIN_UINT32);
     HirType *pointer = pointer_type(sema, element, false);
     HirType *type = arena_calloc(sema->arena, sizeof(*type));
 
